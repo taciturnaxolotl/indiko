@@ -1,6 +1,6 @@
 import { db } from "../db";
 
-function getSessionUser(req: Request): { username: string; is_admin: boolean } | Response {
+function getSessionUser(req: Request): { username: string; userId: number; is_admin: boolean } | Response {
 	const authHeader = req.headers.get("Authorization");
 
 	if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -12,13 +12,13 @@ function getSessionUser(req: Request): { username: string; is_admin: boolean } |
 	// Look up session
 	const session = db
 		.query(
-			`SELECT s.expires_at, u.username, u.is_admin 
+			`SELECT s.expires_at, s.user_id, u.username, u.is_admin 
 			FROM sessions s 
 			JOIN users u ON s.user_id = u.id 
 			WHERE s.token = ?`,
 		)
 		.get(token) as
-		| { expires_at: number; username: string; is_admin: number }
+		| { expires_at: number; user_id: number; username: string; is_admin: number }
 		| undefined;
 
 	if (!session) {
@@ -32,6 +32,7 @@ function getSessionUser(req: Request): { username: string; is_admin: boolean } |
 
 	return {
 		username: session.username,
+		userId: session.user_id,
 		is_admin: session.is_admin === 1,
 	};
 }
@@ -166,4 +167,69 @@ export async function updateProfile(req: Request): Promise<Response> {
 		console.error("Update profile error:", error);
 		return Response.json({ error: "Failed to update profile" }, { status: 500 });
 	}
+}
+
+export function getAuthorizedApps(req: Request): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	const apps = db
+		.query(
+			`SELECT 
+				a.client_id,
+				a.name,
+				a.first_seen,
+				a.last_used as app_last_used,
+				p.scopes,
+				p.granted_at,
+				p.last_used
+			FROM permissions p
+			JOIN apps a ON p.client_id = a.client_id
+			WHERE p.user_id = ?
+			ORDER BY p.last_used DESC`,
+		)
+		.all(user.userId) as Array<{
+		client_id: string;
+		name: string | null;
+		first_seen: number;
+		app_last_used: number;
+		scopes: string;
+		granted_at: number;
+		last_used: number;
+	}>;
+
+	return Response.json({
+		apps: apps.map((app) => ({
+			clientId: app.client_id,
+			name: app.name || new URL(app.client_id).hostname,
+			scopes: JSON.parse(app.scopes) as string[],
+			grantedAt: app.granted_at,
+			lastUsed: app.last_used,
+		})),
+	});
+}
+
+export function revokeApp(req: Request, clientId: string): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	// Delete permission
+	const result = db
+		.query("DELETE FROM permissions WHERE user_id = ? AND client_id = ?")
+		.run(user.userId, clientId);
+
+	if (result.changes === 0) {
+		return Response.json({ error: "App not found" }, { status: 404 });
+	}
+
+	// Also delete any unused auth codes for this app
+	db.query(
+		"DELETE FROM authcodes WHERE user_id = ? AND client_id = ? AND used = 0",
+	).run(user.userId, clientId);
+
+	return Response.json({ success: true });
 }

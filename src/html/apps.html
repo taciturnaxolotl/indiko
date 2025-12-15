@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>authorized apps • indiko</title>
+  <link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --mahogany: #26242b;
+      --lavender: #d9d0de;
+      --old-rose: #bc8da0;
+      --rosewood: #a04668;
+      --berry-crush: #ab4967;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Space Grotesk", sans-serif;
+      background: var(--mahogany);
+      color: var(--lavender);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2.5rem 1.25rem;
+    }
+
+    header {
+      width: 100%;
+      max-width: 56.25rem;
+      margin-bottom: 2rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--old-rose), var(--berry-crush), var(--rosewood));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.125rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      color: var(--old-rose);
+      font-size: 1rem;
+      font-weight: 300;
+    }
+
+    main {
+      flex: 1;
+      width: 100%;
+      max-width: 56.25rem;
+    }
+
+    .apps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .app-card {
+      background: rgba(188, 141, 160, 0.05);
+      border: 1px solid var(--old-rose);
+      padding: 1.5rem;
+    }
+
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+    }
+
+    .app-name {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--lavender);
+    }
+
+    .app-meta {
+      font-size: 0.875rem;
+      color: var(--old-rose);
+      margin-top: 0.25rem;
+    }
+
+    .scopes {
+      margin: 1rem 0;
+    }
+
+    .scope-title {
+      font-size: 0.75rem;
+      color: var(--old-rose);
+      text-transform: uppercase;
+      letter-spacing: 0.05rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .scope-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .scope-badge {
+      padding: 0.25rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05rem;
+      background: rgba(188, 141, 160, 0.2);
+      color: var(--lavender);
+      border: 1px solid var(--old-rose);
+    }
+
+    .revoke-btn {
+      padding: 0.5rem 1rem;
+      background: transparent;
+      color: var(--rosewood);
+      border: 2px solid var(--rosewood);
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .revoke-btn:hover:not(:disabled) {
+      background: var(--rosewood);
+      color: var(--lavender);
+    }
+
+    .revoke-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .loading, .error, .empty {
+      text-align: center;
+      padding: 2rem;
+      color: var(--old-rose);
+    }
+
+    .error {
+      color: var(--rosewood);
+    }
+
+    .back-link {
+      text-align: center;
+      margin-top: 2rem;
+      font-size: 0.875rem;
+    }
+
+    .back-link a {
+      color: var(--berry-crush);
+      text-decoration: none;
+    }
+
+    .back-link a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>authorized apps</h1>
+    <p class="subtitle">manage apps that have access to your account</p>
+  </header>
+
+  <main>
+    <div id="appsList" class="apps-list">
+      <div class="loading">loading apps...</div>
+    </div>
+
+    <div class="back-link">
+      <a href="/">← back to dashboard</a>
+    </div>
+  </main>
+
+  <script type="module" src="../client/apps.ts"></script>
+</body>
+
+</html>

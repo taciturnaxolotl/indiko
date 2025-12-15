@@ -1,6 +1,52 @@
 const token = localStorage.getItem('indiko_session');
 const footer = document.getElementById('footer') as HTMLElement;
-const usersList = document.getElementById('usersList') as HTMLElement;
+const welcome = document.getElementById('welcome') as HTMLElement;
+const subtitle = document.getElementById('subtitle') as HTMLElement;
+const recentApps = document.getElementById('recentApps') as HTMLElement;
+const profileForm = document.getElementById('profileForm') as HTMLFormElement;
+const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
+const message = document.getElementById('message') as HTMLDivElement;
+const profileName = document.getElementById('profileName') as HTMLElement;
+const profileUsername = document.getElementById('profileUsername') as HTMLElement;
+const profileAvatar = document.getElementById('profileAvatar') as HTMLElement;
+const avatarInitials = document.getElementById('avatarInitials') as HTMLElement;
+const publicProfileLink = document.getElementById('publicProfileLink') as HTMLAnchorElement;
+const profileLinks = document.getElementById('profileLinks') as HTMLElement;
+
+const nameInput = document.getElementById('name') as HTMLInputElement;
+const emailInput = document.getElementById('email') as HTMLInputElement;
+const photoInput = document.getElementById('photo') as HTMLInputElement;
+const urlInput = document.getElementById('url') as HTMLInputElement;
+
+let currentUsername = '';
+
+if (!token) {
+	window.location.href = '/login';
+}
+
+interface App {
+	clientId: string;
+	name: string;
+	scopes: string[];
+	grantedAt: number;
+	lastUsed: number;
+}
+
+interface Profile {
+	username: string;
+	name: string;
+	email: string | null;
+	photo: string | null;
+	url: string | null;
+}
+
+
+
+function showMessage(text: string, type: 'success' | 'error') {
+	message.textContent = text;
+	message.className = `message show ${type}`;
+	setTimeout(() => message.classList.remove('show'), 5000);
+}
 
 // Check auth and display user
 async function checkAuth() {
@@ -23,8 +69,14 @@ async function checkAuth() {
 		}
 
 		const data = await response.json();
+		
+		// Update welcome message
+		welcome.textContent = `welcome, ${data.username}`;
+		subtitle.textContent = 'your identity dashboard';
 
-		footer.innerHTML = `signed in as <strong><a href="/u/${data.username}">${data.username}</a></strong> • <a href="/profile">edit profile</a> • <a href="/oauth-test">test oauth</a> • <a href="/login" id="logoutLink">sign out</a>`;
+		// Build footer with conditional admin link
+		const adminLink = data.isAdmin ? ' • <a href="/admin">admin</a>' : '';
+		footer.innerHTML = `signed in as <strong><a href="/u/${data.username}">${data.username}</a></strong> • <a href="/apps">apps</a> • <a href="/oauth-test">test oauth</a>${adminLink} • <a href="/login" id="logoutLink">sign out</a>`;
 
 		// Handle logout
 		document.getElementById('logoutLink')?.addEventListener('click', async (e) => {
@@ -43,77 +95,179 @@ async function checkAuth() {
 			window.location.href = '/login';
 		});
 
-		// Load users if admin
-		if (data.isAdmin) {
-			loadUsers();
-		} else {
-			usersList.innerHTML = '<div class="error">Admin access required</div>';
-		}
+		// Load profile and apps
+		loadProfile();
+		loadRecentApps();
 	} catch (error) {
 		console.error('Auth check failed:', error);
 		footer.textContent = 'error loading user info';
-		usersList.innerHTML = '<div class="error">Failed to load users</div>';
 	}
 }
 
-async function loadUsers() {
+async function loadProfile() {
 	try {
-		const response = await fetch('/api/users', {
+		const response = await fetch('/api/profile', {
 			headers: {
 				'Authorization': `Bearer ${token}`,
 			},
 		});
 
 		if (!response.ok) {
-			throw new Error('Failed to load users');
+			throw new Error('Failed to load profile');
+		}
+
+		const profile = await response.json() as Profile;
+		currentUsername = profile.username;
+
+		// Populate form
+		nameInput.value = profile.name;
+		emailInput.value = profile.email || '';
+		photoInput.value = profile.photo || '';
+		urlInput.value = profile.url || '';
+
+		// Initial preview update
+		updatePreview();
+	} catch (error) {
+		console.error('Failed to load profile:', error);
+		showMessage('Failed to load profile', 'error');
+	}
+}
+
+// Handle profile form submission
+profileForm.addEventListener('submit', async (e) => {
+	e.preventDefault();
+
+	const name = nameInput.value.trim();
+	const email = emailInput.value.trim();
+	const photo = photoInput.value.trim();
+	const url = urlInput.value.trim();
+
+	if (!name) {
+		showMessage('Name is required', 'error');
+		return;
+	}
+
+	saveBtn.disabled = true;
+	saveBtn.textContent = 'saving...';
+
+	try {
+		const response = await fetch('/api/profile', {
+			method: 'PUT',
+			headers: {
+				'Authorization': `Bearer ${token}`,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				name,
+				email: email || null,
+				photo: photo || null,
+				url: url || null,
+			}),
+		});
+
+		if (!response.ok) {
+			throw new Error('Failed to update profile');
+		}
+
+		showMessage('Profile updated successfully!', 'success');
+	} catch (error) {
+		console.error('Failed to update profile:', error);
+		showMessage('Failed to update profile', 'error');
+	} finally {
+		saveBtn.disabled = false;
+		saveBtn.textContent = 'save profile';
+	}
+});
+
+function updatePreview() {
+	const name = nameInput.value.trim() || 'Your Name';
+	const photo = photoInput.value.trim();
+	const email = emailInput.value.trim();
+	const url = urlInput.value.trim();
+
+	// Update name
+	profileName.textContent = name;
+	profileUsername.textContent = `@${currentUsername}`;
+	avatarInitials.textContent = currentUsername.slice(0, 2).toUpperCase();
+	publicProfileLink.href = `/u/${currentUsername}`;
+
+	// Update photo
+	const existingImg = profileAvatar.querySelector('img');
+	if (photo) {
+		if (existingImg) {
+			existingImg.src = photo;
+			existingImg.alt = name;
+		} else {
+			const img = document.createElement('img');
+			img.src = photo;
+			img.alt = name;
+			profileAvatar.insertBefore(img, avatarInitials);
+		}
+		avatarInitials.style.display = 'none';
+	} else {
+		if (existingImg) {
+			existingImg.remove();
+		}
+		avatarInitials.style.display = '';
+	}
+
+	// Update links
+	let links = `<a href="/u/${currentUsername}" id="publicProfileLink">view public profile</a>`;
+	if (email) {
+		links += ` • <a href="mailto:${email}">email</a>`;
+	}
+	if (url) {
+		links += ` • <a href="${url}" target="_blank" rel="noopener noreferrer">website</a>`;
+	}
+	profileLinks.innerHTML = links;
+}
+
+// Live update listeners
+nameInput.addEventListener('input', updatePreview);
+emailInput.addEventListener('input', updatePreview);
+photoInput.addEventListener('input', updatePreview);
+urlInput.addEventListener('input', updatePreview);
+
+async function loadRecentApps() {
+	try {
+		const response = await fetch('/api/apps', {
+			headers: {
+				'Authorization': `Bearer ${token}`,
+			},
+		});
+
+		if (!response.ok) {
+			throw new Error('Failed to load apps');
 		}
 
 		const data = await response.json();
+		const apps = data.apps as App[];
 		
-		if (data.users.length === 0) {
-			usersList.innerHTML = '<div class="loading">No users found</div>';
+		if (apps.length === 0) {
+			recentApps.innerHTML = '<div class="empty">No authorized apps yet</div>';
 			return;
 		}
 
-		usersList.innerHTML = data.users.map((user: {
-			id: number;
-			username: string;
-			name: string;
-			email: string | null;
-			photo: string | null;
-			status: string;
-			role: string;
-			isAdmin: boolean;
-			createdAt: number;
-			credentialCount: number;
-		}) => {
-			const createdDate = new Date(user.createdAt * 1000).toLocaleDateString();
-			const initials = user.username.substring(0, 2).toUpperCase();
-			const avatarContent = user.photo 
-				? `<img src="${user.photo}" alt="${user.username}" />`
-				: initials;
+		// Show top 7 most recent
+		const recent = apps.slice(0, 7);
+		
+		recentApps.innerHTML = recent.map((app) => {
+			const lastUsedDate = new Date(app.lastUsed * 1000).toLocaleDateString();
 			
 			return `
-				<div class="user-card">
-					<div class="user-avatar">${avatarContent}</div>
-					<div class="user-info">
-						<div class="user-name">${user.username}</div>
-						<div class="user-meta">
-							<span class="user-meta-item">${user.credentialCount} passkey${user.credentialCount !== 1 ? 's' : ''}</span>
-							<span class="user-meta-item">joined ${createdDate}</span>
-							${user.email ? `<span class="user-meta-item">${user.email}</span>` : ''}
-						</div>
-					</div>
-					<div class="user-badges">
-						<span class="user-badge badge-status ${user.status}">${user.status}</span>
-						<span class="user-badge badge-role">${user.role}</span>
-					</div>
+				<div class="app-item">
+					<div class="app-name">${app.name}</div>
+					<div class="app-date">${lastUsedDate}</div>
 				</div>
 			`;
 		}).join('');
+
+		if (apps.length > 7) {
+			recentApps.innerHTML += '<a href="/apps" class="view-all">view all apps →</a>';
+		}
 	} catch (error) {
-		console.error('Failed to load users:', error);
-		usersList.innerHTML = '<div class="error">Failed to load users</div>';
+		console.error('Failed to load apps:', error);
+		recentApps.innerHTML = '<div class="empty">Failed to load apps</div>';
 	}
 }
 

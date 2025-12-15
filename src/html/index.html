@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>indiko</title>
+  <title>dashboard • indiko</title>
   <link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,9 +38,72 @@
     header {
       width: 100%;
       max-width: 56.25rem;
-      align-self: flex-start;
-      margin-left: auto;
-      margin-right: auto;
+      margin-bottom: 2rem;
+    }
+
+    .profile-preview {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      background: rgba(188, 141, 160, 0.05);
+      border: 1px solid var(--old-rose);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .profile-avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: var(--berry-crush);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--lavender);
+      text-transform: uppercase;
+      flex-shrink: 0;
+      border: 3px solid var(--berry-crush);
+    }
+
+    .profile-avatar img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .profile-info {
+      flex: 1;
+    }
+
+    .profile-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--lavender);
+      margin-bottom: 0.25rem;
+    }
+
+    .profile-username {
+      font-size: 1rem;
+      color: var(--old-rose);
+      margin-bottom: 0.5rem;
+    }
+
+    .profile-links {
+      display: flex;
+      gap: 1rem;
+      font-size: 0.875rem;
+    }
+
+    .profile-links a {
+      color: var(--berry-crush);
+      text-decoration: none;
+    }
+
+    .profile-links a:hover {
+      text-decoration: underline;
     }
 
     h1 {
@@ -51,14 +114,170 @@
       -webkit-text-fill-color: transparent;
       background-clip: text;
       letter-spacing: -0.125rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      color: var(--old-rose);
+      font-size: 1rem;
+      font-weight: 300;
     }
 
     main {
       flex: 1;
-      display: flex;
-      justify-content: center;
       width: 100%;
-      padding-top: 2rem;
+      max-width: 56.25rem;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    @media (min-width: 768px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .card {
+      background: rgba(188, 141, 160, 0.05);
+      border: 1px solid var(--old-rose);
+      padding: 1.5rem;
+    }
+
+    .card-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--lavender);
+      margin-bottom: 1rem;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    label {
+      display: block;
+      color: var(--old-rose);
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05rem;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="url"] {
+      width: 100%;
+      padding: 0.75rem;
+      background: rgba(12, 23, 19, 0.6);
+      border: 2px solid var(--rosewood);
+      color: var(--lavender);
+      font-size: 1rem;
+      font-family: "Space Grotesk", sans-serif;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--berry-crush);
+      background: rgba(12, 23, 19, 0.8);
+    }
+
+    .save-btn {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--berry-crush);
+      border: 2px solid var(--rosewood);
+      color: var(--lavender);
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .save-btn:hover:not(:disabled) {
+      background: var(--rosewood);
+    }
+
+    .save-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .message {
+      padding: 0.75rem;
+      margin-top: 1rem;
+      font-size: 0.875rem;
+      display: none;
+    }
+
+    .message.show {
+      display: block;
+    }
+
+    .message.success {
+      background: rgba(139, 195, 74, 0.2);
+      border: 1px solid #81c784;
+      color: #a5d6a7;
+    }
+
+    .message.error {
+      background: rgba(244, 67, 54, 0.2);
+      border: 1px solid #e57373;
+      color: #ef9a9a;
+    }
+
+    .apps-preview {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .app-item {
+      padding: 0.75rem;
+      background: rgba(12, 23, 19, 0.6);
+      border: 1px solid var(--rosewood);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .app-name {
+      font-weight: 500;
+      color: var(--lavender);
+    }
+
+    .app-date {
+      font-size: 0.875rem;
+      color: var(--old-rose);
+    }
+
+    .loading, .empty {
+      text-align: center;
+      padding: 1rem;
+      color: var(--old-rose);
+      font-size: 0.875rem;
+    }
+
+    .view-all {
+      display: block;
+      text-align: center;
+      margin-top: 1rem;
+      color: var(--berry-crush);
+      text-decoration: none;
+      font-size: 0.875rem;
+    }
+
+    .view-all:hover {
+      text-decoration: underline;
     }
 
     footer {
@@ -82,169 +301,69 @@
       color: var(--rosewood);
       text-decoration: underline;
     }
-
-    .users-section {
-      width: 100%;
-      max-width: 56.25rem;
-    }
-
-    .users-section h2 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: var(--lavender);
-      margin-bottom: 1.5rem;
-      letter-spacing: -0.05rem;
-    }
-
-    .users-list {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .user-card {
-      background: rgba(188, 141, 160, 0.05);
-      border: 1px solid var(--old-rose);
-      padding: 1.5rem;
-      display: flex;
-      gap: 1.5rem;
-      align-items: center;
-      transition: background 0.2s;
-    }
-
-    .user-card:hover {
-      background: rgba(188, 141, 160, 0.1);
-    }
-
-    .user-avatar {
-      width: 4rem;
-      height: 4rem;
-      border-radius: 50%;
-      background: var(--berry-crush);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: var(--lavender);
-      flex-shrink: 0;
-      text-transform: uppercase;
-    }
-
-    .user-avatar img {
-      width: 100%;
-      height: 100%;
-      border-radius: 50%;
-      object-fit: cover;
-    }
-
-    .user-info {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      flex: 1;
-    }
-
-    .user-name {
-      font-size: 1.125rem;
-      font-weight: 600;
-      color: var(--lavender);
-    }
-
-    .user-meta {
-      font-size: 0.875rem;
-      color: var(--old-rose);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-
-    .user-meta-item {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-    }
-
-    .user-badges {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    .user-badge {
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05rem;
-    }
-
-    .badge-admin {
-      background: var(--berry-crush);
-      color: var(--lavender);
-    }
-
-    .badge-role {
-      background: rgba(188, 141, 160, 0.2);
-      color: var(--lavender);
-      border: 1px solid var(--old-rose);
-    }
-
-    .badge-status {
-      border: 1px solid var(--old-rose);
-    }
-
-    .badge-status.active {
-      background: rgba(139, 195, 74, 0.2);
-      color: #a5d6a7;
-      border-color: #81c784;
-    }
-
-    .badge-status.suspended {
-      background: rgba(244, 67, 54, 0.2);
-      color: #ef9a9a;
-      border-color: #e57373;
-    }
-
-    .badge-status.inactive {
-      background: rgba(158, 158, 158, 0.2);
-      color: #bdbdbd;
-      border-color: #9e9e9e;
-    }
-
-    .loading {
-      text-align: center;
-      padding: 2rem;
-      color: var(--old-rose);
-      font-size: 1rem;
-    }
-
-    .error {
-      text-align: center;
-      padding: 2rem;
-      color: var(--rosewood);
-      font-size: 1rem;
-    }
   </style>
 </head>
 
 <body>
   <header>
-    <img src="../../public/logo.svg" alt="indiko" style="height: 2rem; margin-bottom: 0.5rem;" />
+    <h1 id="welcome">welcome</h1>
+    <p class="subtitle" id="subtitle">loading...</p>
   </header>
 
   <main>
-    <div class="users-section">
-      <h2>users</h2>
-      <div id="usersList" class="users-list">
-        <div class="loading">loading users...</div>
+    <div class="profile-preview">
+      <div class="profile-avatar" id="profileAvatar">
+        <span id="avatarInitials"></span>
+      </div>
+      <div class="profile-info">
+        <div class="profile-name" id="profileName">Loading...</div>
+        <div class="profile-username" id="profileUsername">@username</div>
+        <div class="profile-links" id="profileLinks">
+          <a href="/u/" id="publicProfileLink">view public profile</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <div class="card">
+        <h2 class="card-title">profile</h2>
+        <form id="profileForm">
+          <div class="form-group">
+            <label for="name">name</label>
+            <input type="text" id="name" name="name" required />
+          </div>
+
+          <div class="form-group">
+            <label for="email">email (optional)</label>
+            <input type="email" id="email" name="email" />
+          </div>
+
+          <div class="form-group">
+            <label for="photo">photo url (optional)</label>
+            <input type="url" id="photo" name="photo" placeholder="https://example.com/photo.jpg" />
+          </div>
+
+          <div class="form-group">
+            <label for="url">website url (optional)</label>
+            <input type="url" id="url" name="url" placeholder="https://example.com" />
+          </div>
+
+          <button type="submit" class="save-btn" id="saveBtn">save profile</button>
+          <div id="message" class="message"></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">recent apps</h2>
+        <div id="recentApps" class="apps-preview">
+          <div class="loading">loading...</div>
+        </div>
       </div>
     </div>
   </main>
 
   <footer id="footer">
-    loading... • <a href="/oauth-test">test oauth</a>
+    loading...
   </footer>
 
   <script type="module" src="../client/index.ts"></script>

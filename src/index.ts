@@ -1,11 +1,13 @@
 import { env } from "bun";
 import { db } from "./db";
 import indexHTML from "./html/index.html";
+import adminHTML from "./html/admin.html";
 import loginHTML from "./html/login.html";
 import profileHTML from "./html/profile.html";
 import oauthTestHTML from "./html/oauth-test.html";
+import appsHTML from "./html/apps.html";
 import { canRegister, registerOptions, registerVerify, loginOptions, loginVerify } from "./routes/auth";
-import { hello, listUsers, getProfile, updateProfile } from "./routes/api";
+import { hello, listUsers, getProfile, updateProfile, getAuthorizedApps, revokeApp } from "./routes/api";
 import { authorizeGet, authorizePost, token, logout, userProfile, createInvite } from "./routes/indieauth";
 
 (() => {
@@ -25,15 +27,21 @@ const server = Bun.serve({
 	port: env.PORT ? Number.parseInt(env.PORT, 10) : 3000,
 	routes: {
 		"/": indexHTML,
+		"/admin": adminHTML,
 		"/login": loginHTML,
 		"/profile": profileHTML,
 		"/oauth-test": oauthTestHTML,
+		"/apps": appsHTML,
 		// API endpoints
 		"/api/hello": hello,
 		"/api/users": listUsers,
 		"/api/profile": (req: Request) => {
 			if (req.method === "GET") return getProfile(req);
 			if (req.method === "PUT") return updateProfile(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/apps": (req: Request) => {
+			if (req.method === "GET") return getAuthorizedApps(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
 		"/api/invites/create": (req: Request) => {
@@ -65,10 +73,22 @@ const server = Bun.serve({
 	fetch(req) {
 		// Handle dynamic routes like /u/:username
 		const url = new URL(req.url);
-		const match = url.pathname.match(/^\/u\/([^\/]+)$/);
-		if (match) {
-			const username = match[1];
+		
+		// /u/:username - user profiles
+		const userMatch = url.pathname.match(/^\/u\/([^\/]+)$/);
+		if (userMatch) {
+			const username = userMatch[1];
 			return userProfile(req, username);
+		}
+		
+		// /api/apps/:clientId - revoke app access
+		const appMatch = url.pathname.match(/^\/api\/apps\/([^\/]+)$/);
+		if (appMatch) {
+			if (req.method === "DELETE") {
+				const clientId = decodeURIComponent(appMatch[1]);
+				return revokeApp(req, clientId);
+			}
+			return new Response("Method not allowed", { status: 405 });
 		}
 		
 		// Let Bun handle static routes
