@@ -170,7 +170,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 		// Create user (bootstrap is always admin)
 		const insertUser = db.query(
-			"INSERT INTO users (username, name, is_admin) VALUES (?, ?, 1) RETURNING id",
+			"INSERT INTO users (username, name, is_admin, role) VALUES (?, ?, 1, 'admin') RETURNING id",
 		);
 		const user = insertUser.get(username, username) as {
 			id: number;

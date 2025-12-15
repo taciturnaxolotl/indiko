@@ -2,8 +2,9 @@ import { env } from "bun";
 import { db } from "./db";
 import indexHTML from "./html/index.html";
 import loginHTML from "./html/login.html";
+import profileHTML from "./html/profile.html";
 import { canRegister, registerOptions, registerVerify, loginOptions, loginVerify } from "./routes/auth";
-import { hello } from "./routes/api";
+import { hello, listUsers, getProfile, updateProfile } from "./routes/api";
 
 (() => {
 	const required = ["ORIGIN", "RP_ID"];
@@ -23,8 +24,15 @@ const server = Bun.serve({
 	routes: {
 		"/": indexHTML,
 		"/login": loginHTML,
+		"/profile": profileHTML,
 		// API endpoints
 		"/api/hello": hello,
+		"/api/users": listUsers,
+		"/api/profile": (req: Request) => {
+			if (req.method === "GET") return getProfile(req);
+			if (req.method === "PUT") return updateProfile(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
 		"/auth/can-register": canRegister,
 		"/auth/register/options": registerOptions,
 		"/auth/register/verify": registerVerify,
