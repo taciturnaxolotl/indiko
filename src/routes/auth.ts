@@ -199,11 +199,18 @@ export async function registerVerify(req: Request): Promise<Response> {
 			"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
 		).run(token, user.id, expiresAt);
 
-		return Response.json({
-			token,
-			username,
-			isAdmin: true,
-		});
+		return Response.json(
+			{
+				token,
+				username,
+				isAdmin: true,
+			},
+			{
+				headers: {
+					"Set-Cookie": `indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`,
+				},
+			},
+		);
 	} catch (error) {
 		console.error("Registration verify error:", error);
 		return Response.json({ error: "Internal server error" }, { status: 500 });
@@ -379,10 +386,17 @@ export async function loginVerify(req: Request): Promise<Response> {
 			"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
 		).run(token, user.id, expiresAt);
 
-		return Response.json({
-			token,
-			username,
-		});
+		return Response.json(
+			{
+				token,
+				username,
+			},
+			{
+				headers: {
+					"Set-Cookie": `indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`,
+				},
+			},
+		);
 	} catch (error) {
 		console.error("Login verify error:", error);
 		return Response.json({ error: "Internal server error" }, { status: 500 });

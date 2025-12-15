@@ -24,7 +24,7 @@ async function checkAuth() {
 
 		const data = await response.json();
 
-		footer.innerHTML = `signed in as <strong>${data.username}</strong> • <a href="/profile">edit profile</a> • <a href="/login" id="logoutLink">sign out</a>`;
+		footer.innerHTML = `signed in as <strong><a href="/u/${data.username}">${data.username}</a></strong> • <a href="/profile">edit profile</a> • <a href="/oauth-test">test oauth</a> • <a href="/login" id="logoutLink">sign out</a>`;
 
 		// Handle logout
 		document.getElementById('logoutLink')?.addEventListener('click', async (e) => {

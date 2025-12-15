@@ -82,8 +82,13 @@ loginForm.addEventListener('submit', async (e) => {
 		localStorage.setItem('indiko_session', token);
 
 		showMessage('Login successful!', 'success');
+		
+		// Check for return URL parameter
+		const urlParams = new URLSearchParams(window.location.search);
+		const returnUrl = urlParams.get('return') || '/';
+		
 		const redirectTimer = setTimeout(() => {
-			window.location.href = '/';
+			window.location.href = returnUrl;
 		}, 1000);
 		(redirectTimer as unknown as number);
 
@@ -141,8 +146,13 @@ registerForm.addEventListener('submit', async (e) => {
 		localStorage.setItem('indiko_session', token);
 
 		showMessage('Registration successful!', 'success');
+		
+		// Check for return URL parameter
+		const urlParams = new URLSearchParams(window.location.search);
+		const returnUrl = urlParams.get('return') || '/';
+		
 		const redirectTimer = setTimeout(() => {
-			window.location.href = '/';
+			window.location.href = returnUrl;
 		}, 1000);
 		(redirectTimer as unknown as number);
 

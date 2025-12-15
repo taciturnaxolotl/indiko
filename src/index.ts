@@ -3,8 +3,10 @@ import { db } from "./db";
 import indexHTML from "./html/index.html";
 import loginHTML from "./html/login.html";
 import profileHTML from "./html/profile.html";
+import oauthTestHTML from "./html/oauth-test.html";
 import { canRegister, registerOptions, registerVerify, loginOptions, loginVerify } from "./routes/auth";
 import { hello, listUsers, getProfile, updateProfile } from "./routes/api";
+import { authorizeGet, authorizePost, token, logout, userProfile, createInvite } from "./routes/indieauth";
 
 (() => {
 	const required = ["ORIGIN", "RP_ID"];
@@ -25,6 +27,7 @@ const server = Bun.serve({
 		"/": indexHTML,
 		"/login": loginHTML,
 		"/profile": profileHTML,
+		"/oauth-test": oauthTestHTML,
 		// API endpoints
 		"/api/hello": hello,
 		"/api/users": listUsers,
@@ -33,6 +36,25 @@ const server = Bun.serve({
 			if (req.method === "PUT") return updateProfile(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
+		"/api/invites/create": (req: Request) => {
+			if (req.method === "POST") return createInvite(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		// IndieAuth/OAuth 2.0 endpoints
+		"/auth/authorize": (req: Request) => {
+			if (req.method === "GET") return authorizeGet(req);
+			if (req.method === "POST") return authorizePost(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/auth/token": (req: Request) => {
+			if (req.method === "POST") return token(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/auth/logout": (req: Request) => {
+			if (req.method === "POST") return logout(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		// Passkey auth endpoints
 		"/auth/can-register": canRegister,
 		"/auth/register/options": registerOptions,
 		"/auth/register/verify": registerVerify,
@@ -40,6 +62,18 @@ const server = Bun.serve({
 		"/auth/login/verify": loginVerify,
 	},
 	development: process.env.NODE_ENV === "dev",
+	fetch(req) {
+		// Handle dynamic routes like /u/:username
+		const url = new URL(req.url);
+		const match = url.pathname.match(/^\/u\/([^\/]+)$/);
+		if (match) {
+			const username = match[1];
+			return userProfile(req, username);
+		}
+		
+		// Let Bun handle static routes
+		return undefined as never;
+	},
 });
 
 console.log("[Indiko] running on", env.ORIGIN);
