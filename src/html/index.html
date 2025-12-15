@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>indiko</title>
+  <link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --mahogany: #26242b;
+      --lavender: #d9d0de;
+      --old-rose: #bc8da0;
+      --rosewood: #a04668;
+      --berry-crush: #ab4967;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Space Grotesk", sans-serif;
+      background: var(--mahogany);
+      color: var(--lavender);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2.5rem 1.25rem;
+    }
+
+    header {
+      width: 100%;
+      max-width: 56.25rem;
+      align-self: flex-start;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--old-rose), var(--berry-crush), var(--rosewood));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.125rem;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+
+    footer {
+      width: 100%;
+      max-width: 56.25rem;
+      padding: 1rem;
+      text-align: center;
+      color: var(--old-rose);
+      font-size: 0.875rem;
+      font-weight: 300;
+      letter-spacing: 0.05rem;
+    }
+
+    footer strong {
+      color: var(--lavender);
+      font-weight: 500;
+    }
+
+    footer a {
+      color: var(--berry-crush);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    footer a:hover {
+      color: var(--rosewood);
+      text-decoration: underline;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <img src="../../public/logo.svg" alt="indiko" style="height: 2rem; margin-bottom: 0.5rem;" />
+  </header>
+
+  <main>
+  </main>
+
+  <footer id="footer">
+    loading...
+  </footer>
+
+  <script type="module" src="../client/index.ts"></script>
+</body>
+
+</html>

@@ -1,6 +1,6 @@
 # Indiko
 
-No that was not a typo the project's name actually is `indiko`! This is a small implementation of [IndieAuth](https://indieweb.org/How_to_set_up_web_sign-in_on_your_own_domain) running on cloudflare workers and serving as the authentication provider for my homelab / side projects.
+No that was not a typo the project's name actually is `indiko`! This is a small implementation of [IndieAuth](https://indieweb.org/How_to_set_up_web_sign-in_on_your_own_domain) running on bun with sqlite and lit web components and serving as the authentication provider for my homelab / side projects.
 
 The canonical repo for this is hosted on tangled over at [`dunkirk.sh/indiko`](https://tangled.org/@dunkirk.sh/indiko)
 

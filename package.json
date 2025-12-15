@@ -1,0 +1,22 @@
+{
+	"name": "indiko",
+	"module": "index.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "bun run --hot src/index.ts",
+		"start": "bun run src/index.ts"
+	},
+	"devDependencies": {
+		"@simplewebauthn/types": "^12.0.0",
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"@simplewebauthn/browser": "^13.2.2",
+		"@simplewebauthn/server": "^13.2.2",
+		"bun-sqlite-migrations": "^1.0.2"
+	}
+}
