@@ -458,7 +458,26 @@ export async function authorizePost(req: Request): Promise<Response> {
 // POST /auth/token - Exchange authorization code for user identity
 export async function token(req: Request): Promise<Response> {
 	try {
-		const body = await req.json();
+		const contentType = req.headers.get("Content-Type");
+		let body: Record<string, string>;
+		
+		// Support both JSON and form-encoded requests
+		if (contentType?.includes("application/json")) {
+			body = await req.json();
+		} else if (contentType?.includes("application/x-www-form-urlencoded")) {
+			const formData = await req.formData();
+			body = Object.fromEntries(formData.entries()) as Record<string, string>;
+		} else {
+			console.error("Token endpoint: unsupported content type:", contentType);
+			return Response.json(
+				{
+					error: "invalid_request",
+					error_description: "Content-Type must be application/json or application/x-www-form-urlencoded",
+				},
+				{ status: 400 },
+			);
+		}
+		
 		const {
 			grant_type,
 			code,
@@ -478,6 +497,7 @@ export async function token(req: Request): Promise<Response> {
 		}
 
 		if (!code || !client_id || !redirect_uri || !code_verifier) {
+			console.error("Token endpoint: missing parameters", { code: !!code, client_id: !!client_id, redirect_uri: !!redirect_uri, code_verifier: !!code_verifier });
 			return Response.json(
 				{
 					error: "invalid_request",

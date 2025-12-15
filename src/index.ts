@@ -41,13 +41,13 @@ const server = Bun.serve({
 			return new Response("Method not allowed", { status: 405 });
 		},
 		// IndieAuth/OAuth 2.0 endpoints
-		"/auth/authorize": (req: Request) => {
+		"/auth/authorize": async (req: Request) => {
 			if (req.method === "GET") return authorizeGet(req);
-			if (req.method === "POST") return authorizePost(req);
+			if (req.method === "POST") return await authorizePost(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
-		"/auth/token": (req: Request) => {
-			if (req.method === "POST") return token(req);
+		"/auth/token": async (req: Request) => {
+			if (req.method === "POST") return await token(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
 		"/auth/logout": (req: Request) => {
