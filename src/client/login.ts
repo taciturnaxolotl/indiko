@@ -7,6 +7,23 @@ const message = document.getElementById('message') as HTMLDivElement;
 // Check if registration is allowed on page load
 async function checkRegistrationAllowed() {
 	try {
+		// Check for invite code in URL
+		const urlParams = new URLSearchParams(window.location.search);
+		const inviteCode = urlParams.get('invite');
+
+		if (inviteCode) {
+			// Show registration form with invite
+			const subtitleElement = document.querySelector('.subtitle');
+			if (subtitleElement) {
+				subtitleElement.textContent = 'create your account';
+			}
+			(document.getElementById('registerUsername') as HTMLInputElement).placeholder = 'choose username';
+			(document.getElementById('registerBtn') as HTMLButtonElement).textContent = 'create account';
+			loginForm.style.display = 'none';
+			registerForm.style.display = 'block';
+			return;
+		}
+
 		const response = await fetch('/auth/can-register');
 		const {canRegister} = await response.json();
 
@@ -109,11 +126,15 @@ registerForm.addEventListener('submit', async (e) => {
 		registerBtn.disabled = true;
 		registerBtn.textContent = 'preparing...';
 
+		// Get invite code from URL if present
+		const urlParams = new URLSearchParams(window.location.search);
+		const inviteCode = urlParams.get('invite');
+
 		// Get registration options
 		const optionsRes = await fetch('/auth/register/options', {
 			method: 'POST',
 			headers: {'Content-Type': 'application/json'},
-			body: JSON.stringify({username})
+			body: JSON.stringify({username, inviteCode})
 		});
 
 		if (!optionsRes.ok) {
@@ -134,7 +155,7 @@ registerForm.addEventListener('submit', async (e) => {
 		const verifyRes = await fetch('/auth/register/verify', {
 			method: 'POST',
 			headers: {'Content-Type': 'application/json'},
-			body: JSON.stringify({username, response: regResponse, challenge: options.challenge})
+			body: JSON.stringify({username, response: regResponse, challenge: options.challenge, inviteCode})
 		});
 
 		if (!verifyRes.ok) {
@@ -148,7 +169,6 @@ registerForm.addEventListener('submit', async (e) => {
 		showMessage('Registration successful!', 'success');
 		
 		// Check for return URL parameter
-		const urlParams = new URLSearchParams(window.location.search);
 		const returnUrl = urlParams.get('return') || '/';
 		
 		const redirectTimer = setTimeout(() => {

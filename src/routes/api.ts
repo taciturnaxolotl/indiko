@@ -233,3 +233,149 @@ export function revokeApp(req: Request, clientId: string): Response {
 
 	return Response.json({ success: true });
 }
+
+export function listAllApps(req: Request): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	if (!user.is_admin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	const apps = db
+		.query(
+			`SELECT 
+				a.client_id,
+				a.name,
+				a.first_seen,
+				a.last_used,
+				COUNT(DISTINCT p.user_id) as user_count
+			FROM apps a
+			LEFT JOIN permissions p ON a.client_id = p.client_id
+			GROUP BY a.client_id
+			ORDER BY a.last_used DESC`,
+		)
+		.all() as Array<{
+		client_id: string;
+		name: string | null;
+		first_seen: number;
+		last_used: number;
+		user_count: number;
+	}>;
+
+	return Response.json({
+		apps: apps.map((app) => ({
+			clientId: app.client_id,
+			name: app.name || new URL(app.client_id).hostname,
+			firstSeen: app.first_seen,
+			lastUsed: app.last_used,
+			userCount: app.user_count,
+		})),
+	});
+}
+
+export function getAppDetails(req: Request, clientId: string): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	if (!user.is_admin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	const app = db
+		.query(
+			`SELECT client_id, name, first_seen, last_used
+			FROM apps
+			WHERE client_id = ?`,
+		)
+		.get(clientId) as
+		| {
+				client_id: string;
+				name: string | null;
+				first_seen: number;
+				last_used: number;
+		  }
+		| undefined;
+
+	if (!app) {
+		return Response.json({ error: "App not found" }, { status: 404 });
+	}
+
+	const permissions = db
+		.query(
+			`SELECT 
+				u.username,
+				u.name,
+				p.scopes,
+				p.granted_at,
+				p.last_used
+			FROM permissions p
+			JOIN users u ON p.user_id = u.id
+			WHERE p.client_id = ?
+			ORDER BY p.last_used DESC`,
+		)
+		.all(clientId) as Array<{
+		username: string;
+		name: string;
+		scopes: string;
+		granted_at: number;
+		last_used: number;
+	}>;
+
+	return Response.json({
+		app: {
+			clientId: app.client_id,
+			name: app.name || new URL(app.client_id).hostname,
+			firstSeen: app.first_seen,
+			lastUsed: app.last_used,
+		},
+		permissions: permissions.map((p) => ({
+			username: p.username,
+			name: p.name,
+			scopes: JSON.parse(p.scopes) as string[],
+			grantedAt: p.granted_at,
+			lastUsed: p.last_used,
+		})),
+	});
+}
+
+export function revokeAppForUser(
+	req: Request,
+	clientId: string,
+	username: string,
+): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	if (!user.is_admin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	const targetUser = db
+		.query("SELECT id FROM users WHERE username = ?")
+		.get(username) as { id: number } | undefined;
+
+	if (!targetUser) {
+		return Response.json({ error: "User not found" }, { status: 404 });
+	}
+
+	const result = db
+		.query("DELETE FROM permissions WHERE user_id = ? AND client_id = ?")
+		.run(targetUser.id, clientId);
+
+	if (result.changes === 0) {
+		return Response.json({ error: "Permission not found" }, { status: 404 });
+	}
+
+	db.query(
+		"DELETE FROM authcodes WHERE user_id = ? AND client_id = ? AND used = 0",
+	).run(targetUser.id, clientId);
+
+	return Response.json({ success: true });
+}

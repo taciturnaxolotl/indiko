@@ -87,10 +87,13 @@
 
     main {
       flex: 1;
-      display: flex;
-      justify-content: center;
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 2rem;
+      align-items: start;
       width: 100%;
-      padding-top: 2rem;
+      max-width: 80rem;
+      padding: 2rem 1.25rem;
     }
 
     footer {
@@ -123,7 +126,6 @@
 
     .users-section {
       width: 100%;
-      max-width: 56.25rem;
     }
 
     .users-section h2 {
@@ -264,6 +266,110 @@
       color: var(--rosewood);
       font-size: 1rem;
     }
+
+    .invites-section {
+      width: 100%;
+    }
+
+    .invites-section h2 {
+      font-size: 1.5rem;
+      color: var(--lavender);
+      margin-bottom: 1rem;
+    }
+
+    .invite-actions {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .invite-btn {
+      padding: 0.75rem 1.5rem;
+      background: var(--berry-crush);
+      color: var(--lavender);
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    .invite-btn:hover {
+      background: var(--rosewood);
+    }
+
+    .invite-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .invite-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .invite-item {
+      background: rgba(188, 141, 160, 0.05);
+      border: 1px solid var(--old-rose);
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .invite-code {
+      font-family: monospace;
+      font-size: 0.875rem;
+      color: var(--lavender);
+      word-break: break-all;
+    }
+
+    .invite-meta {
+      font-size: 0.75rem;
+      color: var(--old-rose);
+      margin-top: 0.25rem;
+    }
+
+    .invite-actions-btns {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .copy-btn, .delete-btn {
+      padding: 0.5rem 1rem;
+      background: rgba(188, 141, 160, 0.2);
+      color: var(--lavender);
+      border: 1px solid var(--old-rose);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.875rem;
+      transition: background 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: rgba(188, 141, 160, 0.3);
+    }
+
+    .delete-btn {
+      background: rgba(160, 70, 104, 0.2);
+      border-color: var(--rosewood);
+    }
+
+    .delete-btn:hover {
+      background: rgba(160, 70, 104, 0.3);
+    }
+
+    .invite-url {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      font-family: monospace;
+      font-size: 0.75rem;
+      word-break: break-all;
+    }
   </style>
 </head>
 
@@ -283,6 +389,16 @@
       <h2>users</h2>
       <div id="usersList" class="users-list">
         <div class="loading">loading users...</div>
+      </div>
+    </div>
+
+    <div class="invites-section">
+      <h2>invites</h2>
+      <div class="invite-actions">
+        <button class="invite-btn" id="createInviteBtn">create invite link</button>
+      </div>
+      <div id="invitesList" class="invite-list">
+        <div class="loading">loading invites...</div>
       </div>
     </div>
   </main>

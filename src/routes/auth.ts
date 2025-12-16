@@ -28,7 +28,7 @@ export function canRegister(req: Request): Response {
 export async function registerOptions(req: Request): Promise<Response> {
 	try {
 		const body = await req.json();
-		const { username } = body;
+		const { username, inviteCode } = body;
 
 		if (!username || typeof username !== "string") {
 			return Response.json({ error: "Username required" }, { status: 400 });
@@ -53,8 +53,24 @@ export async function registerOptions(req: Request): Promise<Response> {
 
 		const isBootstrap = userCount.count === 0;
 
+		// If not bootstrap, require valid invite code
 		if (!isBootstrap) {
-			return Response.json({ error: "Registration closed" }, { status: 403 });
+			if (!inviteCode) {
+				return Response.json({ error: "Invite code required" }, { status: 403 });
+			}
+
+			// Validate invite code
+			const invite = db
+				.query("SELECT id, used FROM invites WHERE code = ?")
+				.get(inviteCode) as { id: number; used: number } | undefined;
+
+			if (!invite) {
+				return Response.json({ error: "Invalid invite code" }, { status: 403 });
+			}
+
+			if (invite.used === 1) {
+				return Response.json({ error: "Invite code already used" }, { status: 403 });
+			}
 		}
 
 		// Generate WebAuthn registration options
@@ -88,10 +104,11 @@ export async function registerOptions(req: Request): Promise<Response> {
 export async function registerVerify(req: Request): Promise<Response> {
 	try {
 		const body = await req.json();
-		const { username, response, challenge: expectedChallenge } = body as {
+		const { username, response, challenge: expectedChallenge, inviteCode } = body as {
 			username: string;
 			response: RegistrationResponseJSON;
 			challenge?: string;
+			inviteCode?: string;
 		};
 
 		if (!username || !response) {
@@ -138,8 +155,26 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 		const isBootstrap = userCount.count === 0;
 
+		// If not bootstrap, validate invite code
+		let inviteId: number | undefined;
 		if (!isBootstrap) {
-			return Response.json({ error: "Registration closed" }, { status: 403 });
+			if (!inviteCode) {
+				return Response.json({ error: "Invite code required" }, { status: 403 });
+			}
+
+			const invite = db
+				.query("SELECT id, used FROM invites WHERE code = ?")
+				.get(inviteCode) as { id: number; used: number } | undefined;
+
+			if (!invite) {
+				return Response.json({ error: "Invalid invite code" }, { status: 403 });
+			}
+
+			if (invite.used === 1) {
+				return Response.json({ error: "Invite code already used" }, { status: 403 });
+			}
+
+			inviteId = invite.id;
 		}
 
 		// Verify WebAuthn response
@@ -168,11 +203,11 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 		const { credential } = verification.registrationInfo;
 
-		// Create user (bootstrap is always admin)
+		// Create user (bootstrap is always admin, invited users are regular users)
 		const insertUser = db.query(
-			"INSERT INTO users (username, name, is_admin, role) VALUES (?, ?, 1, 'admin') RETURNING id",
+			"INSERT INTO users (username, name, is_admin, role) VALUES (?, ?, ?, ?) RETURNING id",
 		);
-		const user = insertUser.get(username, username) as {
+		const user = insertUser.get(username, username, isBootstrap ? 1 : 0, isBootstrap ? 'admin' : 'user') as {
 			id: number;
 		};
 
@@ -186,6 +221,14 @@ export async function registerVerify(req: Request): Promise<Response> {
 			Buffer.from(credential.publicKey),
 			credential.counter,
 		);
+
+		// Mark invite as used if applicable
+		if (inviteId) {
+			const usedAt = Math.floor(Date.now() / 1000);
+			db.query(
+				"UPDATE invites SET used = 1, used_by = ?, used_at = ? WHERE id = ?",
+			).run(user.id, usedAt, inviteId);
+		}
 
 		// Delete challenge
 		db.query("DELETE FROM challenges WHERE challenge = ?").run(
@@ -203,7 +246,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 			{
 				token,
 				username,
-				isAdmin: true,
+				isAdmin: isBootstrap,
 			},
 			{
 				headers: {

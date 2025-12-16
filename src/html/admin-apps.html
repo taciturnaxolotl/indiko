@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>apps • admin • indiko</title>
+	<link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+	<style>
+		:root {
+			--mahogany: #26242b;
+			--lavender: #d9d0de;
+			--old-rose: #bc8da0;
+			--rosewood: #a04668;
+			--berry-crush: #ab4967;
+		}
+
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: "Space Grotesk", sans-serif;
+			background: var(--mahogany);
+			color: var(--lavender);
+			min-height: 100vh;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding: 2.5rem 1.25rem;
+		}
+
+		header {
+			width: 100%;
+			max-width: 56.25rem;
+			align-self: flex-start;
+			margin-left: auto;
+			margin-right: auto;
+			margin-bottom: 2rem;
+			display: flex;
+			justify-content: space-between;
+			align-items: flex-start;
+		}
+
+		.header-nav {
+			display: flex;
+			gap: 1rem;
+			margin-top: 0.5rem;
+		}
+
+		.header-nav a {
+			color: var(--old-rose);
+			text-decoration: none;
+			font-size: 0.875rem;
+			font-weight: 500;
+			padding: 0.5rem 1rem;
+			border: 1px solid var(--old-rose);
+			transition: all 0.2s;
+		}
+
+		.header-nav a:hover {
+			background: rgba(188, 141, 160, 0.1);
+			color: var(--berry-crush);
+			border-color: var(--berry-crush);
+		}
+
+		.header-nav a.active {
+			background: var(--berry-crush);
+			color: var(--lavender);
+			border-color: var(--berry-crush);
+		}
+
+		h1 {
+			font-size: 2rem;
+			font-weight: 700;
+			background: linear-gradient(135deg, var(--old-rose), var(--berry-crush), var(--rosewood));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+			letter-spacing: -0.125rem;
+		}
+
+		main {
+			flex: 1;
+			width: 100%;
+			max-width: 56.25rem;
+			padding: 2rem 1.25rem;
+		}
+
+		h2 {
+			font-size: 1.5rem;
+			font-weight: 600;
+			color: var(--lavender);
+			margin-bottom: 1.5rem;
+			letter-spacing: -0.05rem;
+		}
+
+		footer {
+			width: 100%;
+			max-width: 56.25rem;
+			padding: 1rem;
+			text-align: center;
+			color: var(--old-rose);
+			font-size: 0.875rem;
+			font-weight: 300;
+			letter-spacing: 0.05rem;
+		}
+
+		footer a {
+			color: var(--berry-crush);
+			text-decoration: none;
+			transition: color 0.2s;
+		}
+
+		footer a:hover {
+			color: var(--rosewood);
+			text-decoration: underline;
+		}
+
+		.back-link {
+			margin-top: 0.5rem;
+			font-size: 0.875rem;
+			color: var(--old-rose);
+		}
+
+		.apps-list {
+			display: flex;
+			flex-direction: column;
+			gap: 1rem;
+		}
+
+		.app-card {
+			background: rgba(188, 141, 160, 0.05);
+			border: 1px solid var(--old-rose);
+			padding: 1.5rem;
+			cursor: pointer;
+			transition: background 0.2s;
+		}
+
+		.app-card:hover {
+			background: rgba(188, 141, 160, 0.1);
+		}
+
+		.app-card.expanded {
+			background: rgba(188, 141, 160, 0.1);
+		}
+
+		.app-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: flex-start;
+		}
+
+		.app-info {
+			flex: 1;
+		}
+
+		.app-name {
+			font-size: 1.125rem;
+			font-weight: 600;
+			color: var(--lavender);
+			margin-bottom: 0.5rem;
+		}
+
+		.app-meta {
+			font-size: 0.875rem;
+			color: var(--old-rose);
+			display: flex;
+			flex-wrap: wrap;
+			gap: 1rem;
+		}
+
+		.app-stats {
+			display: flex;
+			gap: 1rem;
+			align-items: center;
+		}
+
+		.stat-badge {
+			padding: 0.25rem 0.75rem;
+			font-size: 0.75rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.05rem;
+			background: rgba(188, 141, 160, 0.2);
+			color: var(--lavender);
+			border: 1px solid var(--old-rose);
+		}
+
+		.app-details {
+			margin-top: 1.5rem;
+			padding-top: 1.5rem;
+			border-top: 1px solid var(--old-rose);
+			display: none;
+		}
+
+		.app-card.expanded .app-details {
+			display: block;
+		}
+
+		.permissions-list {
+			display: flex;
+			flex-direction: column;
+			gap: 0.75rem;
+		}
+
+		.permission-item {
+			background: rgba(0, 0, 0, 0.2);
+			padding: 1rem;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.permission-user {
+			flex: 1;
+		}
+
+		.permission-username {
+			font-weight: 600;
+			color: var(--lavender);
+			margin-bottom: 0.25rem;
+		}
+
+		.permission-meta {
+			font-size: 0.75rem;
+			color: var(--old-rose);
+			display: flex;
+			gap: 1rem;
+		}
+
+		.permission-scopes {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+			margin: 0.5rem 0;
+		}
+
+		.scope-badge {
+			padding: 0.25rem 0.5rem;
+			font-size: 0.625rem;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.05rem;
+			background: rgba(188, 141, 160, 0.3);
+			color: var(--lavender);
+			border: 1px solid var(--old-rose);
+		}
+
+		.revoke-btn {
+			padding: 0.5rem 1rem;
+			background: transparent;
+			color: var(--rosewood);
+			border: 2px solid var(--rosewood);
+			font-family: "Space Grotesk", sans-serif;
+			font-size: 0.875rem;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.05rem;
+			cursor: pointer;
+			transition: all 0.2s;
+		}
+
+		.revoke-btn:hover:not(:disabled) {
+			background: var(--rosewood);
+			color: var(--lavender);
+		}
+
+		.revoke-btn:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+
+		.loading {
+			text-align: center;
+			padding: 2rem;
+			color: var(--old-rose);
+			font-size: 1rem;
+		}
+
+		.error {
+			text-align: center;
+			padding: 2rem;
+			color: var(--rosewood);
+			font-size: 1rem;
+		}
+
+		.empty {
+			text-align: center;
+			padding: 2rem;
+			color: var(--old-rose);
+			font-size: 1rem;
+		}
+
+		.expand-indicator {
+			color: var(--old-rose);
+			font-size: 0.75rem;
+			text-transform: uppercase;
+			letter-spacing: 0.05rem;
+		}
+
+		.app-card.expanded .expand-indicator::after {
+			content: " ▲";
+		}
+
+		.app-card:not(.expanded) .expand-indicator::after {
+			content: " ▼";
+		}
+	</style>
+</head>
+
+<body>
+	<header>
+		<div>
+			<img src="../../public/logo.svg" alt="indiko" style="height: 2rem;" />
+		</div>
+		<div class="header-nav">
+			<a href="/admin">users</a>
+			<a href="/admin/apps" class="active">apps</a>
+		</div>
+	</header>
+
+	<main>
+		<h2>apps</h2>
+		<div id="appsList" class="apps-list">
+			<div class="loading">loading apps...</div>
+		</div>
+	</main>
+
+	<footer id="footer">
+		loading...
+		<div class="back-link"><a href="/">← back to dashboard</a></div>
+	</footer>
+
+	<script type="module" src="../client/admin-apps.ts"></script>
+</body>
+
+</html>

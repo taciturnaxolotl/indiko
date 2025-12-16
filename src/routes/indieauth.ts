@@ -880,3 +880,46 @@ export function createInvite(req: Request): Response {
 		inviteUrl: `${process.env.ORIGIN}/login?invite=${inviteCode}`,
 	});
 }
+
+// GET /api/invites - List all invites (admin only)
+export function listInvites(req: Request): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	if (!user.isAdmin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	const invites = db.query(`
+		SELECT i.id, i.code, i.used, i.created_at, i.used_at,
+			creator.username as created_by_username,
+			usedby.username as used_by_username
+		FROM invites i
+		LEFT JOIN users creator ON i.created_by = creator.id
+		LEFT JOIN users usedby ON i.used_by = usedby.id
+		ORDER BY i.created_at DESC
+	`).all() as Array<{
+		id: number;
+		code: string;
+		used: number;
+		created_at: number;
+		used_at: number | null;
+		created_by_username: string;
+		used_by_username: string | null;
+	}>;
+
+	return Response.json({
+		invites: invites.map((inv) => ({
+			id: inv.id,
+			code: inv.code,
+			used: inv.used === 1,
+			createdAt: inv.created_at,
+			usedAt: inv.used_at,
+			createdBy: inv.created_by_username,
+			usedBy: inv.used_by_username,
+			inviteUrl: `${process.env.ORIGIN}/login?invite=${inv.code}`,
+		})),
+	});
+}
