@@ -133,8 +133,8 @@ function displayClients(clients: Client[]) {
 		const firstSeenDate = new Date(client.firstSeen * 1000).toLocaleDateString();
 		
 		return `
-			<div class="client-card" data-client-id="${client.clientId}" onclick="toggleClient('${client.clientId}')">
-				<div class="client-header">
+			<div class="client-card" data-client-id="${client.clientId}">
+				<div class="client-header" onclick="toggleClient('${client.clientId}')">
 					<div class="client-logo">
 						${client.logoUrl 
 							? `<img src="${client.logoUrl}" alt="${client.name}" />`
@@ -158,7 +158,7 @@ function displayClients(clients: Client[]) {
 							<button class="btn-edit" onclick="event.stopPropagation(); editClient('${client.clientId}')">edit</button>
 							<button class="btn-delete" onclick="event.stopPropagation(); deleteClient('${client.clientId}')">delete</button>
 						` : ''}
-						<span class="expand-indicator" style="color: var(--old-rose); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05rem;">details ▼</span>
+						<span class="expand-indicator">details <span class="arrow">▼</span></span>
 					</div>
 				</div>
 				<div class="client-details" id="details-${encodeURIComponent(client.clientId)}">
@@ -174,13 +174,16 @@ function displayClients(clients: Client[]) {
 	if (!card) return;
 
 	const isExpanded = card.classList.contains('expanded');
+	const arrow = card.querySelector('.arrow') as HTMLElement;
 	
 	if (isExpanded) {
 		card.classList.remove('expanded');
+		if (arrow) arrow.textContent = '▼';
 		return;
 	}
 
 	card.classList.add('expanded');
+	if (arrow) arrow.textContent = '▲';
 	
 	const detailsDiv = document.getElementById(`details-${encodeURIComponent(clientId)}`);
 	if (!detailsDiv) return;
