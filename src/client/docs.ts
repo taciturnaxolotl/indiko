@@ -1,3 +1,15 @@
+// JSON syntax highlighter
+function highlightJSON(json: string): string {
+	return json
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
+		.replace(/: "([^"]*)"/g, ': <span class="json-string">"$1"</span>')
+		.replace(/: (\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+		.replace(/: (true|false|null)/g, ': <span class="json-boolean">$1</span>');
+}
+
 // PKCE helper functions
 function generateRandomString(length: number): string {
 	const array = new Uint8Array(length);
@@ -180,11 +192,16 @@ function showResult(text: string, type: 'success' | 'error') {
 		// Extract and parse JSON from success message
 		const jsonStart = text.indexOf('{');
 		const jsonStr = text.substring(jsonStart);
-		const prefix = text.substring(0, jsonStart);
+		const prefix = text.substring(0, jsonStart).trim();
 		
 		try {
 			const data = JSON.parse(jsonStr);
-			resultDiv.innerHTML = `${prefix}<pre style="margin: 0; font-family: 'Space Grotesk', monospace;">${syntaxHighlightJSON(data)}</pre>`;
+			const formattedJson = JSON.stringify(data, null, 2);
+			
+			// Apply custom JSON syntax highlighting
+			const highlightedJson = highlightJSON(formattedJson);
+			
+			resultDiv.innerHTML = `<strong style="color: var(--berry-crush); font-size: 1.125rem; display: block; margin-bottom: 1rem;">${prefix}</strong><pre style="margin: 0;"><code>${highlightedJson}</code></pre>`;
 		} catch {
 			resultDiv.textContent = text;
 		}
@@ -192,23 +209,4 @@ function showResult(text: string, type: 'success' | 'error') {
 		resultDiv.textContent = text;
 	}
 	resultDiv.className = `result show ${type}`;
-}
-
-function syntaxHighlightJSON(obj: any): string {
-	const json = JSON.stringify(obj, null, 2);
-	return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
-		let cls = 'json-number';
-		if (/^"/.test(match)) {
-			if (/:$/.test(match)) {
-				cls = 'json-key';
-			} else {
-				cls = 'json-string';
-			}
-		} else if (/true|false/.test(match)) {
-			cls = 'json-boolean';
-		} else if (/null/.test(match)) {
-			cls = 'json-null';
-		}
-		return `<span class="${cls}">${match}</span>`;
-	});
 }
