@@ -246,21 +246,23 @@ function showConsentScreen(
       padding: 2rem 1rem;
     }
     .consent-box {
-      max-width: 28rem;
+      max-width: 32rem;
       width: 100%;
       background: rgba(188, 141, 160, 0.05);
       border: 1px solid var(--old-rose);
-      padding: 2rem;
+      padding: 2.5rem;
     }
     .app-header {
       display: flex;
-      gap: 1rem;
-      align-items: center;
-      margin-bottom: 1rem;
+      gap: 1.5rem;
+      align-items: flex-start;
+      margin-bottom: 2rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--old-rose);
     }
     .app-logo {
-      width: 4rem;
-      height: 4rem;
+      width: 5rem;
+      height: 5rem;
       border-radius: 0.5rem;
       background: rgba(188, 141, 160, 0.2);
       display: flex;
@@ -268,39 +270,63 @@ function showConsentScreen(
       justify-content: center;
       flex-shrink: 0;
       overflow: hidden;
+      font-size: 2rem;
     }
     .app-logo img {
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
-    h1 {
+    .app-info {
+      flex: 1;
+    }
+    .app-name {
       font-size: 1.5rem;
       font-weight: 700;
       color: var(--lavender);
-      margin-bottom: 0.25rem;
+      margin-bottom: 0.5rem;
     }
-    .app-name {
-      color: var(--berry-crush);
-      font-weight: 700;
+    .app-url {
+      font-size: 0.875rem;
+      color: var(--old-rose);
+      font-family: monospace;
+      margin-bottom: 0.75rem;
     }
     .app-description {
+      font-size: 0.9375rem;
+      color: var(--old-rose);
+      line-height: 1.6;
+    }
+    .user-badge {
+      display: inline-block;
+      background: rgba(188, 141, 160, 0.1);
+      border-left: 3px solid var(--berry-crush);
+      padding: 0.75rem 1rem;
       font-size: 0.875rem;
       color: var(--old-rose);
-      margin-top: 0.5rem;
+      margin-bottom: 2rem;
+    }
+    .user-badge strong {
+      color: var(--lavender);
+    }
+    .request-text {
+      font-size: 1.125rem;
+      color: var(--lavender);
+      margin-bottom: 1.5rem;
+      line-height: 1.6;
     }
     .scopes {
-      margin: 1.5rem 0;
-      padding: 1rem;
-      background: rgba(12, 23, 19, 0.6);
-      border: 1px solid var(--rosewood);
+      margin-bottom: 2rem;
+      padding: 1.5rem;
+      background: rgba(12, 23, 19, 0.4);
+      border: 1px solid var(--old-rose);
     }
     .scope-title {
-      font-size: 0.875rem;
+      font-size: 0.75rem;
       color: var(--old-rose);
       text-transform: uppercase;
-      letter-spacing: 0.05rem;
-      margin-bottom: 0.75rem;
+      letter-spacing: 0.1rem;
+      margin-bottom: 1rem;
     }
     .scope-list {
       list-style: none;
@@ -310,23 +336,64 @@ function showConsentScreen(
     }
     .scope-list li {
       color: var(--lavender);
-      padding-left: 1.5rem;
-      position: relative;
+      font-size: 0.9375rem;
+      line-height: 1.5;
     }
-    .scope-list li::before {
+    .scope-list label {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+      padding: 0.75rem;
+      transition: background 0.2s;
+      border: 1px solid transparent;
+    }
+    .scope-list label:hover {
+      background: rgba(188, 141, 160, 0.1);
+      border-color: var(--old-rose);
+    }
+    .scope-list input[type="checkbox"] {
+      appearance: none;
+      width: 1.5rem;
+      height: 1.5rem;
+      border: 2px solid var(--old-rose);
+      background: rgba(12, 23, 19, 0.6);
+      cursor: pointer;
+      flex-shrink: 0;
+      position: relative;
+      transition: all 0.2s;
+    }
+    .scope-list input[type="checkbox"]:checked {
+      background: var(--berry-crush);
+      border-color: var(--berry-crush);
+    }
+    .scope-list input[type="checkbox"]:checked::after {
       content: "✓";
       position: absolute;
-      left: 0;
-      color: var(--berry-crush);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: var(--lavender);
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .scope-list input[type="checkbox"]:disabled {
+      cursor: not-allowed;
+    }
+    .scope-required {
+      font-size: 0.75rem;
+      color: var(--old-rose);
+      margin-left: 2.25rem;
+      margin-top: -0.25rem;
+      margin-bottom: 0.25rem;
     }
     .buttons {
       display: flex;
       gap: 1rem;
-      margin-top: 1.5rem;
     }
     button {
       flex: 1;
-      padding: 1rem;
+      padding: 1rem 1.5rem;
       border: 4px solid var(--mahogany);
       font-family: "Space Grotesk", sans-serif;
       font-size: 1rem;
@@ -343,6 +410,7 @@ function showConsentScreen(
       position: absolute;
       top: -4px; left: -4px; right: -4px; bottom: -4px;
       background: transparent;
+      border: 4px solid;
       pointer-events: none;
       transition: all 0.15s ease;
     }
@@ -350,57 +418,72 @@ function showConsentScreen(
       transform: translate(3px, 3px);
       box-shadow: 3px 3px 0 var(--mahogany);
     }
+    button:hover::before {
+      top: -7px;
+      left: -7px;
+      right: -7px;
+      bottom: -7px;
+    }
+    button:active {
+      transform: translate(6px, 6px);
+      box-shadow: 0 0 0 var(--mahogany);
+    }
     .allow {
       background: var(--berry-crush);
       color: var(--lavender);
     }
     .allow::before {
-      border: 4px solid var(--rosewood);
+      border-color: var(--rosewood);
     }
     .deny {
       background: transparent;
       color: var(--old-rose);
-      box-shadow: 4px 4px 0 var(--mahogany);
     }
     .deny::before {
-      border: 4px solid var(--old-rose);
-    }
-    .user-info {
-      margin-bottom: 1.5rem;
-      padding: 1rem;
-      background: rgba(188, 141, 160, 0.1);
-      border-left: 3px solid var(--berry-crush);
-      font-size: 0.875rem;
-      color: var(--old-rose);
+      border-color: var(--old-rose);
     }
   </style>
 </head>
 <body>
   <div class="consent-box">
+    <div class="user-badge">
+      <span>Signing in as</span>
+      <strong>${user.username}</strong>
+    </div>
+
     <div class="app-header">
-      ${appLogo ? `<div class="app-logo"><img src="${appLogo}" alt="${appName}" /></div>` : ''}
-      <div>
-        <h1>authorize app</h1>
-        <div class="user-info">
-          Signing in as <strong>${user.username}</strong>
-        </div>
+      <div class="app-logo">
+        ${appLogo ? `<img src="${appLogo}" alt="${appName}" />` : '🔐'}
+      </div>
+      <div class="app-info">
+        <div class="app-name">${appName}</div>
+        <div class="app-url">${new URL(clientId).hostname}</div>
+        ${appDescription ? `<div class="app-description">${appDescription}</div>` : ''}
       </div>
     </div>
 
-    <p style="margin-bottom: 1rem;">
-      <span class="app-name">${appName}</span> is requesting access to:
-    </p>
-    
-    ${appDescription ? `<p class="app-description">${appDescription}</p>` : ''}
+    <div class="request-text">
+      This app would like to access the following information:
+    </div>
 
     <div class="scopes">
-      <div class="scope-title">permissions</div>
+      <div class="scope-title">requested permissions</div>
       <ul class="scope-list">
         ${scopes
 					.map(
-						(scope) => `
-          <li>${scope === "profile" ? "Your profile (name, photo, URL)" : scope === "email" ? "Your email address" : scope}</li>
-        `,
+						(scope) => {
+							const isProfile = scope === "profile";
+							const description = scope === "profile" ? "Your profile (name, photo, URL)" : scope === "email" ? "Your email address" : scope;
+							const required = isProfile ? ' <span style="color: var(--old-rose); font-size: 0.875rem; margin-left: 0.5rem;">(required)</span>' : '';
+							return `
+          <li>
+            <label>
+              <input type="checkbox" name="scope" value="${scope}" ${isProfile ? 'checked disabled' : 'checked'} />
+              <span>${description}${required}</span>
+            </label>
+          </li>
+        `;
+						},
 					)
 					.join("")}
       </ul>
@@ -411,7 +494,8 @@ function showConsentScreen(
       <input type="hidden" name="redirect_uri" value="${redirectUri}" />
       <input type="hidden" name="state" value="${state}" />
       <input type="hidden" name="code_challenge" value="${codeChallenge}" />
-      <input type="hidden" name="scopes" value="${scopes.join(" ")}" />
+      <!-- Always include profile scope as it's required -->
+      <input type="hidden" name="scope" value="profile" />
       
       <div class="buttons">
         <button type="submit" name="action" value="deny" class="deny">deny</button>
@@ -441,9 +525,8 @@ export async function authorizePost(req: Request): Promise<Response> {
 	const redirectUri = formData.get("redirect_uri") as string;
 	const state = formData.get("state") as string;
 	const codeChallenge = formData.get("code_challenge") as string;
-	const scopesStr = formData.get("scopes") as string;
 
-	if (!clientId || !redirectUri || !state || !codeChallenge || !scopesStr) {
+	if (!clientId || !redirectUri || !state || !codeChallenge) {
 		return new Response("Missing required parameters", { status: 400 });
 	}
 
@@ -453,7 +536,13 @@ export async function authorizePost(req: Request): Promise<Response> {
 		);
 	}
 
-	const scopes = scopesStr.split(" ").filter(Boolean);
+	// Get the scopes the user actually approved (from checkboxes)
+	const approvedScopes = formData.getAll("scope") as string[];
+
+	// Profile scope is always required and included via hidden input
+	if (approvedScopes.length === 0 || !approvedScopes.includes("profile")) {
+		return new Response("Invalid scope selection", { status: 400 });
+	}
 
 	// Create authorization code
 	const code = crypto.randomBytes(32).toString("base64url");
@@ -466,7 +555,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 		user.userId,
 		clientId,
 		redirectUri,
-		JSON.stringify(scopes),
+		JSON.stringify(approvedScopes),
 		codeChallenge,
 		expiresAt,
 	);
@@ -479,11 +568,11 @@ export async function authorizePost(req: Request): Promise<Response> {
 	if (existing) {
 		db.query(
 			"UPDATE permissions SET scopes = ?, last_used = ? WHERE user_id = ? AND client_id = ?",
-		).run(JSON.stringify(scopes), Math.floor(Date.now() / 1000), user.userId, clientId);
+		).run(JSON.stringify(approvedScopes), Math.floor(Date.now() / 1000), user.userId, clientId);
 	} else {
 		db.query(
 			"INSERT INTO permissions (user_id, client_id, scopes) VALUES (?, ?, ?)",
-		).run(user.userId, clientId, JSON.stringify(scopes));
+		).run(user.userId, clientId, JSON.stringify(approvedScopes));
 	}
 
 	// Update app last_used

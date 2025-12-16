@@ -5,7 +5,7 @@ import adminHTML from "./html/admin.html";
 import adminClientsHTML from "./html/admin-clients.html";
 import loginHTML from "./html/login.html";
 import profileHTML from "./html/profile.html";
-import oauthTestHTML from "./html/oauth-test.html";
+import docsHTML from "./html/docs.html";
 import appsHTML from "./html/apps.html";
 import {
 	canRegister,
@@ -66,7 +66,7 @@ const server = Bun.serve({
 		"/admin/clients": adminClientsHTML,
 		"/login": loginHTML,
 		"/profile": profileHTML,
-		"/oauth-test": oauthTestHTML,
+		"/docs": docsHTML,
 		"/apps": appsHTML,
 		// API endpoints
 		"/api/hello": hello,

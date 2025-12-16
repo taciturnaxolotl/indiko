@@ -76,7 +76,7 @@ async function checkAuth() {
 
 		// Build footer with conditional admin link
 		const adminLink = data.isAdmin ? ' • <a href="/admin">admin</a>' : '';
-		footer.innerHTML = `signed in as <strong><a href="/u/${data.username}">${data.username}</a></strong> • <a href="/apps">apps</a> • <a href="/oauth-test">test oauth</a>${adminLink} • <a href="/login" id="logoutLink">sign out</a>`;
+		footer.innerHTML = `signed in as <strong><a href="/u/${data.username}">${data.username}</a></strong> • <a href="/apps">apps</a> • <a href="/docs">docs</a>${adminLink} • <a href="/login" id="logoutLink">sign out</a>`;
 
 		// Handle logout
 		document.getElementById('logoutLink')?.addEventListener('click', async (e) => {
