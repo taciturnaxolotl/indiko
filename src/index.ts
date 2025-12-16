@@ -2,14 +2,47 @@ import { env } from "bun";
 import { db } from "./db";
 import indexHTML from "./html/index.html";
 import adminHTML from "./html/admin.html";
-import adminAppsHTML from "./html/admin-apps.html";
+import adminClientsHTML from "./html/admin-clients.html";
 import loginHTML from "./html/login.html";
 import profileHTML from "./html/profile.html";
 import oauthTestHTML from "./html/oauth-test.html";
 import appsHTML from "./html/apps.html";
-import { canRegister, registerOptions, registerVerify, loginOptions, loginVerify } from "./routes/auth";
-import { hello, listUsers, getProfile, updateProfile, getAuthorizedApps, revokeApp, listAllApps, getAppDetails, revokeAppForUser } from "./routes/api";
-import { authorizeGet, authorizePost, token, logout, userProfile, createInvite, listInvites } from "./routes/indieauth";
+import {
+	canRegister,
+	registerOptions,
+	registerVerify,
+	loginOptions,
+	loginVerify,
+} from "./routes/auth";
+import {
+	hello,
+	listUsers,
+	getProfile,
+	updateProfile,
+	getAuthorizedApps,
+	revokeApp,
+	listAllApps,
+	getAppDetails,
+	revokeAppForUser,
+} from "./routes/api";
+import {
+	authorizeGet,
+	authorizePost,
+	token,
+	logout,
+	userProfile,
+	createInvite,
+	listInvites,
+} from "./routes/indieauth";
+import {
+	listClients,
+	createClient,
+	getClient,
+	updateClient,
+	deleteClient,
+	setUserRole,
+	regenerateClientSecret,
+} from "./routes/clients";
 
 (() => {
 	const required = ["ORIGIN", "RP_ID"];
@@ -29,7 +62,8 @@ const server = Bun.serve({
 	routes: {
 		"/": indexHTML,
 		"/admin": adminHTML,
-		"/admin/apps": adminAppsHTML,
+		"/admin/apps": () => Response.redirect("/admin/clients", 302),
+		"/admin/clients": adminClientsHTML,
 		"/login": loginHTML,
 		"/profile": profileHTML,
 		"/oauth-test": oauthTestHTML,
@@ -48,6 +82,11 @@ const server = Bun.serve({
 		},
 		"/api/admin/apps": (req: Request) => {
 			if (req.method === "GET") return listAllApps(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/clients": (req: Request) => {
+			if (req.method === "GET") return listClients(req);
+			if (req.method === "POST") return createClient(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
 		"/api/invites/create": (req: Request) => {
@@ -78,53 +117,39 @@ const server = Bun.serve({
 		"/auth/register/verify": registerVerify,
 		"/auth/login/options": loginOptions,
 		"/auth/login/verify": loginVerify,
+		// Dynamic routes with Bun's :param syntax
+		"/u/:username": (req) => userProfile(req, req.params.username),
+		"/api/apps/:clientId": (req) => {
+			if (req.method === "DELETE") return revokeApp(req, req.params.clientId);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/apps/:clientId": (req) => {
+			if (req.method === "GET") return getAppDetails(req, req.params.clientId);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/apps/:clientId/users/:username": (req) => {
+			if (req.method === "DELETE")
+				return revokeAppForUser(req, req.params.clientId, req.params.username);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/clients/:clientId": (req) => {
+			if (req.method === "GET") return getClient(req, req.params.clientId);
+			if (req.method === "PUT") return updateClient(req, req.params.clientId);
+			if (req.method === "DELETE") return deleteClient(req, req.params.clientId);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/clients/:clientId/users/:username/role": (req) => {
+			if (req.method === "POST")
+				return setUserRole(req, req.params.clientId, req.params.username);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/clients/:clientId/secret": (req) => {
+			if (req.method === "POST")
+				return regenerateClientSecret(req, req.params.clientId);
+			return new Response("Method not allowed", { status: 405 });
+		},
 	},
 	development: process.env.NODE_ENV === "dev",
-	fetch(req) {
-		// Handle dynamic routes like /u/:username
-		const url = new URL(req.url);
-		
-		// /u/:username - user profiles
-		const userMatch = url.pathname.match(/^\/u\/([^\/]+)$/);
-		if (userMatch) {
-			const username = userMatch[1];
-			return userProfile(req, username);
-		}
-		
-		// /api/apps/:clientId - revoke app access
-		const appMatch = url.pathname.match(/^\/api\/apps\/([^\/]+)$/);
-		if (appMatch) {
-			if (req.method === "DELETE") {
-				const clientId = decodeURIComponent(appMatch[1]);
-				return revokeApp(req, clientId);
-			}
-			return new Response("Method not allowed", { status: 405 });
-		}
-		
-		// /api/admin/apps/:clientId - get app details (admin)
-		const adminAppMatch = url.pathname.match(/^\/api\/admin\/apps\/([^\/]+)$/);
-		if (adminAppMatch) {
-			if (req.method === "GET") {
-				const clientId = decodeURIComponent(adminAppMatch[1]);
-				return getAppDetails(req, clientId);
-			}
-			return new Response("Method not allowed", { status: 405 });
-		}
-		
-		// /api/admin/apps/:clientId/users/:username - revoke app access for user (admin)
-		const adminAppUserMatch = url.pathname.match(/^\/api\/admin\/apps\/([^\/]+)\/users\/([^\/]+)$/);
-		if (adminAppUserMatch) {
-			if (req.method === "DELETE") {
-				const clientId = decodeURIComponent(adminAppUserMatch[1]);
-				const username = decodeURIComponent(adminAppUserMatch[2]);
-				return revokeAppForUser(req, clientId, username);
-			}
-			return new Response("Method not allowed", { status: 405 });
-		}
-		
-		// Let Bun handle static routes
-		return undefined as never;
-	},
 });
 
 console.log("[Indiko] running on", env.ORIGIN);

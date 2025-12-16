@@ -95,10 +95,10 @@ function ensureApp(clientId: string, redirectUri: string): void {
 		.get(clientId);
 
 	if (!existing) {
-		// New app - auto-register
+		// New app - auto-register (without pre-registration, no client secret or role)
 		db.query(
-			"INSERT INTO apps (client_id, redirect_uris, last_used) VALUES (?, ?, ?)",
-		).run(clientId, JSON.stringify([redirectUri]), Math.floor(Date.now() / 1000));
+			"INSERT INTO apps (client_id, redirect_uris, is_preregistered, first_seen, last_used) VALUES (?, ?, 0, ?, ?)",
+		).run(clientId, JSON.stringify([redirectUri]), Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000));
 	} else {
 		// Update last_used
 		db.query("UPDATE apps SET last_used = ? WHERE client_id = ?").run(
@@ -207,7 +207,14 @@ function showConsentScreen(
 	codeChallenge: string,
 	scopes: string[],
 ): Response {
-	const appName = new URL(clientId).hostname;
+	// Load app metadata if pre-registered
+	const appData = db
+		.query("SELECT name, logo_url, description FROM apps WHERE client_id = ?")
+		.get(clientId) as { name: string | null; logo_url: string | null; description: string | null } | undefined;
+	
+	const appName = appData?.name || new URL(clientId).hostname;
+	const appLogo = appData?.logo_url;
+	const appDescription = appData?.description;
 
 	const html = `<!doctype html>
 <html lang="en">
@@ -245,15 +252,42 @@ function showConsentScreen(
       border: 1px solid var(--old-rose);
       padding: 2rem;
     }
+    .app-header {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .app-logo {
+      width: 4rem;
+      height: 4rem;
+      border-radius: 0.5rem;
+      background: rgba(188, 141, 160, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .app-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
     h1 {
       font-size: 1.5rem;
       font-weight: 700;
       color: var(--lavender);
-      margin-bottom: 1rem;
+      margin-bottom: 0.25rem;
     }
     .app-name {
       color: var(--berry-crush);
       font-weight: 700;
+    }
+    .app-description {
+      font-size: 0.875rem;
+      color: var(--old-rose);
+      margin-top: 0.5rem;
     }
     .scopes {
       margin: 1.5rem 0;
@@ -343,15 +377,21 @@ function showConsentScreen(
 </head>
 <body>
   <div class="consent-box">
-    <h1>authorize app</h1>
-    
-    <div class="user-info">
-      Signing in as <strong>${user.username}</strong>
+    <div class="app-header">
+      ${appLogo ? `<div class="app-logo"><img src="${appLogo}" alt="${appName}" /></div>` : ''}
+      <div>
+        <h1>authorize app</h1>
+        <div class="user-info">
+          Signing in as <strong>${user.username}</strong>
+        </div>
+      </div>
     </div>
 
     <p style="margin-bottom: 1rem;">
       <span class="app-name">${appName}</span> is requesting access to:
     </p>
+    
+    ${appDescription ? `<p class="app-description">${appDescription}</p>` : ''}
 
     <div class="scopes">
       <div class="scope-title">permissions</div>
@@ -479,33 +519,91 @@ export async function token(req: Request): Promise<Response> {
 		}
 		
 		const {
-			grant_type,
-			code,
-			client_id,
-			redirect_uri,
-			code_verifier,
-		} = body;
+		grant_type,
+		code,
+		client_id,
+		client_secret,
+		redirect_uri,
+		 code_verifier,
+	} = body;
 
 		if (grant_type !== "authorization_code") {
+		return Response.json(
+		{
+		error: "unsupported_grant_type",
+		 error_description: "Only authorization_code grant type is supported",
+		},
+		 { status: 400 },
+		 );
+	}
+
+		// Check if client is pre-registered and requires secret
+		const app = db
+		.query("SELECT is_preregistered, client_secret_hash FROM apps WHERE client_id = ?")
+		.get(client_id) as
+		| { is_preregistered: number; client_secret_hash: string | null }
+		| undefined;
+
+		// If client is pre-registered, verify client secret
+		if (app && app.is_preregistered === 1) {
+		if (!client_secret) {
 			return Response.json(
 				{
-					error: "unsupported_grant_type",
-					error_description: "Only authorization_code grant type is supported",
+					error: "invalid_client",
+					error_description: "client_secret is required for pre-registered clients",
 				},
-				{ status: 400 },
+				{ status: 401 },
 			);
 		}
 
-		if (!code || !client_id || !redirect_uri || !code_verifier) {
-			console.error("Token endpoint: missing parameters", { code: !!code, client_id: !!client_id, redirect_uri: !!redirect_uri, code_verifier: !!code_verifier });
+		if (!app.client_secret_hash) {
 			return Response.json(
 				{
-					error: "invalid_request",
-					error_description: "Missing required parameters",
+					error: "server_error",
+					error_description: "Client secret not configured",
 				},
-				{ status: 400 },
+				{ status: 500 },
 			);
 		}
+
+		// Verify client secret
+		const providedSecretHash = crypto
+			.createHash("sha256")
+			.update(client_secret)
+			.digest("hex");
+
+		if (providedSecretHash !== app.client_secret_hash) {
+			return Response.json(
+				{
+					error: "invalid_client",
+					error_description: "Invalid client_secret",
+				},
+				{ status: 401 },
+			);
+		}
+	}
+
+	if (!code || !client_id || !redirect_uri) {
+		console.error("Token endpoint: missing parameters", { code: !!code, client_id: !!client_id, redirect_uri: !!redirect_uri });
+		return Response.json(
+			{
+				error: "invalid_request",
+				error_description: "Missing required parameters",
+			},
+			{ status: 400 },
+		);
+	}
+
+	// For auto-registered clients, code_verifier (PKCE) is still required
+	if ((!app || app.is_preregistered === 0) && !code_verifier) {
+		return Response.json(
+			{
+				error: "invalid_request",
+				error_description: "code_verifier is required for public clients",
+			},
+			{ status: 400 },
+		);
+	}
 
 		// Look up authorization code
 		const authcode = db
@@ -579,16 +677,18 @@ export async function token(req: Request): Promise<Response> {
 			);
 		}
 
-		// Verify PKCE code_verifier
+		// Verify PKCE code_verifier (only for public clients)
+		if ((!app || app.is_preregistered === 0) && code_verifier) {
 		if (!verifyPKCE(code_verifier, authcode.code_challenge)) {
-			return Response.json(
-				{
-					error: "invalid_grant",
-					error_description: "Invalid code_verifier",
-				},
-				{ status: 400 },
-			);
+		return Response.json(
+		{
+		 error: "invalid_grant",
+		  error_description: "Invalid code_verifier",
+		 },
+		  { status: 400 },
+		  );
 		}
+	}
 
 		// Mark code as used
 		db.query("UPDATE authcodes SET used = 1 WHERE code = ?").run(code);

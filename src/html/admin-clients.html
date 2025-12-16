@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>oauth clients • admin • indiko</title>
+	<link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+	<style>
+		:root {
+			--mahogany: #26242b;
+			--lavender: #d9d0de;
+			--old-rose: #bc8da0;
+			--rosewood: #a04668;
+			--berry-crush: #ab4967;
+		}
+
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: "Space Grotesk", sans-serif;
+			background: var(--mahogany);
+			color: var(--lavender);
+			min-height: 100vh;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding: 2.5rem 1.25rem;
+		}
+
+		header {
+			width: 100%;
+			max-width: 56.25rem;
+			align-self: flex-start;
+			margin-left: auto;
+			margin-right: auto;
+			margin-bottom: 2rem;
+			display: flex;
+			justify-content: space-between;
+			align-items: flex-start;
+		}
+
+		.header-nav {
+			display: flex;
+			gap: 1rem;
+			margin-top: 0.5rem;
+		}
+
+		.header-nav a {
+			color: var(--old-rose);
+			text-decoration: none;
+			font-size: 0.875rem;
+			font-weight: 500;
+			padding: 0.5rem 1rem;
+			border: 1px solid var(--old-rose);
+			transition: all 0.2s;
+		}
+
+		.header-nav a:hover {
+			background: rgba(188, 141, 160, 0.1);
+			color: var(--berry-crush);
+			border-color: var(--berry-crush);
+		}
+
+		.header-nav a.active {
+			background: var(--berry-crush);
+			color: var(--lavender);
+			border-color: var(--berry-crush);
+		}
+
+		h1 {
+			font-size: 2rem;
+			font-weight: 700;
+			background: linear-gradient(135deg, var(--old-rose), var(--berry-crush), var(--rosewood));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+			letter-spacing: -0.125rem;
+		}
+
+		main {
+			flex: 1;
+			width: 100%;
+			max-width: 56.25rem;
+			padding: 2rem 1.25rem;
+		}
+
+		h2 {
+			font-size: 1.5rem;
+			font-weight: 600;
+			color: var(--lavender);
+			margin-bottom: 1.5rem;
+			letter-spacing: -0.05rem;
+		}
+
+		footer {
+			width: 100%;
+			max-width: 56.25rem;
+			padding: 1rem;
+			text-align: center;
+			color: var(--old-rose);
+			font-size: 0.875rem;
+			font-weight: 300;
+			letter-spacing: 0.05rem;
+		}
+
+		footer a {
+			color: var(--berry-crush);
+			text-decoration: none;
+			transition: color 0.2s;
+		}
+
+		footer a:hover {
+			color: var(--rosewood);
+			text-decoration: underline;
+		}
+
+		.back-link {
+			margin-top: 0.5rem;
+			font-size: 0.875rem;
+			color: var(--old-rose);
+		}
+
+		.actions {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 1.5rem;
+		}
+
+		.btn {
+			padding: 0.75rem 1.5rem;
+			background: var(--berry-crush);
+			color: var(--lavender);
+			border: none;
+			cursor: pointer;
+			font-family: inherit;
+			font-size: 1rem;
+			font-weight: 500;
+			transition: background 0.2s;
+			text-decoration: none;
+			display: inline-block;
+		}
+
+		.btn:hover {
+			background: var(--rosewood);
+		}
+
+		.btn:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+
+		.clients-list {
+			display: flex;
+			flex-direction: column;
+			gap: 1rem;
+		}
+
+		.client-card {
+			background: rgba(188, 141, 160, 0.05);
+			border: 1px solid var(--old-rose);
+			padding: 1.5rem;
+			cursor: pointer;
+			transition: background 0.2s;
+		}
+
+		.client-card:hover {
+			background: rgba(188, 141, 160, 0.1);
+		}
+
+		.client-card.expanded {
+			background: rgba(188, 141, 160, 0.1);
+		}
+
+		.client-header {
+			display: flex;
+			gap: 1rem;
+			align-items: flex-start;
+		}
+
+		.client-logo {
+			width: 4rem;
+			height: 4rem;
+			border-radius: 0.5rem;
+			background: rgba(188, 141, 160, 0.2);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			flex-shrink: 0;
+			overflow: hidden;
+		}
+
+		.client-logo img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		.client-logo-placeholder {
+			font-size: 1.5rem;
+			color: var(--old-rose);
+		}
+
+		.client-info {
+			flex: 1;
+		}
+
+		.client-name {
+			font-size: 1.125rem;
+			font-weight: 600;
+			color: var(--lavender);
+			margin-bottom: 0.25rem;
+		}
+
+		.client-id {
+			font-size: 0.75rem;
+			color: var(--old-rose);
+			font-family: monospace;
+			margin-bottom: 0.5rem;
+		}
+
+		.client-description {
+			font-size: 0.875rem;
+			color: var(--old-rose);
+			margin-bottom: 0.5rem;
+		}
+
+		.client-badges {
+			display: flex;
+			gap: 0.5rem;
+			flex-wrap: wrap;
+			margin-top: 0.5rem;
+		}
+
+		.badge {
+			padding: 0.25rem 0.75rem;
+			font-size: 0.75rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.05rem;
+		}
+
+		.badge-preregistered {
+			background: var(--berry-crush);
+			color: var(--lavender);
+		}
+
+		.badge-auto {
+			background: rgba(188, 141, 160, 0.2);
+			color: var(--lavender);
+			border: 1px solid var(--old-rose);
+		}
+
+		.client-details {
+			margin-top: 1.5rem;
+			padding-top: 1.5rem;
+			border-top: 1px solid var(--old-rose);
+			display: none;
+		}
+
+		.client-card.expanded .client-details {
+			display: block;
+		}
+
+		.detail-section {
+			margin-bottom: 1.5rem;
+		}
+
+		.detail-title {
+			font-size: 0.75rem;
+			color: var(--old-rose);
+			text-transform: uppercase;
+			letter-spacing: 0.05rem;
+			margin-bottom: 0.5rem;
+		}
+
+		.redirect-uris {
+			display: flex;
+			flex-direction: column;
+			gap: 0.25rem;
+		}
+
+		.redirect-uri {
+			font-family: monospace;
+			font-size: 0.75rem;
+			color: var(--lavender);
+			background: rgba(0, 0, 0, 0.2);
+			padding: 0.5rem;
+		}
+
+		.users-list {
+			display: flex;
+			flex-direction: column;
+			gap: 0.75rem;
+		}
+
+		.user-item {
+			background: rgba(0, 0, 0, 0.2);
+			padding: 1rem;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.user-info {
+			flex: 1;
+		}
+
+		.user-name {
+			font-weight: 600;
+			color: var(--lavender);
+			margin-bottom: 0.25rem;
+		}
+
+		.user-role-input {
+			display: flex;
+			gap: 0.5rem;
+			align-items: center;
+			margin-top: 0.5rem;
+		}
+
+		.user-role-input input {
+			padding: 0.5rem;
+			background: rgba(0, 0, 0, 0.3);
+			border: 1px solid var(--old-rose);
+			color: var(--lavender);
+			font-family: inherit;
+			font-size: 0.875rem;
+		}
+
+		.user-role-input button {
+			padding: 0.5rem 1rem;
+			background: var(--berry-crush);
+			color: var(--lavender);
+			border: none;
+			cursor: pointer;
+			font-family: inherit;
+			font-size: 0.875rem;
+			transition: background 0.2s;
+		}
+
+		.user-role-input button:hover {
+			background: var(--rosewood);
+		}
+
+		.user-meta {
+			font-size: 0.75rem;
+			color: var(--old-rose);
+		}
+
+		.client-card.expanded .expand-indicator::after {
+			content: " ▲" !important;
+		}
+
+		.client-actions {
+			display: flex;
+			gap: 0.5rem;
+			margin-top: 1rem;
+		}
+
+		.btn-edit, .btn-delete, .revoke-btn {
+			padding: 0.5rem 1rem;
+			font-family: inherit;
+			font-size: 0.875rem;
+			font-weight: 600;
+			cursor: pointer;
+			transition: all 0.2s;
+			border: none;
+		}
+
+		.btn-edit {
+			background: rgba(188, 141, 160, 0.2);
+			color: var(--lavender);
+		}
+
+		.btn-edit:hover {
+			background: rgba(188, 141, 160, 0.3);
+		}
+
+		.btn-delete, .revoke-btn {
+			background: rgba(160, 70, 104, 0.2);
+			color: var(--lavender);
+			border: 2px solid var(--rosewood);
+		}
+
+		.btn-delete:hover, .revoke-btn:hover {
+			background: rgba(160, 70, 104, 0.3);
+		}
+
+		.loading, .error, .empty {
+			text-align: center;
+			padding: 2rem;
+			color: var(--old-rose);
+		}
+
+		.error {
+			color: var(--rosewood);
+		}
+
+		.modal {
+			display: none;
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: rgba(0, 0, 0, 0.8);
+			z-index: 1000;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.modal.active {
+			display: flex;
+		}
+
+		.modal-content {
+			background: var(--mahogany);
+			border: 2px solid var(--old-rose);
+			padding: 2rem;
+			max-width: 40rem;
+			width: 90%;
+			max-height: 90vh;
+			overflow-y: auto;
+		}
+
+		.modal-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 1.5rem;
+		}
+
+		.modal-title {
+			font-size: 1.5rem;
+			font-weight: 600;
+			color: var(--lavender);
+		}
+
+		.modal-close {
+			background: none;
+			border: none;
+			color: var(--old-rose);
+			font-size: 1.5rem;
+			cursor: pointer;
+			padding: 0;
+			width: 2rem;
+			height: 2rem;
+		}
+
+		.modal-close:hover {
+			color: var(--lavender);
+		}
+
+		.form-group {
+			margin-bottom: 1rem;
+		}
+
+		.form-label {
+			display: block;
+			font-size: 0.875rem;
+			color: var(--old-rose);
+			margin-bottom: 0.5rem;
+			text-transform: uppercase;
+			letter-spacing: 0.05rem;
+		}
+
+		.form-input {
+			width: 100%;
+			padding: 0.75rem;
+			background: rgba(0, 0, 0, 0.3);
+			border: 1px solid var(--old-rose);
+			color: var(--lavender);
+			font-family: inherit;
+			font-size: 1rem;
+		}
+
+		.form-input:focus {
+			outline: none;
+			border-color: var(--berry-crush);
+		}
+
+		.form-textarea {
+			min-height: 5rem;
+			resize: vertical;
+		}
+
+		.redirect-uris-list {
+			display: flex;
+			flex-direction: column;
+			gap: 0.5rem;
+			margin-top: 0.5rem;
+		}
+
+		.redirect-uri-item {
+			display: flex;
+			gap: 0.5rem;
+		}
+
+		.redirect-uri-item input {
+			flex: 1;
+		}
+
+		.btn-remove {
+			padding: 0.5rem 1rem;
+			background: rgba(160, 70, 104, 0.2);
+			color: var(--lavender);
+			border: none;
+			cursor: pointer;
+			font-family: inherit;
+		}
+
+		.btn-remove:hover {
+			background: rgba(160, 70, 104, 0.3);
+		}
+
+		.btn-add {
+			margin-top: 0.5rem;
+			padding: 0.5rem 1rem;
+			background: rgba(188, 141, 160, 0.2);
+			color: var(--lavender);
+			border: none;
+			cursor: pointer;
+			font-family: inherit;
+		}
+
+		.btn-add:hover {
+			background: rgba(188, 141, 160, 0.3);
+		}
+
+		.form-actions {
+			display: flex;
+			gap: 1rem;
+			margin-top: 1.5rem;
+		}
+
+		.form-actions .btn {
+			flex: 1;
+		}
+
+		.toast {
+			position: fixed;
+			bottom: 2rem;
+			right: 2rem;
+			background: var(--mahogany);
+			border: 2px solid var(--berry-crush);
+			padding: 1rem 1.5rem;
+			color: var(--lavender);
+			font-size: 0.875rem;
+			font-weight: 500;
+			z-index: 2000;
+			opacity: 0;
+			transform: translateY(1rem);
+			transition: opacity 0.3s, transform 0.3s;
+			max-width: 25rem;
+			box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5);
+		}
+
+		.toast.show {
+			opacity: 1;
+			transform: translateY(0);
+		}
+
+		.toast.error {
+			border-color: var(--rosewood);
+		}
+
+		.toast.success {
+			border-color: var(--berry-crush);
+		}
+	</style>
+</head>
+
+<body>
+	<header>
+		<div>
+			<img src="../../public/logo.svg" alt="indiko" style="height: 2rem;" />
+		</div>
+		<div class="header-nav">
+			<a href="/admin">users</a>
+			<a href="/admin/clients" class="active">apps</a>
+		</div>
+	</header>
+
+	<main>
+		<div class="actions">
+			<h2>oauth clients</h2>
+			<button class="btn" id="createClientBtn">create client</button>
+		</div>
+		<div id="clientsList" class="clients-list">
+			<div class="loading">loading clients...</div>
+		</div>
+	</main>
+
+	<div id="toast" class="toast"></div>
+
+	<footer id="footer">
+		loading...
+		<div class="back-link"><a href="/">← back to dashboard</a></div>
+	</footer>
+
+	<div id="clientModal" class="modal">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h3 class="modal-title" id="modalTitle">Create OAuth Client</h3>
+				<button class="modal-close" id="modalClose">&times;</button>
+			</div>
+			<form id="clientForm">
+				<input type="hidden" id="editClientId" />
+				<div class="form-group">
+					<label class="form-label" for="clientId">Client ID (URL)</label>
+					<input type="url" class="form-input" id="clientId" required placeholder="https://example.com" />
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="clientName">Name</label>
+					<input type="text" class="form-input" id="clientName" placeholder="My Application" />
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="logoUrl">Logo URL</label>
+					<input type="url" class="form-input" id="logoUrl" placeholder="https://example.com/logo.png" />
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="description">Description</label>
+					<textarea class="form-input form-textarea" id="description" placeholder="A brief description of your application"></textarea>
+				</div>
+				<div class="form-group">
+					<label class="form-label">Redirect URIs</label>
+					<div id="redirectUrisList" class="redirect-uris-list">
+						<div class="redirect-uri-item">
+							<input type="url" class="form-input redirect-uri-input" placeholder="https://example.com/auth/callback" required />
+							<button type="button" class="btn-remove" onclick="removeRedirectUri(this)">remove</button>
+						</div>
+					</div>
+					<button type="button" class="btn-add" id="addRedirectUriBtn">add redirect uri</button>
+				</div>
+				<div class="form-actions">
+					<button type="button" class="btn" style="background: rgba(188, 141, 160, 0.2);" id="cancelBtn">cancel</button>
+					<button type="submit" class="btn">save</button>
+				</div>
+			</form>
+		</div>
+	</div>
+
+	<script type="module" src="../client/admin-clients.ts"></script>
+</body>
+
+</html>
