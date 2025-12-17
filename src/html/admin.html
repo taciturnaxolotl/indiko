@@ -5,7 +5,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>admin • indiko</title>
+  <meta name="description" content="Indiko admin panel - manage users and invites" />
   <link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Admin • Indiko" />
+  <meta property="og:description" content="Indiko admin panel - manage users and invites" />
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Admin • Indiko" />
+  <meta name="twitter:description" content="Indiko admin panel - manage users and invites" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
@@ -370,6 +381,238 @@
       font-size: 0.75rem;
       word-break: break-all;
     }
+
+    .invite-inactive {
+      opacity: 0.6;
+    }
+
+    .invite-note {
+      font-size: 0.875rem;
+      color: var(--lavender);
+      margin-top: 0.5rem;
+      font-style: italic;
+    }
+
+    .invite-roles {
+      font-size: 0.875rem;
+      color: var(--berry-crush);
+      margin-top: 0.5rem;
+    }
+
+    .invite-used-by {
+      font-size: 0.75rem;
+      color: var(--old-rose);
+      margin-top: 0.5rem;
+    }
+
+    /* Modal styles */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: var(--mahogany);
+      border: 2px solid var(--old-rose);
+      padding: 2rem;
+      max-width: 40rem;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .modal-header h3 {
+      font-size: 1.5rem;
+      color: var(--lavender);
+      margin: 0;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--old-rose);
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .modal-close:hover {
+      color: var(--berry-crush);
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+      display: block;
+      color: var(--lavender);
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--old-rose);
+      color: var(--lavender);
+      padding: 0.75rem;
+      font-family: inherit;
+      font-size: 1rem;
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 4rem;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--berry-crush);
+    }
+
+    .form-help {
+      font-size: 0.75rem;
+      color: var(--old-rose);
+      margin-top: 0.25rem;
+    }
+
+    .app-role-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem;
+      background: rgba(188, 141, 160, 0.05);
+      border: 1px solid var(--old-rose);
+      margin-bottom: 0.5rem;
+    }
+
+    .app-role-item label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex: 1;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .app-role-item input[type="checkbox"] {
+      appearance: none;
+      width: 1.5rem;
+      height: 1.5rem;
+      border: 2px solid var(--old-rose);
+      background: rgba(12, 23, 19, 0.6);
+      cursor: pointer;
+      flex-shrink: 0;
+      position: relative;
+      transition: all 0.2s;
+    }
+
+    .app-role-item input[type="checkbox"]:checked {
+      background: var(--berry-crush);
+      border-color: var(--berry-crush);
+    }
+
+    .app-role-item input[type="checkbox"]:checked::after {
+      content: "✓";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: var(--lavender);
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .app-role-item input[type="checkbox"]:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .app-role-item input.role-input-custom {
+      flex: 1;
+      padding: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .app-role-item select.role-select {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--old-rose);
+      color: var(--lavender);
+      padding: 0.5rem;
+      font-family: inherit;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+
+    .app-role-item select.role-select:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .app-role-item select.role-select:focus {
+      outline: none;
+      border-color: var(--berry-crush);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: flex-end;
+      margin-top: 2rem;
+    }
+
+    .modal-btn {
+      padding: 0.75rem 1.5rem;
+      font-family: inherit;
+      font-size: 1rem;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .modal-btn-primary {
+      background: var(--berry-crush);
+      color: var(--lavender);
+    }
+
+    .modal-btn-primary:hover {
+      background: var(--rosewood);
+    }
+
+    .modal-btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .modal-btn-secondary {
+      background: rgba(188, 141, 160, 0.2);
+      color: var(--lavender);
+      border: 1px solid var(--old-rose);
+    }
+
+    .modal-btn-secondary:hover {
+      background: rgba(188, 141, 160, 0.3);
+    }
   </style>
 </head>
 
@@ -407,6 +650,47 @@
     loading...
     <div class="back-link"><a href="/">← back to dashboard</a></div>
   </footer>
+
+  <!-- Create Invite Modal -->
+  <div id="createInviteModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>create invite</h3>
+        <button class="modal-close" onclick="closeCreateInviteModal()">&times;</button>
+      </div>
+
+      <div class="form-group">
+        <label for="maxUses">maximum uses</label>
+        <input type="number" id="maxUses" min="1" max="999" value="1">
+        <div class="form-help">How many people can use this invite (1-999)</div>
+      </div>
+
+      <div class="form-group">
+        <label for="expiresIn">expires in (hours)</label>
+        <input type="number" id="expiresIn" min="1" placeholder="Leave empty for no expiry">
+        <div class="form-help">Optional: invite will expire after this many hours</div>
+      </div>
+
+      <div class="form-group">
+        <label for="inviteNote">note</label>
+        <textarea id="inviteNote" placeholder="Optional note about this invite"></textarea>
+        <div class="form-help">Internal note to help you remember what this invite is for</div>
+      </div>
+
+      <div class="form-group">
+        <label>app role assignments (optional)</label>
+        <div class="form-help">Users who register with this invite will automatically be assigned these roles</div>
+        <div id="appRolesContainer" style="margin-top: 1rem;">
+          <div class="loading">Loading apps...</div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-secondary" onclick="closeCreateInviteModal()">cancel</button>
+        <button class="modal-btn modal-btn-primary" id="submitInviteBtn" onclick="submitCreateInvite()">create invite</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="../client/admin.ts"></script>
 </body>

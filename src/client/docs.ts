@@ -40,6 +40,7 @@ const callbackInfo = document.getElementById('callbackInfo') as HTMLElement;
 const exchangeBtn = document.getElementById('exchangeBtn') as HTMLButtonElement;
 const resultSection = document.getElementById('resultSection') as HTMLElement;
 const resultDiv = document.getElementById('result') as HTMLElement;
+const copyMarkdownBtn = document.getElementById('copyMarkdownBtn') as HTMLButtonElement;
 
 // Auto-fill redirect URI with current page URL
 const currentUrl = window.location.origin + window.location.pathname;
@@ -47,6 +48,16 @@ redirectUriInput.value = currentUrl;
 
 // Auto-fill client ID with a test URL
 clientIdInput.value = window.location.origin;
+
+// Update documentation examples with current origin
+const origin = window.location.origin;
+const authUrlEl = document.getElementById('authUrl');
+const tokenUrlEl = document.getElementById('tokenUrl');
+const profileMeUrlEl = document.getElementById('profileMeUrl');
+
+if (authUrlEl) authUrlEl.textContent = `${origin}/auth/authorize`;
+if (tokenUrlEl) tokenUrlEl.textContent = `${origin}/auth/token`;
+if (profileMeUrlEl) profileMeUrlEl.textContent = `"${origin}/u/username"`;
 
 // Check if we're handling a callback
 const urlParams = new URLSearchParams(window.location.search);
@@ -210,3 +221,170 @@ function showResult(text: string, type: 'success' | 'error') {
 	}
 	resultDiv.className = `result show ${type}`;
 }
+
+// Convert HTML documentation to Markdown by parsing the DOM
+function extractMarkdown(): string {
+	const lines: string[] = [];
+	
+	// Get title and subtitle from header
+	const h1 = document.querySelector('header h1');
+	const subtitle = document.querySelector('header .subtitle');
+	
+	if (h1) {
+		lines.push(`# ${h1.textContent}`);
+		lines.push('');
+	}
+	
+	if (subtitle) {
+		lines.push(subtitle.textContent || '');
+		lines.push('');
+	}
+	
+	// Process each section (skip TOC and OAuth tester)
+	const sections = document.querySelectorAll('.section');
+	
+	sections.forEach((section) => {
+		// Skip the OAuth tester section
+		if (section.id === 'tester') return;
+		
+		processElement(section, lines);
+		lines.push('');
+	});
+	
+	return lines.join('\n');
+}
+
+function processElement(el: Element, lines: string[], indent = 0): void {
+	const tag = el.tagName.toLowerCase();
+	
+	// Headers
+	if (tag === 'h2') {
+		lines.push(`## ${el.textContent}`);
+		lines.push('');
+	} else if (tag === 'h3') {
+		lines.push(`### ${el.textContent}`);
+		lines.push('');
+	}
+	// Paragraphs
+	else if (tag === 'p') {
+		lines.push(el.textContent || '');
+		lines.push('');
+	}
+	// Lists
+	else if (tag === 'ul' || tag === 'ol') {
+		const items = el.querySelectorAll(':scope > li');
+		items.forEach((li, i) => {
+			const prefix = tag === 'ol' ? `${i + 1}. ` : '- ';
+			const text = getTextContent(li);
+			lines.push(`${prefix}${text}`);
+		});
+		lines.push('');
+	}
+	// Tables
+	else if (tag === 'table') {
+		const headers: string[] = [];
+		const rows: string[][] = [];
+		
+		// Get headers
+		el.querySelectorAll('thead th').forEach((th) => {
+			headers.push(th.textContent?.trim() || '');
+		});
+		
+		// Get rows
+		el.querySelectorAll('tbody tr').forEach((tr) => {
+			const row: string[] = [];
+			tr.querySelectorAll('td').forEach((td) => {
+				row.push(td.textContent?.trim() || '');
+			});
+			rows.push(row);
+		});
+		
+		// Format as markdown table
+		if (headers.length > 0) {
+			lines.push(`| ${headers.join(' | ')} |`);
+			lines.push(`|${headers.map(() => '-------').join('|')}|`);
+			rows.forEach((row) => {
+				lines.push(`| ${row.join(' | ')} |`);
+			});
+			lines.push('');
+		}
+	}
+	// Code blocks
+	else if (tag === 'pre') {
+		const code = el.querySelector('code');
+		if (code) {
+			// Detect language from class or content
+			let lang = '';
+			const text = code.textContent || '';
+			
+			if (text.includes('GET ') || text.includes('POST ')) {
+				lang = 'http';
+			} else if (text.includes('{') && text.includes('"')) {
+				lang = 'json';
+			}
+			
+			lines.push(`\`\`\`${lang}`);
+			lines.push(text.trim());
+			lines.push('```');
+			lines.push('');
+		}
+	}
+	// Info boxes
+	else if (el.classList.contains('info-box')) {
+		const strong = el.querySelector('strong');
+		const text = el.textContent?.trim() || '';
+		
+		if (strong) {
+			// Extract content after the strong tag
+			const afterStrong = text.substring(strong.textContent?.length || 0).trim();
+			lines.push(`> **${strong.textContent}** ${afterStrong}`);
+		} else {
+			lines.push(`> ${text}`);
+		}
+		lines.push('');
+	}
+	// Process children for sections and divs
+	else if (tag === 'section' || tag === 'div') {
+		Array.from(el.children).forEach((child) => {
+			processElement(child, lines, indent);
+		});
+	}
+}
+
+// Get text content, preserving inline code formatting
+function getTextContent(el: Element): string {
+	let text = '';
+	
+	el.childNodes.forEach((node) => {
+		if (node.nodeType === Node.TEXT_NODE) {
+			text += node.textContent;
+		} else if (node.nodeType === Node.ELEMENT_NODE) {
+			const elem = node as Element;
+			if (elem.tagName.toLowerCase() === 'code') {
+				text += `\`${elem.textContent}\``;
+			} else if (elem.tagName.toLowerCase() === 'strong') {
+				text += `**${elem.textContent}**`;
+			} else {
+				text += elem.textContent;
+			}
+		}
+	});
+	
+	return text.trim();
+}
+
+// Copy markdown to clipboard
+copyMarkdownBtn.addEventListener('click', async () => {
+	const markdown = extractMarkdown();
+	
+	try {
+		await navigator.clipboard.writeText(markdown);
+		copyMarkdownBtn.textContent = 'copied! ✓';
+		setTimeout(() => {
+			copyMarkdownBtn.textContent = 'copy as markdown';
+		}, 2000);
+	} catch (error) {
+		console.error('Failed to copy:', error);
+		alert('Failed to copy to clipboard');
+	}
+});

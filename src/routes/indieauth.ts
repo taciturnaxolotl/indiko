@@ -570,9 +570,14 @@ export async function authorizePost(req: Request): Promise<Response> {
 			"UPDATE permissions SET scopes = ?, last_used = ? WHERE user_id = ? AND client_id = ?",
 		).run(JSON.stringify(approvedScopes), Math.floor(Date.now() / 1000), user.userId, clientId);
 	} else {
+		// Get app's default role for new permissions
+		const app = db
+			.query("SELECT default_role FROM apps WHERE client_id = ?")
+			.get(clientId) as { default_role: string | null } | undefined;
+		
 		db.query(
-			"INSERT INTO permissions (user_id, client_id, scopes) VALUES (?, ?, ?)",
-		).run(user.userId, clientId, JSON.stringify(approvedScopes));
+			"INSERT INTO permissions (user_id, client_id, scopes, role) VALUES (?, ?, ?, ?)",
+		).run(user.userId, clientId, JSON.stringify(approvedScopes), app?.default_role || null);
 	}
 
 	// Update app last_used
@@ -820,10 +825,23 @@ export async function token(req: Request): Promise<Response> {
 			profile.email = user.email;
 		}
 
-		return Response.json({
+		// Get user's role for this app (if assigned)
+		const permission = db
+			.query("SELECT role FROM permissions WHERE user_id = ? AND client_id = ?")
+			.get(authcode.user_id, client_id) as { role: string | null } | undefined;
+
+		const response: Record<string, unknown> = {
 			me: `${process.env.ORIGIN}/u/${user.username}`,
 			profile,
-		});
+			scope: scopes.join(" "),
+		};
+
+		// Include role if assigned
+		if (permission?.role) {
+			response.role = permission.role;
+		}
+
+		return Response.json(response);
 	} catch (error) {
 		console.error("Token exchange error:", error);
 		return Response.json(
@@ -877,10 +895,26 @@ export function userProfile(req: Request, username: string): Response {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${user.name} • indiko</title>
+  <meta name="description" content="${user.name}'s profile on Indiko${user.url ? ` - ${user.url}` : ""}" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="authorization_endpoint" href="${process.env.ORIGIN}/auth/authorize" />
   <link rel="token_endpoint" href="${process.env.ORIGIN}/auth/token" />
   ${user.url ? `<link rel="me" href="${user.url}" />` : ""}
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="profile" />
+  <meta property="og:title" content="${user.name}" />
+  <meta property="og:description" content="${user.name}'s profile on Indiko" />
+  <meta property="og:url" content="${process.env.ORIGIN}/u/${user.username}" />
+  ${user.photo ? `<meta property="og:image" content="${user.photo}" />` : ""}
+  <meta property="profile:username" content="${user.username}" />
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="${user.name}" />
+  <meta name="twitter:description" content="${user.name}'s profile on Indiko" />
+  ${user.photo ? `<meta name="twitter:image" content="${user.photo}" />` : ""}
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
@@ -1082,33 +1116,74 @@ export function listInvites(req: Request): Response {
 	}
 
 	const invites = db.query(`
-		SELECT i.id, i.code, i.used, i.created_at, i.used_at,
-			creator.username as created_by_username,
-			usedby.username as used_by_username
+		SELECT i.id, i.code, i.max_uses, i.current_uses, i.expires_at, i.note, i.created_at,
+			creator.username as created_by_username
 		FROM invites i
 		LEFT JOIN users creator ON i.created_by = creator.id
-		LEFT JOIN users usedby ON i.used_by = usedby.id
 		ORDER BY i.created_at DESC
 	`).all() as Array<{
 		id: number;
 		code: string;
-		used: number;
+		max_uses: number;
+		current_uses: number;
+		expires_at: number | null;
+		note: string | null;
 		created_at: number;
-		used_at: number | null;
 		created_by_username: string;
-		used_by_username: string | null;
 	}>;
+
+	// Get app roles for each invite
+	const inviteRoles = db.query(`
+		SELECT ir.invite_id, ir.app_id, ir.role, a.client_id
+		FROM invite_roles ir
+		JOIN apps a ON ir.app_id = a.id
+	`).all() as Array<{
+		invite_id: number;
+		app_id: number;
+		role: string;
+		client_id: string;
+	}>;
+
+	// Get users who used each invite
+	const inviteUses = db.query(`
+		SELECT iu.invite_id, iu.used_at, u.username
+		FROM invite_uses iu
+		JOIN users u ON iu.user_id = u.id
+		ORDER BY iu.used_at DESC
+	`).all() as Array<{
+		invite_id: number;
+		used_at: number;
+		username: string;
+	}>;
+
+	const now = Math.floor(Date.now() / 1000);
 
 	return Response.json({
 		invites: invites.map((inv) => ({
 			id: inv.id,
 			code: inv.code,
-			used: inv.used === 1,
+			maxUses: inv.max_uses,
+			currentUses: inv.current_uses,
+			isExpired: inv.expires_at ? inv.expires_at < now : false,
+			isFullyUsed: inv.current_uses >= inv.max_uses,
+			expiresAt: inv.expires_at,
+			note: inv.note,
 			createdAt: inv.created_at,
-			usedAt: inv.used_at,
 			createdBy: inv.created_by_username,
-			usedBy: inv.used_by_username,
 			inviteUrl: `${process.env.ORIGIN}/login?invite=${inv.code}`,
+			appRoles: inviteRoles
+				.filter((r) => r.invite_id === inv.id)
+				.map((r) => ({
+					appId: r.app_id,
+					clientId: r.client_id,
+					role: r.role,
+				})),
+			usedBy: inviteUses
+				.filter((u) => u.invite_id === inv.id)
+				.map((u) => ({
+					username: u.username,
+					usedAt: u.used_at,
+				})),
 		})),
 	});
 }

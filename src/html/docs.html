@@ -5,7 +5,18 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>documentation • indiko</title>
+	<meta name="description" content="IndieAuth/OAuth 2.0 server documentation and interactive API testing" />
 	<link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
+
+	<!-- Open Graph / Facebook -->
+	<meta property="og:type" content="website" />
+	<meta property="og:title" content="Documentation • Indiko" />
+	<meta property="og:description" content="IndieAuth/OAuth 2.0 server documentation and interactive API testing" />
+
+	<!-- Twitter -->
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="Documentation • Indiko" />
+	<meta name="twitter:description" content="IndieAuth/OAuth 2.0 server documentation and interactive API testing" />
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
@@ -135,42 +146,42 @@
 			background: rgba(12, 23, 19, 0.8);
 			border: 1px solid var(--rosewood);
 		}
-		
+
 		/* HTTP syntax highlighting */
 		.http-method {
 			color: var(--berry-crush);
 			font-weight: 700;
 		}
-		
+
 		.http-url {
 			color: #a5d6a7;
 		}
-		
+
 		.http-header {
 			color: var(--old-rose);
 		}
-		
+
 		.http-param {
 			color: #81c784;
 		}
-		
+
 		/* JSON syntax highlighting */
 		.json-key {
 			color: var(--berry-crush);
 		}
-		
+
 		.json-string {
 			color: #a5d6a7;
 		}
-		
+
 		.json-number {
 			color: #81c784;
 		}
-		
+
 		.json-boolean {
 			color: var(--old-rose);
 		}
-		
+
 		.token.property,
 		.token.tag,
 		.token.boolean,
@@ -179,7 +190,7 @@
 		.token.symbol {
 			color: #81c784;
 		}
-		
+
 		.token.selector,
 		.token.attr-name,
 		.token.string,
@@ -187,11 +198,11 @@
 		.token.builtin {
 			color: #a5d6a7;
 		}
-		
+
 		.token.punctuation {
 			color: var(--lavender);
 		}
-		
+
 		.token.operator,
 		.token.entity,
 		.token.url,
@@ -200,7 +211,8 @@
 			color: var(--old-rose);
 		}
 
-		ul, ol {
+		ul,
+		ol {
 			margin-left: 1.5rem;
 			margin-bottom: 1rem;
 			line-height: 1.8;
@@ -281,6 +293,14 @@
 		.toc a:hover {
 			color: var(--berry-crush);
 			text-decoration: underline;
+		}
+
+		.copy-btn {
+			display: block;
+			width: auto;
+			padding: 0.75rem 1.5rem;
+			font-size: 0.875rem;
+			margin: 2rem auto;
 		}
 
 		.back-link {
@@ -457,6 +477,8 @@
 			<p class="subtitle">IndieAuth/OAuth 2.0 server with passkey authentication</p>
 		</header>
 
+		<button id="copyMarkdownBtn" class="copy-btn">copy as markdown</button>
+
 		<nav class="toc">
 			<h3>table of contents</h3>
 			<ul>
@@ -465,6 +487,7 @@
 				<li><a href="#endpoints">endpoints</a></li>
 				<li><a href="#authorization">authorization flow</a></li>
 				<li><a href="#scopes">scopes</a></li>
+				<li><a href="#roles">roles</a></li>
 				<li><a href="#clients">client types</a></li>
 				<li><a href="#tester">oauth tester</a></li>
 			</ul>
@@ -473,7 +496,8 @@
 		<section id="overview" class="section">
 			<h2>overview</h2>
 			<p>
-				Indiko is a self-hosted IndieAuth/OAuth 2.0 authorization server with passwordless authentication using WebAuthn passkeys.
+				Indiko is a self-hosted IndieAuth/OAuth 2.0 authorization server with passwordless authentication using WebAuthn
+				passkeys.
 				It provides single sign-on (SSO) for your apps and services.
 			</p>
 
@@ -505,7 +529,8 @@
 			<div class="info-box">
 				<strong>Auto-registration:</strong>
 				Apps are automatically registered on first use. You don't need admin approval to get started.
-				For advanced features like client secrets and role assignment, contact your Indiko admin to pre-register your app.
+				For advanced features like client secrets and role assignment, contact your Indiko admin to pre-register your
+				app.
 			</div>
 
 			<h3>for users</h3>
@@ -604,17 +629,19 @@
 			<h2>authorization flow</h2>
 
 			<h3>1. redirect to authorization endpoint</h3>
-			<pre><code><span class="http-method">GET</span> <span class="http-url">/auth/authorize</span>?<span class="http-param">response_type</span>=code
-  &<span class="http-param">client_id</span>=https://myapp.example.com
-  &<span class="http-param">redirect_uri</span>=https://myapp.example.com/callback
-  &<span class="http-param">state</span>=random_state_string
-  &<span class="http-param">code_challenge</span>=base64url_encoded_challenge
-  &<span class="http-param">code_challenge_method</span>=S256
-  &<span class="http-param">scope</span>=profile email</code></pre>
+			<pre><code><span class="http-method">GET</span> <span class="http-url" id="authUrl">http://localhost:3000/auth/authorize</span>?<span
+						class="http-param">response_type</span>=code
+					&<span class="http-param">client_id</span>=https://myapp.example.com
+					&<span class="http-param">redirect_uri</span>=https://myapp.example.com/callback
+					&<span class="http-param">state</span>=random_state_string
+					&<span class="http-param">code_challenge</span>=base64url_encoded_challenge
+					&<span class="http-param">code_challenge_method</span>=S256
+					&<span class="http-param">scope</span>=profile email</code></pre>
 
 			<div class="info-box">
 				<strong>PKCE is required:</strong>
-				Generate a random <code>code_verifier</code> (43-128 characters), then create <code>code_challenge</code> by hashing it with SHA-256 and base64url encoding.
+				Generate a random <code>code_verifier</code> (43-128 characters), then create <code>code_challenge</code> by
+				hashing it with SHA-256 and base64url encoding.
 			</div>
 
 			<h3>2. user authenticates and approves</h3>
@@ -628,30 +655,44 @@
 			</ul>
 
 			<h3>3. redirect back with code</h3>
-			<pre><code><span class="http-url">https://myapp.example.com/callback</span>?<span class="http-param">code</span>=short_lived_authorization_code
-  &<span class="http-param">state</span>=random_state_string</code></pre>
+			<pre><code><span class="http-url">https://myapp.example.com/callback</span>?<span
+						class="http-param">code</span>=short_lived_authorization_code
+					&<span class="http-param">state</span>=random_state_string</code></pre>
 
 			<h3>4. exchange code for token</h3>
-			<pre><code><span class="http-method">POST</span> <span class="http-url">/auth/token</span>
-<span class="http-header">Content-Type</span>: application/x-www-form-urlencoded
+			<pre><code><span class="http-method">POST</span> <span class="http-url" id="tokenUrl">http://localhost:3000/auth/token</span>
+					<span class="http-header">Content-Type</span>: application/x-www-form-urlencoded
 
-<span class="http-param">grant_type</span>=authorization_code
-&<span class="http-param">code</span>=authorization_code
-&<span class="http-param">client_id</span>=https://myapp.example.com
-&<span class="http-param">redirect_uri</span>=https://myapp.example.com/callback
-&<span class="http-param">code_verifier</span>=original_code_verifier</code></pre>
+					<span class="http-param">grant_type</span>=authorization_code
+					&<span class="http-param">code</span>=authorization_code
+					&<span class="http-param">client_id</span>=https://myapp.example.com
+					&<span class="http-param">redirect_uri</span>=https://myapp.example.com/callback
+					&<span class="http-param">code_verifier</span>=original_code_verifier
+					&<span class="http-param">client_secret</span>=your_client_secret (if pre-registered)</code></pre>
+
+			<div class="info-box">
+				<strong>Client authentication:</strong>
+				Public clients (auto-registered) use PKCE for security. Pre-registered confidential clients must include <code>client_secret</code> in the token request.
+			</div>
 
 			<h3>5. receive user profile</h3>
 			<pre><code>{
-  <span class="json-key">"me"</span>: <span class="json-string">"https://indiko.example.com/u/username"</span>,
-  <span class="json-key">"profile"</span>: {
-    <span class="json-key">"name"</span>: <span class="json-string">"Jane Doe"</span>,
-    <span class="json-key">"email"</span>: <span class="json-string">"jane@example.com"</span>,
-    <span class="json-key">"photo"</span>: <span class="json-string">"https://example.com/photo.jpg"</span>,
-    <span class="json-key">"url"</span>: <span class="json-string">"https://jane.example.com"</span>
-  },
-  <span class="json-key">"scope"</span>: <span class="json-string">"profile email"</span>
-}</code></pre>
+					<span class="json-key">"me"</span>: <span class="json-string" id="profileMeUrl">"http://localhost:3000/u/username"</span>,
+					<span class="json-key">"profile"</span>: {
+					<span class="json-key">"name"</span>: <span class="json-string">"Jane Doe"</span>,
+					<span class="json-key">"email"</span>: <span class="json-string">"jane@example.com"</span>,
+					<span class="json-key">"photo"</span>: <span class="json-string">"https://example.com/photo.jpg"</span>,
+					<span class="json-key">"url"</span>: <span class="json-string">"https://jane.example.com"</span>
+					},
+					<span class="json-key">"scope"</span>: <span class="json-string">"profile email"</span>,
+					<span class="json-key">"role"</span>: <span class="json-string">"admin"</span>
+					}</code></pre>
+
+			<div class="info-box">
+				<strong>Roles:</strong>
+				If an admin has assigned a role to this user for your app, it will be included in the response. Roles are
+				arbitrary strings that you can use for role-based access control (RBAC) in your application.
+			</div>
 		</section>
 
 		<section id="scopes" class="section">
@@ -685,12 +726,67 @@
 			</div>
 		</section>
 
+		<section id="roles" class="section">
+			<h2>roles</h2>
+			<p>
+				Roles enable role-based access control (RBAC) in your applications. <strong>Only pre-registered clients with client secrets support role assignment.</strong>
+			</p>
+
+			<div class="info-box">
+				<strong>Pre-registration required:</strong>
+				To use roles, contact your Indiko admin to pre-register your app with a client secret. Auto-registered (public) clients cannot use roles.
+			</div>
+
+			<h3>how roles work</h3>
+			<ul>
+				<li>Roles are assigned by admins for specific user-app combinations</li>
+				<li>Role strings are arbitrary (e.g., <code>"admin"</code>, <code>"editor"</code>, <code>"viewer"</code>)</li>
+				<li>Only one role per user per app</li>
+				<li>Included in token response if assigned</li>
+				<li>Your app interprets the role string and enforces permissions</li>
+			</ul>
+
+			<div class="info-box">
+				<strong>Example use case:</strong>
+				A CMS app could use roles like <code>"admin"</code>, <code>"editor"</code>, and <code>"viewer"</code>. When
+				users authenticate via Indiko, the app checks their role and grants appropriate permissions.
+			</div>
+
+			<h3>defining app roles</h3>
+			<p>
+				Apps can define available roles in three ways:
+			</p>
+			<ul>
+				<li><strong>Disabled (default):</strong> Leave "Available Roles" empty. No roles can be assigned.</li>
+				<li><strong>Predefined roles:</strong> Specify allowed roles (one per line). Creates a dropdown for role selection, preventing typos.</li>
+				<li><strong>Default role:</strong> Automatically assign a role when users first authorize your app.</li>
+			</ul>
+
+			<h3>assigning roles</h3>
+			<p>
+				Roles can be assigned in multiple ways:
+			</p>
+			<ol>
+				<li><strong>Default role (automatic):</strong> If configured, users automatically receive the default role on first authorization.</li>
+				<li><strong>Via invite codes:</strong> Admins can create invites with pre-assigned roles for specific apps. New
+					users automatically get those roles on signup.</li>
+				<li><strong>Via admin dashboard:</strong> Admins can assign or change roles for existing users in the clients
+					management interface.</li>
+			</ol>
+
+			<div class="info-box">
+				<strong>Note:</strong>
+				Roles are optional. If no role is assigned, the <code>role</code> field will not appear in the token response.
+			</div>
+		</section>
+
 		<section id="clients" class="section">
 			<h2>client types</h2>
 
 			<h3>auto-registered clients</h3>
 			<p>
-				Any app can use Indiko without pre-registration. On first authorization, the client is automatically registered with:
+				Any app can use Indiko without pre-registration. On first authorization, the client is automatically registered
+				with:
 			</p>
 			<ul>
 				<li>Client ID (must be a valid URL)</li>
@@ -698,22 +794,25 @@
 				<li>Last used timestamp</li>
 			</ul>
 			<p>
-				Auto-registered clients <strong>cannot</strong> use client secrets or assign user roles.
+				Auto-registered clients <strong>cannot</strong> use client secrets or role assignment. They must use PKCE for security.
 			</p>
 
 			<h3>pre-registered clients</h3>
 			<p>
-				Admins can pre-register clients for advanced features:
+				Admins can pre-register clients for advanced features. <strong>All pre-registered clients require a client secret.</strong>
 			</p>
 			<ul>
-				<li><strong>Client secret:</strong> Confidential clients can authenticate with secrets</li>
+				<li><strong>Client secret:</strong> Required for all pre-registered clients (used in token exchange)</li>
 				<li><strong>Role assignment:</strong> Admins can assign per-user roles for RBAC</li>
+				<li><strong>Available roles:</strong> Define which roles can be assigned (enforces dropdown selection)</li>
+				<li><strong>Default role:</strong> Automatically assigned to users on first authorization</li>
 				<li><strong>Metadata:</strong> Custom name, logo, description</li>
 			</ul>
 
 			<div class="info-box">
 				<strong>Tip:</strong>
-				Contact your Indiko admin to pre-register your app if you need client authentication or role-based access control.
+				Contact your Indiko admin to pre-register your app if you need client authentication or role-based access
+				control.
 			</div>
 		</section>
 
@@ -761,7 +860,8 @@
 
 			<div class="info-box" style="margin-top: 2rem;">
 				<strong>How it works:</strong>
-				This page uses the current URL as the redirect URI. After authorization, the code is automatically detected and you can exchange it for user profile data.
+				This page uses the current URL as the redirect URI. After authorization, the code is automatically detected and
+				you can exchange it for user profile data.
 			</div>
 		</section>
 

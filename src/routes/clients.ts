@@ -82,6 +82,27 @@ export function listClients(req: Request): Response {
 		last_used: number;
 	}>;
 
+	// Get distinct roles for each app
+	const appRoles = db
+		.query(
+			`SELECT a.id as app_id, p.role 
+			FROM permissions p
+			JOIN apps a ON p.client_id = a.client_id
+			WHERE p.role IS NOT NULL AND p.role != '' 
+			GROUP BY a.id, p.role 
+			ORDER BY a.id, p.role`,
+		)
+		.all() as Array<{ app_id: number; role: string }>;
+
+	// Group roles by app_id
+	const rolesByApp = new Map<number, string[]>();
+	for (const { app_id, role } of appRoles) {
+		if (!rolesByApp.has(app_id)) {
+			rolesByApp.set(app_id, []);
+		}
+		rolesByApp.get(app_id)!.push(role);
+	}
+
 	return Response.json({
 		clients: clients.map((c) => ({
 			id: c.id,
@@ -93,6 +114,7 @@ export function listClients(req: Request): Response {
 			isPreregistered: c.is_preregistered === 1,
 			firstSeen: c.first_seen,
 			lastUsed: c.last_used,
+			roles: rolesByApp.get(c.id) || [],
 		})),
 	});
 }
@@ -109,7 +131,7 @@ export async function createClient(req: Request): Promise<Response> {
 
 	try {
 		const body = await req.json();
-		const { clientId, name, logoUrl, description, redirectUris } = body;
+		const { clientId, name, logoUrl, description, redirectUris, availableRoles, defaultRole } = body;
 
 		if (!clientId || typeof clientId !== "string") {
 			return Response.json({ error: "Client ID is required" }, { status: 400 });
@@ -145,10 +167,24 @@ export async function createClient(req: Request): Promise<Response> {
 		const clientSecret = generateClientSecret();
 		const clientSecretHash = hashSecret(clientSecret);
 
+		// Validate roles if provided
+		let rolesArray: string[] = [];
+		if (availableRoles) {
+			if (!Array.isArray(availableRoles)) {
+				return Response.json({ error: "Available roles must be an array" }, { status: 400 });
+			}
+			rolesArray = availableRoles.filter((r: unknown) => typeof r === 'string' && r.trim());
+		}
+
+		// Validate default role is in available roles
+		if (defaultRole && rolesArray.length > 0 && !rolesArray.includes(defaultRole)) {
+			return Response.json({ error: "Default role must be one of the available roles" }, { status: 400 });
+		}
+
 		const result = db
 			.query(
-				`INSERT INTO apps (client_id, name, logo_url, description, redirect_uris, is_preregistered, client_secret_hash, first_seen, last_used) 
-				VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+				`INSERT INTO apps (client_id, name, logo_url, description, redirect_uris, is_preregistered, client_secret_hash, available_roles, default_role, first_seen, last_used) 
+				VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				clientId,
@@ -157,6 +193,8 @@ export async function createClient(req: Request): Promise<Response> {
 				description || null,
 				JSON.stringify(redirectUris),
 				clientSecretHash,
+				rolesArray.length > 0 ? JSON.stringify(rolesArray) : null,
+				defaultRole || null,
 				Math.floor(Date.now() / 1000),
 				Math.floor(Date.now() / 1000),
 			);
@@ -200,6 +238,8 @@ export function getClient(req: Request, clientId: string): Response {
 				description,
 				redirect_uris,
 				is_preregistered,
+				available_roles,
+				default_role,
 				first_seen,
 				last_used
 			FROM apps
@@ -214,6 +254,8 @@ export function getClient(req: Request, clientId: string): Response {
 				description: string | null;
 				redirect_uris: string;
 				is_preregistered: number;
+				available_roles: string | null;
+				default_role: string | null;
 				first_seen: number;
 				last_used: number;
 		  }
@@ -255,6 +297,8 @@ export function getClient(req: Request, clientId: string): Response {
 			description: client.description,
 			redirectUris: JSON.parse(client.redirect_uris) as string[],
 			isPreregistered: client.is_preregistered === 1,
+			availableRoles: client.available_roles ? JSON.parse(client.available_roles) as string[] : null,
+			defaultRole: client.default_role,
 			firstSeen: client.first_seen,
 			lastUsed: client.last_used,
 		},
@@ -281,7 +325,7 @@ export async function updateClient(req: Request, clientId: string): Promise<Resp
 
 	try {
 		const body = await req.json();
-		const { name, logoUrl, description, redirectUris } = body;
+		const { name, logoUrl, description, redirectUris, availableRoles, defaultRole } = body;
 
 		const existing = db
 			.query("SELECT id, is_preregistered FROM apps WHERE client_id = ?")
@@ -305,15 +349,35 @@ export async function updateClient(req: Request, clientId: string): Promise<Resp
 			}
 		}
 
+		// Validate roles if provided
+		let rolesArray: string[] | null = null;
+		if (availableRoles !== undefined) {
+			if (availableRoles === null) {
+				// Explicitly disable roles
+				rolesArray = null;
+			} else if (Array.isArray(availableRoles)) {
+				rolesArray = availableRoles.filter((r: unknown) => typeof r === 'string' && r.trim());
+			} else {
+				return Response.json({ error: "Available roles must be an array or null" }, { status: 400 });
+			}
+		}
+
+		// Validate default role is in available roles
+		if (defaultRole && rolesArray && rolesArray.length > 0 && !rolesArray.includes(defaultRole)) {
+			return Response.json({ error: "Default role must be one of the available roles" }, { status: 400 });
+		}
+
 		db.query(
 			`UPDATE apps 
-			SET name = ?, logo_url = ?, description = ?, redirect_uris = ?
+			SET name = ?, logo_url = ?, description = ?, redirect_uris = ?, available_roles = ?, default_role = ?
 			WHERE client_id = ?`,
 		).run(
 			name || null,
 			logoUrl || null,
 			description || null,
 			redirectUris ? JSON.stringify(redirectUris) : null,
+			rolesArray !== null ? (rolesArray.length > 0 ? JSON.stringify(rolesArray) : null) : null,
+			defaultRole || null,
 			clientId,
 		);
 
@@ -374,11 +438,21 @@ export async function setUserRole(
 		}
 
 		const client = db
-			.query("SELECT id FROM apps WHERE client_id = ?")
-			.get(clientId);
+			.query("SELECT id, available_roles FROM apps WHERE client_id = ?")
+			.get(clientId) as { id: number; available_roles: string | null } | undefined;
 
 		if (!client) {
 			return Response.json({ error: "Client not found" }, { status: 404 });
+		}
+
+		// Validate role against available roles if defined
+		if (role && client.available_roles) {
+			const availableRoles = JSON.parse(client.available_roles) as string[];
+			if (!availableRoles.includes(role)) {
+				return Response.json({ 
+					error: `Role must be one of: ${availableRoles.join(', ')}` 
+				}, { status: 400 });
+			}
 		}
 
 		const permission = db

@@ -81,6 +81,8 @@ interface Client {
 	description: string | null;
 	redirectUris: string[];
 	isPreregistered: boolean;
+	availableRoles: string[] | null;
+	defaultRole: string | null;
 	firstSeen: number;
 	lastUsed: number;
 }
@@ -234,10 +236,18 @@ function displayClients(clients: Client[]) {
 								<div class="user-item">
 									<div class="user-info">
 										<div class="user-name"><a href="/u/${user.username}" onclick="event.stopPropagation();" style="color: var(--lavender); text-decoration: none;">${user.name}</a> (<a href="/u/${user.username}" onclick="event.stopPropagation();" style="color: var(--old-rose); text-decoration: none;">@${user.username}</a>)</div>
-										${data.client.isPreregistered ? `
+										${data.client.isPreregistered && data.client.availableRoles !== null ? `
 											<div class="user-role-input">
-												<label style="color: var(--old-rose); font-size: 0.75rem;">ROLE:</label>
-												<input type="text" value="${user.role || ''}" placeholder="none" data-username="${user.username}" data-client-id="${clientId}" />
+												<label style="color: var(--old-rose); font-size: 0.75rem;">ROLE${data.client.availableRoles.length > 0 ? '' : ' (OPTIONAL)'}:</label>
+												${data.client.availableRoles.length > 0 
+													? `<select data-username="${user.username}" data-client-id="${clientId}" style="padding: 0.5rem; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--old-rose); color: var(--lavender); font-family: inherit; font-size: 0.875rem;">
+														<option value="">No role</option>
+														${data.client.availableRoles.map((role: string) => `
+															<option value="${role}" ${user.role === role ? 'selected' : ''}>${role}</option>
+														`).join('')}
+													</select>`
+													: `<input type="text" value="${user.role || ''}" placeholder="e.g. admin, editor, viewer" data-username="${user.username}" data-client-id="${clientId}" />`
+												}
 												<button onclick="event.stopPropagation(); setUserRole('${clientId}', '${user.username}', this.previousElementSibling.value)">update</button>
 											</div>
 										` : ''}
@@ -305,6 +315,8 @@ function displayClients(clients: Client[]) {
 		(document.getElementById('clientName') as HTMLInputElement).value = client.name || '';
 		(document.getElementById('logoUrl') as HTMLInputElement).value = client.logoUrl || '';
 		(document.getElementById('description') as HTMLTextAreaElement).value = client.description || '';
+		(document.getElementById('availableRoles') as HTMLTextAreaElement).value = client.availableRoles ? client.availableRoles.join('\n') : '';
+		(document.getElementById('defaultRole') as HTMLInputElement).value = client.defaultRole || '';
 
 		redirectUrisList.innerHTML = client.redirectUris.map((uri: string) => `
 			<div class="redirect-uri-item">
@@ -393,9 +405,23 @@ clientForm.addEventListener('submit', async (e) => {
 	const name = (document.getElementById('clientName') as HTMLInputElement).value;
 	const logoUrl = (document.getElementById('logoUrl') as HTMLInputElement).value;
 	const description = (document.getElementById('description') as HTMLTextAreaElement).value;
+	const availableRolesText = (document.getElementById('availableRoles') as HTMLTextAreaElement).value;
+	const defaultRole = (document.getElementById('defaultRole') as HTMLInputElement).value;
 	
 	const redirectUriInputs = Array.from(redirectUrisList.querySelectorAll('.redirect-uri-input')) as HTMLInputElement[];
 	const redirectUris = redirectUriInputs.map(input => input.value).filter(uri => uri.trim());
+
+	// Parse available roles from textarea (one per line)
+	const availableRoles = availableRolesText
+		.split('\n')
+		.map(r => r.trim())
+		.filter(r => r);
+
+	// Validate default role is in available roles
+	if (defaultRole && availableRoles.length > 0 && !availableRoles.includes(defaultRole)) {
+		showToast('Default role must be one of the available roles', 'error');
+		return;
+	}
 
 	if (redirectUris.length === 0) {
 		showToast('At least one redirect URI is required', 'error');
@@ -421,6 +447,8 @@ clientForm.addEventListener('submit', async (e) => {
 				logoUrl,
 				description,
 				redirectUris,
+				availableRoles: availableRolesText.trim() ? availableRoles : null,
+				defaultRole: defaultRole || undefined,
 			}),
 		});
 
@@ -431,14 +459,17 @@ clientForm.addEventListener('submit', async (e) => {
 
 		clientModal.classList.remove('active');
 		
-		// If creating a new client, show the secret
+		// If creating a new client, show the secret in modal
 		if (!isEdit) {
 			const result = await response.json();
 			if (result.client && result.client.clientSecret) {
-				// Show secret in modal
-				const secretText = result.client.clientSecret;
-				navigator.clipboard.writeText(secretText);
-				showToast(`Client created! Secret copied to clipboard: ${secretText}`);
+				const secretModal = document.getElementById('secretModal') as HTMLElement;
+				const generatedSecret = document.getElementById('generatedSecret') as HTMLElement;
+				
+				if (generatedSecret && secretModal) {
+					generatedSecret.textContent = result.client.clientSecret;
+					secretModal.classList.add('active');
+				}
 			}
 		} else {
 			showToast('Client updated successfully');
@@ -470,23 +501,13 @@ clientForm.addEventListener('submit', async (e) => {
 
 		const data = await response.json();
 		
-		// Show the new secret in an alert (could also show in a modal)
-		const secretInput = document.getElementById(`secret-${encodeURIComponent(clientId)}`) as HTMLInputElement;
-		if (secretInput) {
-			secretInput.type = 'text';
-			secretInput.value = data.clientSecret;
-			secretInput.select();
-			
-			// Copy to clipboard
-			navigator.clipboard.writeText(data.clientSecret);
-			
-			showToast(`New secret generated and copied: ${data.clientSecret}`);
-			
-			// Reset to password field after a delay
-			setTimeout(() => {
-				secretInput.type = 'password';
-				secretInput.value = '••••••••••••••••••••••••';
-			}, 5000);
+		// Show the secret in modal
+		const secretModal = document.getElementById('secretModal') as HTMLElement;
+		const generatedSecret = document.getElementById('generatedSecret') as HTMLElement;
+		
+		if (generatedSecret && secretModal) {
+			generatedSecret.textContent = data.clientSecret;
+			secretModal.classList.add('active');
 		}
 	} catch (error) {
 		console.error('Failed to regenerate secret:', error);
@@ -528,5 +549,30 @@ clientForm.addEventListener('submit', async (e) => {
 		showToast('Failed to revoke permission. Please try again.', 'error');
 	}
 };
+
+// Secret modal handlers
+const secretModal = document.getElementById('secretModal') as HTMLElement;
+const secretModalClose = document.getElementById('secretModalClose') as HTMLButtonElement;
+const copySecretBtn = document.getElementById('copySecretBtn') as HTMLButtonElement;
+
+secretModalClose?.addEventListener('click', () => {
+	secretModal?.classList.remove('active');
+});
+
+copySecretBtn?.addEventListener('click', async () => {
+	const generatedSecret = document.getElementById('generatedSecret') as HTMLElement;
+	if (generatedSecret) {
+		try {
+			await navigator.clipboard.writeText(generatedSecret.textContent || '');
+			copySecretBtn.textContent = 'copied! ✓';
+			setTimeout(() => {
+				copySecretBtn.textContent = 'copy to clipboard';
+			}, 2000);
+		} catch (error) {
+			console.error('Failed to copy:', error);
+			showToast('Failed to copy to clipboard', 'error');
+		}
+	}
+});
 
 checkAuth();

@@ -61,15 +61,20 @@ export async function registerOptions(req: Request): Promise<Response> {
 
 			// Validate invite code
 			const invite = db
-				.query("SELECT id, used FROM invites WHERE code = ?")
-				.get(inviteCode) as { id: number; used: number } | undefined;
+				.query("SELECT id, max_uses, current_uses, expires_at FROM invites WHERE code = ?")
+				.get(inviteCode) as { id: number; max_uses: number; current_uses: number; expires_at: number | null } | undefined;
 
 			if (!invite) {
 				return Response.json({ error: "Invalid invite code" }, { status: 403 });
 			}
 
-			if (invite.used === 1) {
-				return Response.json({ error: "Invite code already used" }, { status: 403 });
+			const now = Math.floor(Date.now() / 1000);
+			if (invite.expires_at && invite.expires_at < now) {
+				return Response.json({ error: "Invite code expired" }, { status: 403 });
+			}
+
+			if (invite.current_uses >= invite.max_uses) {
+				return Response.json({ error: "Invite code fully used" }, { status: 403 });
 			}
 		}
 
@@ -157,24 +162,35 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 		// If not bootstrap, validate invite code
 		let inviteId: number | undefined;
+		let inviteRoles: Array<{ app_id: number; role: string }> = [];
 		if (!isBootstrap) {
 			if (!inviteCode) {
 				return Response.json({ error: "Invite code required" }, { status: 403 });
 			}
 
 			const invite = db
-				.query("SELECT id, used FROM invites WHERE code = ?")
-				.get(inviteCode) as { id: number; used: number } | undefined;
+				.query("SELECT id, max_uses, current_uses, expires_at FROM invites WHERE code = ?")
+				.get(inviteCode) as { id: number; max_uses: number; current_uses: number; expires_at: number | null } | undefined;
 
 			if (!invite) {
 				return Response.json({ error: "Invalid invite code" }, { status: 403 });
 			}
 
-			if (invite.used === 1) {
-				return Response.json({ error: "Invite code already used" }, { status: 403 });
+			const now = Math.floor(Date.now() / 1000);
+			if (invite.expires_at && invite.expires_at < now) {
+				return Response.json({ error: "Invite code expired" }, { status: 403 });
+			}
+
+			if (invite.current_uses >= invite.max_uses) {
+				return Response.json({ error: "Invite code fully used" }, { status: 403 });
 			}
 
 			inviteId = invite.id;
+
+			// Get app role assignments for this invite
+			inviteRoles = db.query(
+				"SELECT app_id, role FROM invite_roles WHERE invite_id = ?"
+			).all(inviteId) as Array<{ app_id: number; role: string }>;
 		}
 
 		// Verify WebAuthn response
@@ -225,9 +241,26 @@ export async function registerVerify(req: Request): Promise<Response> {
 		// Mark invite as used if applicable
 		if (inviteId) {
 			const usedAt = Math.floor(Date.now() / 1000);
+			
+			// Increment invite usage counter
 			db.query(
-				"UPDATE invites SET used = 1, used_by = ?, used_at = ? WHERE id = ?",
-			).run(user.id, usedAt, inviteId);
+				"UPDATE invites SET current_uses = current_uses + 1 WHERE id = ?",
+			).run(inviteId);
+			
+			// Record this invite use
+			db.query(
+				"INSERT INTO invite_uses (invite_id, user_id, used_at) VALUES (?, ?, ?)",
+			).run(inviteId, user.id, usedAt);
+			
+			// Assign app roles to the new user
+			if (inviteRoles.length > 0) {
+				const insertPermission = db.query(
+					"INSERT INTO permissions (user_id, app_id, role) VALUES (?, ?, ?)",
+				);
+				for (const { app_id, role } of inviteRoles) {
+					insertPermission.run(user.id, app_id, role);
+				}
+			}
 		}
 
 		// Delete challenge

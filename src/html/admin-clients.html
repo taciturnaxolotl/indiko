@@ -5,7 +5,18 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>oauth clients • admin • indiko</title>
+	<meta name="description" content="Manage OAuth clients and application registrations" />
 	<link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
+	
+	<!-- Open Graph / Facebook -->
+	<meta property="og:type" content="website" />
+	<meta property="og:title" content="OAuth Clients • Indiko Admin" />
+	<meta property="og:description" content="Manage OAuth clients and application registrations" />
+	
+	<!-- Twitter -->
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="OAuth Clients • Indiko Admin" />
+	<meta name="twitter:description" content="Manage OAuth clients and application registrations" />
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
@@ -649,11 +660,39 @@
 					</div>
 					<button type="button" class="btn-add" id="addRedirectUriBtn">add redirect uri</button>
 				</div>
+				<div class="form-group">
+					<label class="form-label">Available Roles (one per line)</label>
+					<textarea class="form-input form-textarea" id="availableRoles" placeholder="admin&#10;editor&#10;viewer" style="min-height: 6rem;"></textarea>
+					<p style="font-size: 0.75rem; color: var(--old-rose); margin-top: 0.5rem;">Define which roles can be assigned to users for this app. Leave empty to allow free-text roles.</p>
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="defaultRole">Default Role</label>
+					<input type="text" class="form-input" id="defaultRole" placeholder="Leave empty for no default" />
+					<p style="font-size: 0.75rem; color: var(--old-rose); margin-top: 0.5rem;">Automatically assigned when users first authorize this app.</p>
+				</div>
 				<div class="form-actions">
 					<button type="button" class="btn" style="background: rgba(188, 141, 160, 0.2);" id="cancelBtn">cancel</button>
 					<button type="submit" class="btn">save</button>
 				</div>
 			</form>
+		</div>
+	</div>
+
+	<div id="secretModal" class="modal">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h3 class="modal-title">Client Secret Generated</h3>
+				<button class="modal-close" id="secretModalClose">&times;</button>
+			</div>
+			<div style="margin-bottom: 1.5rem;">
+				<p style="color: var(--rosewood); font-weight: 600; margin-bottom: 1rem;">
+					⚠️ Save this secret now. You won't be able to see it again!
+				</p>
+				<div style="background: rgba(0, 0, 0, 0.3); padding: 1rem; border: 1px solid var(--old-rose); margin-bottom: 1rem;">
+					<code id="generatedSecret" style="color: var(--lavender); font-size: 0.875rem; word-break: break-all; display: block;"></code>
+				</div>
+				<button class="btn" id="copySecretBtn" style="width: 100%;">copy to clipboard</button>
+			</div>
 		</div>
 	</div>
 
