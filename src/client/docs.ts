@@ -41,6 +41,8 @@ const exchangeBtn = document.getElementById('exchangeBtn') as HTMLButtonElement;
 const resultSection = document.getElementById('resultSection') as HTMLElement;
 const resultDiv = document.getElementById('result') as HTMLElement;
 const copyMarkdownBtn = document.getElementById('copyMarkdownBtn') as HTMLButtonElement;
+const copyButtonCodeBtn = document.getElementById('copyButtonCode') as HTMLButtonElement;
+const demoButton = document.getElementById('demoButton') as HTMLAnchorElement;
 
 // Auto-fill redirect URI with current page URL
 const currentUrl = window.location.origin + window.location.pathname;
@@ -388,3 +390,82 @@ copyMarkdownBtn.addEventListener('click', async () => {
 		alert('Failed to copy to clipboard');
 	}
 });
+
+// Copy button code to clipboard
+copyButtonCodeBtn.addEventListener('click', async () => {
+	const buttonCode = `<!-- Add Google Fonts to your <head> -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+
+<!-- Button HTML -->
+<a href="YOUR_OAUTH_URL_HERE" class="indiko-button">
+  Sign in with Indiko
+</a>
+
+<style>
+  .indiko-button {
+    position: relative;
+    display: inline-block;
+    padding: 1rem 2rem;
+    background: #ab4967;
+    color: #d9d0de;
+    border: 4px solid #26242b;
+    font-size: 1rem;
+    font-weight: 700;
+    text-decoration: none;
+    font-family: 'Space Grotesk', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.1rem;
+    box-shadow: 6px 6px 0 #26242b;
+    transition: all 0.15s ease;
+  }
+
+  .indiko-button::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    background: transparent;
+    border: 4px solid #a04668;
+    pointer-events: none;
+    transition: all 0.15s ease;
+  }
+
+  .indiko-button:hover {
+    transform: translate(3px, 3px);
+    box-shadow: 3px 3px 0 #26242b;
+  }
+
+  .indiko-button:hover::before {
+    top: -7px;
+    left: -7px;
+    right: -7px;
+    bottom: -7px;
+  }
+
+  .indiko-button:active {
+    transform: translate(6px, 6px);
+    box-shadow: 0 0 0 #26242b;
+  }
+</style>`;
+
+	try {
+		await navigator.clipboard.writeText(buttonCode);
+		copyButtonCodeBtn.textContent = 'copied! ✓';
+		setTimeout(() => {
+			copyButtonCodeBtn.textContent = 'copy button code';
+		}, 2000);
+	} catch (error) {
+		console.error('Failed to copy:', error);
+		alert('Failed to copy to clipboard');
+	}
+});
+
+// Add interactive hover effect to demo button
+demoButton.addEventListener('click', (e) => {
+	e.preventDefault();
+});
+

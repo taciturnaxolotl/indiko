@@ -484,6 +484,7 @@
 			<ul>
 				<li><a href="#overview">overview</a></li>
 				<li><a href="#getting-started">getting started</a></li>
+				<li><a href="#button">sign in button</a></li>
 				<li><a href="#endpoints">endpoints</a></li>
 				<li><a href="#authorization">authorization flow</a></li>
 				<li><a href="#scopes">scopes</a></li>
@@ -543,6 +544,99 @@
 				<li>Authorize apps to access your profile</li>
 				<li>Manage app permissions from your dashboard</li>
 			</ul>
+		</section>
+
+		<section id="button" class="section">
+			<h2>sign in button</h2>
+			<p>
+				Copy this themed button for your app's login page. It matches Indiko's visual style:
+			</p>
+
+			<div style="background: rgba(12, 23, 19, 0.6); padding: 2rem; margin: 1.5rem 0; display: flex; justify-content: center;">
+				<a href="#" id="demoButton" style="
+					position: relative;
+					display: inline-block;
+					padding: 1rem 2rem;
+					background: #ab4967;
+					color: #d9d0de;
+					border: 4px solid #26242b;
+					font-size: 1rem;
+					font-weight: 700;
+					text-decoration: none;
+					font-family: 'Space Grotesk', sans-serif;
+					text-transform: uppercase;
+					letter-spacing: 0.1rem;
+					box-shadow: 6px 6px 0 #26242b;
+					transition: all 0.15s ease;
+				">Sign in with Indiko</a>
+			</div>
+
+			<h3>HTML + CSS</h3>
+			<pre><code>&lt;!-- Add Google Fonts to your &lt;head&gt; --&gt;
+&lt;link rel="preconnect" href="https://fonts.googleapis.com"&gt;
+&lt;link rel="preconnect" href="https://fonts.gstatic.com" crossorigin&gt;
+&lt;link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;display=swap" rel="stylesheet"&gt;
+
+&lt;!-- Button HTML --&gt;
+&lt;a href="YOUR_OAUTH_URL_HERE" class="indiko-button"&gt;
+  Sign in with Indiko
+&lt;/a&gt;
+
+&lt;style&gt;
+  .indiko-button {
+    position: relative;
+    display: inline-block;
+    padding: 1rem 2rem;
+    background: #ab4967;
+    color: #d9d0de;
+    border: 4px solid #26242b;
+    font-size: 1rem;
+    font-weight: 700;
+    text-decoration: none;
+    font-family: 'Space Grotesk', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.1rem;
+    box-shadow: 6px 6px 0 #26242b;
+    transition: all 0.15s ease;
+  }
+
+  .indiko-button::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    background: transparent;
+    border: 4px solid #a04668;
+    pointer-events: none;
+    transition: all 0.15s ease;
+  }
+
+  .indiko-button:hover {
+    transform: translate(3px, 3px);
+    box-shadow: 3px 3px 0 #26242b;
+  }
+
+  .indiko-button:hover::before {
+    top: -7px;
+    left: -7px;
+    right: -7px;
+    bottom: -7px;
+  }
+
+  .indiko-button:active {
+    transform: translate(6px, 6px);
+    box-shadow: 0 0 0 #26242b;
+  }
+&lt;/style&gt;</code></pre>
+
+			<button id="copyButtonCode" class="copy-btn">copy button code</button>
+
+			<div class="info-box">
+				<strong>Customization:</strong>
+				Replace <code>YOUR_OAUTH_URL_HERE</code> with your authorization URL (see <a href="#authorization">authorization flow</a> below). You can also change the button text or adjust colors to match your app's theme.
+			</div>
 		</section>
 
 		<section id="endpoints" class="section">
