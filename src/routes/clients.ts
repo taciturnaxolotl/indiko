@@ -1,12 +1,17 @@
 import { db } from "../db";
 import crypto from "crypto";
+import { nanoid } from "nanoid";
 
 function hashSecret(secret: string): string {
 	return crypto.createHash("sha256").update(secret).digest("hex");
 }
 
 function generateClientSecret(): string {
-	return crypto.randomBytes(32).toString("base64url");
+	return `iks_${nanoid(43)}`; // indiko secret
+}
+
+function generateClientId(): string {
+	return `ikc_${nanoid(21)}`; // indiko client
 }
 
 function getSessionUser(req: Request): { username: string; userId: number; is_admin: boolean } | Response {
@@ -131,17 +136,7 @@ export async function createClient(req: Request): Promise<Response> {
 
 	try {
 		const body = await req.json();
-		const { clientId, name, logoUrl, description, redirectUris, availableRoles, defaultRole } = body;
-
-		if (!clientId || typeof clientId !== "string") {
-			return Response.json({ error: "Client ID is required" }, { status: 400 });
-		}
-
-		try {
-			new URL(clientId);
-		} catch {
-			return Response.json({ error: "Client ID must be a valid URL" }, { status: 400 });
-		}
+		const { name, logoUrl, description, redirectUris, availableRoles, defaultRole } = body;
 
 		if (!redirectUris || !Array.isArray(redirectUris) || redirectUris.length === 0) {
 			return Response.json({ error: "At least one redirect URI is required" }, { status: 400 });
@@ -155,15 +150,8 @@ export async function createClient(req: Request): Promise<Response> {
 			}
 		}
 
-		const existing = db
-			.query("SELECT id FROM apps WHERE client_id = ?")
-			.get(clientId);
-
-		if (existing) {
-			return Response.json({ error: "Client ID already exists" }, { status: 409 });
-		}
-
-		// Generate client secret for pre-registered clients
+		// Generate client ID and secret for pre-registered clients
+		const clientId = generateClientId();
 		const clientSecret = generateClientSecret();
 		const clientSecretHash = hashSecret(clientSecret);
 
@@ -205,7 +193,7 @@ export async function createClient(req: Request): Promise<Response> {
 				id: result.lastInsertRowid,
 				clientId,
 				clientSecret, // Return the plain secret only once on creation
-				name: name || new URL(clientId).hostname,
+				name: name || clientId,
 				logoUrl: logoUrl || null,
 				description: description || null,
 				redirectUris,

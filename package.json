@@ -18,6 +18,7 @@
 	"dependencies": {
 		"@simplewebauthn/browser": "^13.2.2",
 		"@simplewebauthn/server": "^13.2.2",
-		"bun-sqlite-migrations": "^1.0.2"
+		"bun-sqlite-migrations": "^1.0.2",
+		"nanoid": "^5.1.6"
 	}
 }
