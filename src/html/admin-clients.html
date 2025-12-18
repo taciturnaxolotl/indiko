@@ -636,10 +636,6 @@
 			<form id="clientForm">
 				<input type="hidden" id="editClientId" />
 				<div class="form-group">
-					<label class="form-label" for="clientId">Client ID (URL)</label>
-					<input type="url" class="form-input" id="clientId" required placeholder="https://example.com" />
-				</div>
-				<div class="form-group">
 					<label class="form-label" for="clientName">Name</label>
 					<input type="text" class="form-input" id="clientName" placeholder="My Application" />
 				</div>
@@ -682,17 +678,27 @@
 	<div id="secretModal" class="modal">
 		<div class="modal-content">
 			<div class="modal-header">
-				<h3 class="modal-title">Client Secret Generated</h3>
+				<h3 class="modal-title">Client Credentials Generated</h3>
 				<button class="modal-close" id="secretModalClose">&times;</button>
 			</div>
 			<div style="margin-bottom: 1.5rem;">
 				<p style="color: var(--rosewood); font-weight: 600; margin-bottom: 1rem;">
-					⚠️ Save this secret now. You won't be able to see it again!
+					⚠️ Save these credentials now. You won't be able to see the secret again!
 				</p>
-				<div style="background: rgba(0, 0, 0, 0.3); padding: 1rem; border: 1px solid var(--old-rose); margin-bottom: 1rem;">
-					<code id="generatedSecret" style="color: var(--lavender); font-size: 0.875rem; word-break: break-all; display: block;"></code>
+				<div style="margin-bottom: 1rem;">
+					<label style="display: block; color: var(--old-rose); font-size: 0.875rem; margin-bottom: 0.5rem;">Client ID</label>
+					<div style="background: rgba(0, 0, 0, 0.3); padding: 1rem; border: 1px solid var(--old-rose); margin-bottom: 0.5rem;">
+						<code id="generatedClientId" style="color: var(--lavender); font-size: 0.875rem; word-break: break-all; display: block;"></code>
+					</div>
+					<button class="btn" id="copyClientIdBtn" style="width: 100%; background: rgba(188, 141, 160, 0.2);">copy client id</button>
 				</div>
-				<button class="btn" id="copySecretBtn" style="width: 100%;">copy to clipboard</button>
+				<div style="margin-bottom: 1rem;">
+					<label style="display: block; color: var(--old-rose); font-size: 0.875rem; margin-bottom: 0.5rem;">Client Secret</label>
+					<div style="background: rgba(0, 0, 0, 0.3); padding: 1rem; border: 1px solid var(--old-rose); margin-bottom: 0.5rem;">
+						<code id="generatedSecret" style="color: var(--lavender); font-size: 0.875rem; word-break: break-all; display: block;"></code>
+					</div>
+					<button class="btn" id="copySecretBtn" style="width: 100%; background: rgba(188, 141, 160, 0.2);">copy secret</button>
+				</div>
 			</div>
 		</div>
 	</div>

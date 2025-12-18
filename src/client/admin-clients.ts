@@ -310,8 +310,6 @@ function displayClients(clients: Client[]) {
 
 		modalTitle.textContent = 'Edit OAuth Client';
 		(document.getElementById('editClientId') as HTMLInputElement).value = clientId;
-		(document.getElementById('clientId') as HTMLInputElement).value = client.clientId;
-		(document.getElementById('clientId') as HTMLInputElement).disabled = true;
 		(document.getElementById('clientName') as HTMLInputElement).value = client.name || '';
 		(document.getElementById('logoUrl') as HTMLInputElement).value = client.logoUrl || '';
 		(document.getElementById('description') as HTMLTextAreaElement).value = client.description || '';
@@ -383,7 +381,6 @@ createClientBtn.addEventListener('click', () => {
 	modalTitle.textContent = 'Create OAuth Client';
 	clientForm.reset();
 	(document.getElementById('editClientId') as HTMLInputElement).value = '';
-	(document.getElementById('clientId') as HTMLInputElement).disabled = false;
 	redirectUrisList.innerHTML = `
 		<div class="redirect-uri-item">
 			<input type="url" class="form-input redirect-uri-input" placeholder="https://example.com/auth/callback" required />
@@ -424,7 +421,6 @@ clientForm.addEventListener('submit', async (e) => {
 	e.preventDefault();
 
 	const editClientId = (document.getElementById('editClientId') as HTMLInputElement).value;
-	const clientId = (document.getElementById('clientId') as HTMLInputElement).value;
 	const name = (document.getElementById('clientName') as HTMLInputElement).value;
 	const logoUrl = (document.getElementById('logoUrl') as HTMLInputElement).value;
 	const description = (document.getElementById('description') as HTMLTextAreaElement).value;
@@ -465,7 +461,6 @@ clientForm.addEventListener('submit', async (e) => {
 				'Content-Type': 'application/json',
 			},
 			body: JSON.stringify({
-				clientId: isEdit ? undefined : clientId,
 				name,
 				logoUrl,
 				description,
@@ -482,14 +477,16 @@ clientForm.addEventListener('submit', async (e) => {
 
 		clientModal.classList.remove('active');
 		
-		// If creating a new client, show the secret in modal
+		// If creating a new client, show the credentials in modal
 		if (!isEdit) {
 			const result = await response.json();
-			if (result.client && result.client.clientSecret) {
+			if (result.client && result.client.clientId && result.client.clientSecret) {
 				const secretModal = document.getElementById('secretModal') as HTMLElement;
+				const generatedClientId = document.getElementById('generatedClientId') as HTMLElement;
 				const generatedSecret = document.getElementById('generatedSecret') as HTMLElement;
 				
-				if (generatedSecret && secretModal) {
+				if (generatedClientId && generatedSecret && secretModal) {
+					generatedClientId.textContent = result.client.clientId;
 					generatedSecret.textContent = result.client.clientSecret;
 					secretModal.classList.add('active');
 				}
@@ -576,10 +573,28 @@ clientForm.addEventListener('submit', async (e) => {
 // Secret modal handlers
 const secretModal = document.getElementById('secretModal') as HTMLElement;
 const secretModalClose = document.getElementById('secretModalClose') as HTMLButtonElement;
+const copyClientIdBtn = document.getElementById('copyClientIdBtn') as HTMLButtonElement;
 const copySecretBtn = document.getElementById('copySecretBtn') as HTMLButtonElement;
 
 secretModalClose?.addEventListener('click', () => {
 	secretModal?.classList.remove('active');
+});
+
+copyClientIdBtn?.addEventListener('click', async () => {
+	const generatedClientId = document.getElementById('generatedClientId') as HTMLElement;
+	if (generatedClientId) {
+		try {
+			await navigator.clipboard.writeText(generatedClientId.textContent || '');
+			const originalText = copyClientIdBtn.textContent;
+			copyClientIdBtn.textContent = 'copied! ✓';
+			setTimeout(() => {
+				copyClientIdBtn.textContent = originalText;
+			}, 2000);
+		} catch (error) {
+			console.error('Failed to copy:', error);
+			showToast('Failed to copy to clipboard', 'error');
+		}
+	}
 });
 
 copySecretBtn?.addEventListener('click', async () => {
@@ -587,9 +602,10 @@ copySecretBtn?.addEventListener('click', async () => {
 	if (generatedSecret) {
 		try {
 			await navigator.clipboard.writeText(generatedSecret.textContent || '');
+			const originalText = copySecretBtn.textContent;
 			copySecretBtn.textContent = 'copied! ✓';
 			setTimeout(() => {
-				copySecretBtn.textContent = 'copy to clipboard';
+				copySecretBtn.textContent = originalText;
 			}, 2000);
 		} catch (error) {
 			console.error('Failed to copy:', error);
