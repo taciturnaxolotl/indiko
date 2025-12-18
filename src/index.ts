@@ -57,10 +57,38 @@ import {
 
 	if (missing.length > 0) {
 		console.warn(
-			`[Startup] Missing required envivonment variables: ${missing.join(", ")}`,
+			`[Startup] Missing required environment variables: ${missing.join(", ")}`,
 		);
 		process.exit(1);
 	}
+
+	// Validate ORIGIN is HTTPS in production
+	const origin = process.env.ORIGIN!;
+	const rpId = process.env.RP_ID!;
+	const nodeEnv = process.env.NODE_ENV || "development";
+
+	if (nodeEnv === "production" && !origin.startsWith("https://")) {
+		console.error(
+			`[Startup] ORIGIN must use HTTPS in production (got: ${origin})`,
+		);
+		process.exit(1);
+	}
+
+	// Validate RP_ID matches ORIGIN domain
+	try {
+		const originUrl = new URL(origin);
+		if (originUrl.hostname !== rpId) {
+			console.error(
+				`[Startup] RP_ID must match ORIGIN domain (ORIGIN: ${originUrl.hostname}, RP_ID: ${rpId})`,
+			);
+			process.exit(1);
+		}
+	} catch {
+		console.error(`[Startup] Invalid ORIGIN URL format: ${origin}`);
+		process.exit(1);
+	}
+
+	console.log(`[Startup] Environment validated (${nodeEnv} mode)`);
 })();
 
 const server = Bun.serve({
@@ -75,6 +103,42 @@ const server = Bun.serve({
 		"/profile": profileHTML,
 		"/docs": docsHTML,
 		"/apps": appsHTML,
+		// Well-known endpoints
+		"/.well-known/security.txt": () =>
+			new Response(
+				`# Security Contact Information for Indiko
+# See: https://securitytxt.org/
+
+Contact: mailto:security@dunkirk.sh
+Expires: 2026-12-31T23:59:59.000Z
+Preferred-Languages: en
+Canonical: ${env.ORIGIN}/.well-known/security.txt
+
+# Reporting Security Vulnerabilities
+# 
+# If you discover a security vulnerability in Indiko, please report it 
+# responsibly by emailing security@dunkirk.sh with:
+# 
+# - Description of the vulnerability
+# - Steps to reproduce
+# - Potential impact assessment
+# - Any suggested fixes (optional)
+#
+# Please do not open public issues for security vulnerabilities.
+# You will receive a response within 48 hours.
+#
+# We appreciate responsible disclosure and will credit researchers 
+# who report vulnerabilities (unless you prefer to remain anonymous).
+
+Policy: https://github.com/taciturnaxolotl/indiko/blob/main/SECURITY.md
+Acknowledgments: https://github.com/taciturnaxolotl/indiko/blob/main/SECURITY.md#security-audit-history
+`,
+				{
+					headers: {
+						"Content-Type": "text/plain; charset=utf-8",
+					},
+				},
+			),
 		// API endpoints
 		"/api/hello": hello,
 		"/api/users": listUsers,
