@@ -33,7 +33,7 @@ async function checkAuth() {
 			},
 		});
 
-		if (response.status === 401) {
+		if (response.status === 401 || response.status === 403) {
 			localStorage.removeItem('indiko_session');
 			window.location.href = '/login';
 			return;

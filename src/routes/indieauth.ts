@@ -19,13 +19,13 @@ function getSessionUser(req: Request): SessionUser | Response {
 
 	const session = db
 		.query(
-			`SELECT s.expires_at, u.id, u.username, u.is_admin 
+			`SELECT s.expires_at, u.id, u.username, u.is_admin, u.status 
 			FROM sessions s 
 			JOIN users u ON s.user_id = u.id 
 			WHERE s.token = ?`,
 		)
 		.get(token) as
-		| { expires_at: number; id: number; username: string; is_admin: number }
+		| { expires_at: number; id: number; username: string; is_admin: number; status: string }
 		| undefined;
 
 	if (!session) {
@@ -35,6 +35,10 @@ function getSessionUser(req: Request): SessionUser | Response {
 	const now = Math.floor(Date.now() / 1000);
 	if (session.expires_at < now) {
 		return Response.json({ error: "Session expired" }, { status: 401 });
+	}
+
+	if (session.status !== 'active') {
+		return Response.json({ error: "Account is suspended" }, { status: 403 });
 	}
 
 	return {
@@ -61,19 +65,21 @@ function getUserFromCookie(req: Request): SessionUser | null {
 
 	const session = db
 		.query(
-			`SELECT s.expires_at, u.id, u.username, u.is_admin 
+			`SELECT s.expires_at, u.id, u.username, u.is_admin, u.status 
 			FROM sessions s 
 			JOIN users u ON s.user_id = u.id 
 			WHERE s.token = ?`,
 		)
 		.get(sessionToken) as
-		| { expires_at: number; id: number; username: string; is_admin: number }
+		| { expires_at: number; id: number; username: string; is_admin: number; status: string }
 		| undefined;
 
 	if (!session) return null;
 
 	const now = Math.floor(Date.now() / 1000);
 	if (session.expires_at < now) return null;
+
+	if (session.status !== 'active') return null;
 
 	return {
 		username: session.username,

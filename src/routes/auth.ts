@@ -306,13 +306,17 @@ export async function loginOptions(req: Request): Promise<Response> {
 			return Response.json({ error: "Username required" }, { status: 400 });
 		}
 
-		// Check if user exists
+		// Check if user exists and is active
 		const user = db
-			.query("SELECT id FROM users WHERE username = ?")
-			.get(username) as { id: number } | undefined;
+			.query("SELECT id, status FROM users WHERE username = ?")
+			.get(username) as { id: number; status: string } | undefined;
 
 		if (!user) {
 			return Response.json({ error: "User not found" }, { status: 404 });
+		}
+
+		if (user.status !== 'active') {
+			return Response.json({ error: "Account is suspended" }, { status: 403 });
 		}
 
 		// Get user's credentials (just to verify they exist)
@@ -371,16 +375,24 @@ export async function loginVerify(req: Request): Promise<Response> {
 		
 		const credentialWithUser = db
 			.query(
-				"SELECT c.credential_id, c.public_key, c.counter, c.user_id, u.username FROM credentials c JOIN users u ON c.user_id = u.id WHERE c.credential_id = ?",
+				"SELECT c.credential_id, c.public_key, c.counter, c.user_id, u.username, u.status FROM credentials c JOIN users u ON c.user_id = u.id WHERE c.credential_id = ?",
 			)
 			.get(Buffer.from(credentialIdString)) as
-			| { credential_id: Buffer; public_key: Buffer; counter: number; user_id: number; username: string }
+			| { credential_id: Buffer; public_key: Buffer; counter: number; user_id: number; username: string; status: string }
 			| undefined;
 
 		if (!credentialWithUser) {
 			return Response.json(
 				{ error: "Credential not found" },
 				{ status: 404 },
+			);
+		}
+
+		// Check if user account is active
+		if (credentialWithUser.status !== 'active') {
+			return Response.json(
+				{ error: "Account is suspended" },
+				{ status: 403 },
 			);
 		}
 
