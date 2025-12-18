@@ -62,7 +62,7 @@ bun run start
 
 On first run, you'll need to create an admin user:
 
-1. Visit `https://your-indiko-domain.com/login?invite=bootstrap`
+1. Visit `https://your-indiko-domain.com/login`
 2. Register with a passkey
 3. This first user will automatically be an admin
 
@@ -152,7 +152,7 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-    
+
     # Content Security Policy
     add_header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';" always;
 
