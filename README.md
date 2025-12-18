@@ -1,5 +1,7 @@
 # Indiko
 
+![screenshot of oauth page](https://hc-cdn.hel1.your-objectstorage.com/s/v3/c52ab5939b667050_95318.png)
+
 No that was not a typo the project's name actually is `indiko`! This is a small implementation of [IndieAuth](https://indieweb.org/How_to_set_up_web_sign-in_on_your_own_domain) running on bun with sqlite and serving as the authentication provider for my homelab / side projects it also supports custom clients with roles over the OAuth 2.0 spec.
 
 The canonical repo for this is hosted on tangled over at [`dunkirk.sh/indiko`](https://tangled.org/@dunkirk.sh/indiko)
