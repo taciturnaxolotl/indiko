@@ -1123,7 +1123,12 @@ export function logout(req: Request): Response {
 }
 
 // GET /u/:username - Public user profile (h-card)
-export function userProfile(req: Request, username: string): Response {
+export function userProfile(req: Request): Response {
+	const username = (req as any).params?.username;
+	if (!username) {
+		return new Response("Username required", { status: 400 });
+	}
+	
 	const user = db
 		.query("SELECT username, name, email, photo, url FROM users WHERE username = ?")
 		.get(username) as
@@ -1221,14 +1226,19 @@ export function userProfile(req: Request, username: string): Response {
     .p-name:hover {
       color: var(--berry-crush);
     }
-    .u-email {
+    .u-email, .u-url-link {
       color: var(--old-rose);
       text-decoration: none;
       margin-top: 0.5rem;
       font-size: 0.875rem;
     }
-    .u-email:hover {
+    .u-email:hover, .u-url-link:hover {
       color: var(--berry-crush);
+    }
+    .links {
+      display: flex;
+      gap: 1rem;
+      margin-top: 0.5rem;
     }
     .identity-info {
       margin-top: 1rem;
@@ -1300,8 +1310,11 @@ export function userProfile(req: Request, username: string): Response {
   <div class="container">
     <div class="h-card">
       ${user.photo ? `<img class="u-photo" src="${user.photo}" alt="${user.name}" />` : ""}
-      <a class="p-name u-url" href="${user.url || `${process.env.ORIGIN}/u/${user.username}`}">${user.name}</a>
-      ${user.email ? `<a class="u-email" href="mailto:${user.email}">email</a>` : ""}
+      <h1 class="p-name">${user.name}</h1>
+      <div class="links">
+        ${user.url ? `<a class="u-url u-url-link" rel="me" href="${user.url}">website</a>` : ""}
+        ${user.email ? `<a class="u-email" rel="me" href="mailto:${user.email}">email</a>` : ""}
+      </div>
       <div class="identity-info">
         IndieAuth identity: <code>${process.env.ORIGIN}/u/${user.username}</code>
       </div>

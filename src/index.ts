@@ -230,7 +230,7 @@ Acknowledgments: https://github.com/taciturnaxolotl/indiko/blob/main/SECURITY.md
 		"/auth/login/options": loginOptions,
 		"/auth/login/verify": loginVerify,
 		// Dynamic routes with Bun's :param syntax
-		"/u/:username": (req) => userProfile(req, req.params.username),
+		"/u/:username": userProfile,
 		"/api/apps/:clientId": (req) => {
 			if (req.method === "DELETE") return revokeApp(req, req.params.clientId);
 			return new Response("Method not allowed", { status: 405 });
