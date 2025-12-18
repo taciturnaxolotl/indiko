@@ -322,7 +322,7 @@ export async function loginOptions(req: Request): Promise<Response> {
 			return Response.json({ error: "Account is suspended" }, { status: 403 });
 		}
 
-		// Get user's credentials (just to verify they exist)
+		// Get user's credentials
 		const credentials = db
 			.query("SELECT credential_id FROM credentials WHERE user_id = ?")
 			.all(user.id) as { credential_id: Buffer }[];
@@ -335,12 +335,16 @@ export async function loginOptions(req: Request): Promise<Response> {
 		}
 
 		// Generate authentication options
-		// For discoverable credentials, omit allowCredentials to let password managers
-		// show all available passkeys for this RP ID
+		// Include allowCredentials to filter to only this user's passkeys
 		const options: PublicKeyCredentialRequestOptionsJSON =
 			await generateAuthenticationOptions({
 				rpID: process.env.RP_ID!,
 				userVerification: "required",
+				allowCredentials: credentials.map(c => ({
+					id: c.credential_id.toString('base64url'),
+					type: 'public-key' as const,
+					transports: ['hybrid', 'internal', 'usb', 'ble', 'nfc'] as AuthenticatorTransportFuture[],
+				})),
 			});
 
 		// Store challenge
