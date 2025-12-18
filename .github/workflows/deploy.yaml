@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Setup Tailscale
         uses: tailscale/github-action@v3
         with:
@@ -19,12 +19,12 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
           use-cache: "true"
-      
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
           echo "StrictHostKeyChecking no" >> ~/.ssh/config
-      
+
       - name: Deploy to server
         run: |
           ssh indiko@terebithia << 'EOF'
@@ -34,33 +34,40 @@ jobs:
             bun install
             sudo /run/current-system/sw/bin/systemctl restart indiko.service
           EOF
-      
-      - name: Wait for service to start
-        run: sleep 10
-      
+
       - name: Health check
         run: |
-          HEALTH_URL="https://indiko.dunkirk.sh/"
+          HEALTH_URL="https://indiko.dunkirk.sh/health"
           MAX_RETRIES=6
           RETRY_DELAY=5
-          
+
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Health check attempt $i/$MAX_RETRIES..."
             
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || echo "000")
+            RESPONSE=$(curl -s -w "\n%{http_code}" "$HEALTH_URL" || echo "000")
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            BODY=$(echo "$RESPONSE" | head -n-1)
             
             if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Service is healthy (HTTP $HTTP_CODE)"
-              exit 0
+              # Validate response contains "status":"ok"
+              if echo "$BODY" | grep -q '"status":"ok"'; then
+                echo "✅ Service is healthy (HTTP $HTTP_CODE)"
+                echo "Response: $BODY"
+                exit 0
+              else
+                echo "❌ Health check returned 200 but invalid body"
+                echo "Response: $BODY"
+              fi
+            else
+              echo "❌ Health check failed with HTTP $HTTP_CODE"
+              echo "Response: $BODY"
             fi
-            
-            echo "❌ Health check failed with HTTP $HTTP_CODE"
             
             if [ $i -lt $MAX_RETRIES ]; then
               echo "Retrying in ${RETRY_DELAY}s..."
               sleep $RETRY_DELAY
             fi
           done
-          
+
           echo "❌ Health check failed after $MAX_RETRIES attempts"
           exit 1

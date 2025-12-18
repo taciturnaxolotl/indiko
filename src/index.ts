@@ -95,6 +95,18 @@ const server = Bun.serve({
 	port: env.PORT ? Number.parseInt(env.PORT, 10) : 3000,
 	routes: {
 		"/": indexHTML,
+		"/health": () => {
+			try {
+				// Verify database is accessible
+				db.query("SELECT 1").get();
+				return Response.json({ status: "ok", timestamp: new Date().toISOString() });
+			} catch {
+				return Response.json(
+					{ status: "error", error: "Database unavailable" },
+					{ status: 503 }
+				);
+			}
+		},
 		"/admin": adminHTML,
 		"/admin/invites": adminInvitesHTML,
 		"/admin/apps": () => Response.redirect("/admin/clients", 302),
