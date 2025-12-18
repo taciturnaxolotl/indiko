@@ -421,7 +421,25 @@ function showConsentScreen(
 		.query("SELECT name, logo_url, description FROM apps WHERE client_id = ?")
 		.get(clientId) as { name: string | null; logo_url: string | null; description: string | null } | undefined;
 	
-	const appName = appData?.name || new URL(clientId).hostname;
+	// Determine app name and URL - custom apps have ikc_ prefix and should use name from DB
+	let appName: string;
+	let appUrl: string | null = null;
+	
+	if (clientId.startsWith('ikc_')) {
+		// Custom app with generated ID
+		appName = appData?.name || clientId;
+	} else {
+		// URL-based client ID (anonymous app)
+		try {
+			const parsedUrl = new URL(clientId);
+			appName = appData?.name || parsedUrl.hostname;
+			appUrl = parsedUrl.hostname;
+		} catch {
+			// Fallback if URL parsing fails
+			appName = appData?.name || clientId;
+		}
+	}
+	
 	const appLogo = appData?.logo_url;
 	const appDescription = appData?.description;
 
@@ -666,7 +684,7 @@ function showConsentScreen(
       </div>
       <div class="app-info">
         <div class="app-name">${appName}</div>
-        <div class="app-url">${new URL(clientId).hostname}</div>
+        ${appUrl ? `<div class="app-url">${appUrl}</div>` : ''}
         ${appDescription ? `<div class="app-description">${appDescription}</div>` : ''}
       </div>
     </div>
