@@ -97,7 +97,7 @@ async function loadUsers() {
 				: initials;
 			
 			return `
-				<div class="user-card" data-user-id="${user.id}">
+				<div class="user-card ${user.status === 'suspended' ? 'user-suspended' : ''}" data-user-id="${user.id}">
 					<div class="user-avatar">${avatarContent}</div>
 					<div class="user-info">
 						<div class="user-name">${user.username}</div>
@@ -112,15 +112,18 @@ async function loadUsers() {
 						<span class="user-badge badge-role">${user.role}</span>
 					</div>
 					<div class="user-actions">
-						${user.status !== 'suspended' ? `<button class="btn btn-disable" data-action="disable" data-user-id="${user.id}">disable</button>` : ''}
-						<button class="btn btn-delete" data-action="delete" data-user-id="${user.id}">delete</button>
+						${user.status === 'suspended' 
+							? `<button class="btn-edit" data-action="enable" data-user-id="${user.id}">enable</button>` 
+							: `<button class="btn-disable" data-action="disable" data-user-id="${user.id}">disable</button>`
+						}
+						<button class="btn-delete" data-action="delete" data-user-id="${user.id}">delete</button>
 					</div>
 				</div>
 			`;
 		}).join('');
 
 		// Add event listeners for action buttons
-		document.querySelectorAll('.btn[data-action]').forEach(btn => {
+		document.querySelectorAll('button[data-action]').forEach(btn => {
 			btn.addEventListener('click', handleUserAction);
 		});
 	} catch (error) {
@@ -136,36 +139,58 @@ async function handleUserAction(e: Event) {
 	
 	if (!userId || !action) return;
 
-	const confirmMessage = action === 'delete' 
-		? 'Are you sure you want to delete this user? This cannot be undone.'
-		: 'Are you sure you want to disable this user? They will be logged out and unable to sign in.';
-
-	if (!confirm(confirmMessage)) return;
-
-	try {
-		const endpoint = action === 'delete' 
-			? `/api/admin/users/${userId}/delete`
-			: `/api/admin/users/${userId}/disable`;
+	// Check if already in confirmation state
+	if (btn.dataset.confirmState === 'pending') {
+		// Second click - perform action
+		btn.dataset.confirmState = '';
+		btn.disabled = true;
 		
-		const method = action === 'delete' ? 'DELETE' : 'POST';
+		try {
+			let endpoint = '';
+			let method = 'POST';
+			
+			if (action === 'delete') {
+				endpoint = `/api/admin/users/${userId}/delete`;
+				method = 'DELETE';
+			} else if (action === 'disable') {
+				endpoint = `/api/admin/users/${userId}/disable`;
+			} else if (action === 'enable') {
+				endpoint = `/api/admin/users/${userId}/enable`;
+			}
 
-		const response = await fetch(endpoint, {
-			method,
-			headers: {
-				'Authorization': `Bearer ${token}`,
-			},
-		});
+			const response = await fetch(endpoint, {
+				method,
+				headers: {
+					'Authorization': `Bearer ${token}`,
+				},
+			});
 
-		if (!response.ok) {
-			const error = await response.json();
-			throw new Error(error.error || 'Failed to perform action');
+			if (!response.ok) {
+				const error = await response.json();
+				throw new Error(error.error || 'Failed to perform action');
+			}
+
+			// Reload users list
+			loadUsers();
+		} catch (error) {
+			console.error(`Failed to ${action} user:`, error);
+			alert(`Failed to ${action} user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			btn.disabled = false;
 		}
-
-		// Reload users list
-		loadUsers();
-	} catch (error) {
-		console.error(`Failed to ${action} user:`, error);
-		alert(`Failed to ${action} user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+	} else {
+		// First click - set confirmation state
+		const originalText = btn.textContent;
+		btn.dataset.confirmState = 'pending';
+		btn.dataset.originalText = originalText || '';
+		btn.textContent = 'you sure?';
+		
+		// Reset after 3 seconds if not clicked again
+		setTimeout(() => {
+			if (btn.dataset.confirmState === 'pending') {
+				btn.dataset.confirmState = '';
+				btn.textContent = btn.dataset.originalText || originalText;
+			}
+		}, 3000);
 	}
 }
 

@@ -56,7 +56,7 @@ function displayApps(apps: App[]) {
 						<div class="app-name">${app.name}</div>
 						<div class="app-meta">Granted ${grantedDate} • Last used ${lastUsedDate}</div>
 					</div>
-					<button class="revoke-btn" onclick="revokeApp('${app.clientId}')">revoke</button>
+					<button class="revoke-btn" onclick="revokeApp('${app.clientId}', event)">revoke</button>
 				</div>
 				<div class="scopes">
 					<div class="scope-title">permissions</div>
@@ -69,45 +69,60 @@ function displayApps(apps: App[]) {
 	}).join('');
 }
 
-(window as any).revokeApp = async function(clientId: string) {
-	if (!confirm('Are you sure you want to revoke access for this app? You will need to authorize it again next time.')) {
-		return;
-	}
-
-	const card = document.querySelector(`[data-client-id="${clientId}"]`);
-	const btn = card?.querySelector('.revoke-btn') as HTMLButtonElement;
+(window as any).revokeApp = async function(clientId: string, event?: Event) {
+	const btn = event?.target as HTMLButtonElement | undefined;
 	
-	if (btn) {
+	// Double-click confirmation pattern
+	if (btn?.dataset.confirmState === 'pending') {
+		// Second click - execute revoke
+		delete btn.dataset.confirmState;
 		btn.disabled = true;
 		btn.textContent = 'revoking...';
-	}
+		
+		const card = document.querySelector(`[data-client-id="${clientId}"]`);
 
-	try {
-		const response = await fetch(`/api/apps/${encodeURIComponent(clientId)}`, {
-			method: 'DELETE',
-			headers: {
-				'Authorization': `Bearer ${token}`,
-			},
-		});
+		try {
+			const response = await fetch(`/api/apps/${encodeURIComponent(clientId)}`, {
+				method: 'DELETE',
+				headers: {
+					'Authorization': `Bearer ${token}`,
+				},
+			});
 
-		if (!response.ok) {
-			throw new Error('Failed to revoke app');
+			if (!response.ok) {
+				throw new Error('Failed to revoke app');
+			}
+
+			// Remove from UI
+			card?.remove();
+
+			// Check if list is now empty
+			const remaining = document.querySelectorAll('.app-card');
+			if (remaining.length === 0) {
+				appsList.innerHTML = '<div class="empty">No authorized apps yet. Apps will appear here after you grant them access.</div>';
+			}
+		} catch (error) {
+			console.error('Failed to revoke app:', error);
+			alert('Failed to revoke app access. Please try again.');
+			if (btn) {
+				btn.disabled = false;
+				btn.textContent = 'revoke';
+			}
 		}
-
-		// Remove from UI
-		card?.remove();
-
-		// Check if list is now empty
-		const remaining = document.querySelectorAll('.app-card');
-		if (remaining.length === 0) {
-			appsList.innerHTML = '<div class="empty">No authorized apps yet. Apps will appear here after you grant them access.</div>';
-		}
-	} catch (error) {
-		console.error('Failed to revoke app:', error);
-		alert('Failed to revoke app access. Please try again.');
+	} else {
+		// First click - set pending state
 		if (btn) {
-			btn.disabled = false;
-			btn.textContent = 'revoke';
+			const originalText = btn.textContent;
+			btn.dataset.confirmState = 'pending';
+			btn.textContent = 'you sure?';
+			
+			// Reset after 3 seconds if not confirmed
+			setTimeout(() => {
+				if (btn.dataset.confirmState === 'pending') {
+					delete btn.dataset.confirmState;
+					btn.textContent = originalText;
+				}
+			}, 3000);
 		}
 	}
 };

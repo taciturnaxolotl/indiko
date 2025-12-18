@@ -410,6 +410,34 @@ export function disableUser(req: Request, userId: string): Response {
 	return Response.json({ success: true });
 }
 
+export function enableUser(req: Request, userId: string): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	if (!user.is_admin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	const targetUserId = Number.parseInt(userId, 10);
+	if (Number.isNaN(targetUserId)) {
+		return Response.json({ error: "Invalid user ID" }, { status: 400 });
+	}
+
+	const targetUser = db
+		.query("SELECT id, username FROM users WHERE id = ?")
+		.get(targetUserId) as { id: number; username: string } | undefined;
+
+	if (!targetUser) {
+		return Response.json({ error: "User not found" }, { status: 404 });
+	}
+
+	db.query("UPDATE users SET status = 'active' WHERE id = ?").run(targetUserId);
+
+	return Response.json({ success: true });
+}
+
 export function deleteUser(req: Request, userId: string): Response {
 	const user = getSessionUser(req);
 	if (user instanceof Response) {

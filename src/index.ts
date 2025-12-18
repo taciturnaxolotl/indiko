@@ -26,6 +26,7 @@ import {
 	getAppDetails,
 	revokeAppForUser,
 	disableUser,
+	enableUser,
 	deleteUser,
 } from "./routes/api";
 import {
@@ -116,6 +117,14 @@ const server = Bun.serve({
 			}
 			return new Response("Method not allowed", { status: 405 });
 		},
+	"/api/admin/users/:id/enable": (req: Request) => {
+		if (req.method === "POST") {
+			const url = new URL(req.url);
+			const userId = url.pathname.split("/")[4];
+			return enableUser(req, userId);
+		}
+		return new Response("Method not allowed", { status: 405 });
+	},
 		"/api/admin/users/:id/delete": (req: Request) => {
 			if (req.method === "DELETE") {
 				const url = new URL(req.url);

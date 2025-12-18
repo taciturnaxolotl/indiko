@@ -20,59 +20,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css">
   <style>
-    :root {
-      --mahogany: #26242b;
-      --lavender: #d9d0de;
-      --old-rose: #bc8da0;
-      --rosewood: #a04668;
-      --berry-crush: #ab4967;
-    }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: "Space Grotesk", sans-serif;
-      background: var(--mahogany);
-      color: var(--lavender);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2.5rem 1.25rem;
-    }
-
-    header {
-      width: 100%;
-      max-width: 56.25rem;
-      margin-bottom: 2rem;
-    }
-
+    /* Apps-specific styles */
     h1 {
-      font-size: 2rem;
-      font-weight: 700;
-      background: linear-gradient(135deg, var(--old-rose), var(--berry-crush), var(--rosewood));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      letter-spacing: -0.125rem;
       margin-bottom: 0.5rem;
-    }
-
-    .subtitle {
-      color: var(--old-rose);
-      font-size: 1rem;
-      font-weight: 300;
-    }
-
-    main {
-      flex: 1;
-      width: 100%;
-      max-width: 56.25rem;
     }
 
     .apps-list {
@@ -147,41 +99,22 @@
       letter-spacing: 0.05rem;
       cursor: pointer;
       transition: all 0.2s;
+      box-shadow: none;
+    }
+
+    .revoke-btn::before {
+      display: none;
     }
 
     .revoke-btn:hover:not(:disabled) {
       background: var(--rosewood);
       color: var(--lavender);
+      transform: none;
     }
 
     .revoke-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
-    }
-
-    .loading, .error, .empty {
-      text-align: center;
-      padding: 2rem;
-      color: var(--old-rose);
-    }
-
-    .error {
-      color: var(--rosewood);
-    }
-
-    .back-link {
-      text-align: center;
-      margin-top: 2rem;
-      font-size: 0.875rem;
-    }
-
-    .back-link a {
-      color: var(--berry-crush);
-      text-decoration: none;
-    }
-
-    .back-link a:hover {
-      text-decoration: underline;
     }
   </style>
 </head>

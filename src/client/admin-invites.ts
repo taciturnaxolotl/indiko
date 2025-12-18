@@ -313,16 +313,16 @@ async function loadInvites() {
 						<div class="invite-url">${invite.inviteUrl}</div>
 					</div>
 					<div class="invite-actions-btns">
-						<button class="copy-btn" data-invite-id="${invite.id}" data-invite-url="${invite.inviteUrl}" ${isActive ? '' : 'disabled'}>copy link</button>
-						<button class="edit-btn" onclick="editInvite(${invite.id})" ${isActive ? '' : 'disabled'}>edit</button>
-						<button class="delete-btn" onclick="deleteInvite(${invite.id})">delete</button>
+						<button class="btn-copy" data-invite-id="${invite.id}" data-invite-url="${invite.inviteUrl}" ${isActive ? '' : 'disabled'}>copy link</button>
+						<button class="btn-edit" onclick="editInvite(${invite.id})" ${isActive ? '' : 'disabled'}>edit</button>
+						<button class="btn-delete" onclick="deleteInvite(${invite.id}, event)">delete</button>
 					</div>
 				</div>
 			`;
 		}).join('');
 
 		// Add copy button handlers
-		const copyButtons = invitesList.querySelectorAll('.copy-btn');
+		const copyButtons = invitesList.querySelectorAll('.btn-copy');
 		copyButtons.forEach((btn) => {
 			btn.addEventListener('click', async (e) => {
 				const button = e.target as HTMLButtonElement;
@@ -476,26 +476,49 @@ let currentEditInviteId: number | null = null;
 	}
 };
 
-(window as any).deleteInvite = async (inviteId: number) => {
-	if (!confirm('Are you sure you want to delete this invite? This action cannot be undone.')) {
-		return;
-	}
+(window as any).deleteInvite = async (inviteId: number, event?: Event) => {
+	const btn = event?.target as HTMLButtonElement | undefined;
+	
+	// Double-click confirmation pattern
+	if (btn?.dataset.confirmState === 'pending') {
+		// Second click - execute delete
+		delete btn.dataset.confirmState;
+		btn.textContent = 'deleting...';
+		btn.disabled = true;
+		
+		try {
+			const response = await fetch(`/api/invites/${inviteId}`, {
+				method: 'DELETE',
+				headers: {
+					'Authorization': `Bearer ${token}`,
+				},
+			});
 
-	try {
-		const response = await fetch(`/api/invites/${inviteId}`, {
-			method: 'DELETE',
-			headers: {
-				'Authorization': `Bearer ${token}`,
-			},
-		});
+			if (!response.ok) {
+				throw new Error('Failed to delete invite');
+			}
 
-		if (!response.ok) {
-			throw new Error('Failed to delete invite');
+			await loadInvites();
+		} catch (error) {
+			console.error('Failed to delete invite:', error);
+			alert('Failed to delete invite');
+			btn.textContent = 'delete';
+			btn.disabled = false;
 		}
-
-		await loadInvites();
-	} catch (error) {
-		console.error('Failed to delete invite:', error);
-		alert('Failed to delete invite');
+	} else {
+		// First click - set pending state
+		if (btn) {
+			const originalText = btn.textContent;
+			btn.dataset.confirmState = 'pending';
+			btn.textContent = 'you sure?';
+			
+			// Reset after 3 seconds if not confirmed
+			setTimeout(() => {
+				if (btn.dataset.confirmState === 'pending') {
+					delete btn.dataset.confirmState;
+					btn.textContent = originalText;
+				}
+			}, 3000);
+		}
 	}
 };

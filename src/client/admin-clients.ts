@@ -158,7 +158,7 @@ function displayClients(clients: Client[]) {
 					<div class="client-actions" style="display: flex; gap: 0.5rem; align-items: center;">
 						${client.isPreregistered ? `
 							<button class="btn-edit" onclick="event.stopPropagation(); editClient('${client.clientId}')">edit</button>
-							<button class="btn-delete" onclick="event.stopPropagation(); deleteClient('${client.clientId}')">delete</button>
+							<button class="btn-delete" onclick="event.stopPropagation(); deleteClient('${client.clientId}', event)">delete</button>
 						` : ''}
 						<span class="expand-indicator">details <span class="arrow">▼</span></span>
 					</div>
@@ -332,27 +332,50 @@ function displayClients(clients: Client[]) {
 	}
 };
 
-(window as any).deleteClient = async function(clientId: string) {
-	if (!confirm('Are you sure you want to delete this client? This will revoke access for all users and cannot be undone.')) {
-		return;
-	}
+(window as any).deleteClient = async function(clientId: string, event?: Event) {
+	const btn = event?.target as HTMLButtonElement | undefined;
+	
+	// Double-click confirmation pattern
+	if (btn?.dataset.confirmState === 'pending') {
+		// Second click - execute delete
+		delete btn.dataset.confirmState;
+		btn.disabled = true;
+		btn.textContent = 'deleting...';
+		
+		try {
+			const response = await fetch(`/api/admin/clients/${encodeURIComponent(clientId)}`, {
+				method: 'DELETE',
+				headers: {
+					'Authorization': `Bearer ${token}`,
+				},
+			});
 
-	try {
-		const response = await fetch(`/api/admin/clients/${encodeURIComponent(clientId)}`, {
-			method: 'DELETE',
-			headers: {
-				'Authorization': `Bearer ${token}`,
-			},
-		});
+			if (!response.ok) {
+				throw new Error('Failed to delete client');
+			}
 
-		if (!response.ok) {
-			throw new Error('Failed to delete client');
+			await loadClients();
+		} catch (error) {
+			console.error('Failed to delete client:', error);
+			showToast('Failed to delete client. Please try again.', 'error');
+			btn.disabled = false;
+			btn.textContent = 'delete';
 		}
-
-		await loadClients();
-	} catch (error) {
-		console.error('Failed to delete client:', error);
-		showToast('Failed to delete client. Please try again.', 'error');
+	} else {
+		// First click - set pending state
+		if (btn) {
+			const originalText = btn.textContent;
+			btn.dataset.confirmState = 'pending';
+			btn.textContent = 'you sure?';
+			
+			// Reset after 3 seconds if not confirmed
+			setTimeout(() => {
+				if (btn.dataset.confirmState === 'pending') {
+					delete btn.dataset.confirmState;
+					btn.textContent = originalText;
+				}
+			}, 3000);
+		}
 	}
 };
 
