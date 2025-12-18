@@ -129,6 +129,74 @@ Now you can sign in to IndieAuth-compatible sites using `https://your-domain.com
 - `PUT /api/admin/clients/:clientId` - Update client
 - `DELETE /api/admin/clients/:clientId` - Delete client
 
+## Production Deployment
+
+### Reverse Proxy Configuration
+
+Indiko should be deployed behind a reverse proxy (nginx, Caddy, Traefik) for production use. The proxy should add security headers.
+
+#### nginx Example
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name auth.example.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    # Security headers
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    
+    # Content Security Policy
+    add_header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';" always;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+#### Caddy Example
+
+```caddy
+auth.example.com {
+    reverse_proxy localhost:3000
+
+    header {
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
+    }
+}
+```
+
+### Security Headers Explained
+
+- **X-Frame-Options**: Prevents clickjacking attacks
+- **X-Content-Type-Options**: Prevents MIME-sniffing
+- **X-XSS-Protection**: Enables browser XSS filter
+- **Referrer-Policy**: Controls referrer information
+- **Permissions-Policy**: Restricts browser features
+- **Strict-Transport-Security**: Enforces HTTPS
+- **Content-Security-Policy**: Prevents XSS and data injection attacks
+
+> [!NOTE]
+> The CSP allows Google Fonts and user-provided profile images (`img-src https:`). Adjust based on your security requirements.
+
 ## Development
 
 ```bash
