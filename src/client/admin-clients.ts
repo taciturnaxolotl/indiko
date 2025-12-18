@@ -213,7 +213,7 @@ function displayClients(clients: Client[]) {
 					<div class="detail-title">client secret</div>
 					<div class="secret-section">
 						<input type="password" value="••••••••••••••••••••••••" readonly style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--old-rose); color: var(--lavender); padding: 0.5rem; font-family: monospace; width: 100%; margin-bottom: 0.5rem;" id="secret-${encodeURIComponent(clientId)}" />
-						<button class="btn-edit" onclick="event.stopPropagation(); regenerateSecret('${clientId}')">regenerate secret</button>
+						<button class="btn-edit" onclick="event.stopPropagation(); regenerateSecret('${clientId}', event)">regenerate secret</button>
 					</div>
 				</div>
 			` : ''}
@@ -502,36 +502,64 @@ clientForm.addEventListener('submit', async (e) => {
 	}
 });
 
-(window as any).regenerateSecret = async function(clientId: string) {
-	if (!confirm('Are you sure you want to regenerate the client secret? This will invalidate the old secret and any apps using it will need to be updated.')) {
-		return;
-	}
-
-	try {
-		const response = await fetch(`/api/admin/clients/${encodeURIComponent(clientId)}/secret`, {
-			method: 'POST',
-			headers: {
-				'Authorization': `Bearer ${token}`,
-			},
-		});
-
-		if (!response.ok) {
-			throw new Error('Failed to regenerate secret');
-		}
-
-		const data = await response.json();
+(window as any).regenerateSecret = async function(clientId: string, event?: Event) {
+	const btn = event?.target as HTMLButtonElement | undefined;
+	
+	// Double-click confirmation pattern (same as delete)
+	if (btn?.dataset.confirmState === 'pending') {
+		// Second click - execute regenerate
+		delete btn.dataset.confirmState;
+		btn.disabled = true;
+		btn.textContent = 'regenerating...';
 		
-		// Show the secret in modal
-		const secretModal = document.getElementById('secretModal') as HTMLElement;
-		const generatedSecret = document.getElementById('generatedSecret') as HTMLElement;
-		
-		if (generatedSecret && secretModal) {
-			generatedSecret.textContent = data.clientSecret;
-			secretModal.classList.add('active');
+		try {
+			const response = await fetch(`/api/admin/clients/${encodeURIComponent(clientId)}/secret`, {
+				method: 'POST',
+				headers: {
+					'Authorization': `Bearer ${token}`,
+				},
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to regenerate secret');
+			}
+
+			const data = await response.json();
+			
+			// Show the secret in modal
+			const secretModal = document.getElementById('secretModal') as HTMLElement;
+			const generatedClientId = document.getElementById('generatedClientId') as HTMLElement;
+			const generatedSecret = document.getElementById('generatedSecret') as HTMLElement;
+			
+			if (generatedClientId && generatedSecret && secretModal) {
+				generatedClientId.textContent = clientId;
+				generatedSecret.textContent = data.clientSecret;
+				secretModal.classList.add('active');
+			}
+			
+			btn.disabled = false;
+			btn.textContent = 'regenerate secret';
+		} catch (error) {
+			console.error('Failed to regenerate secret:', error);
+			showToast('Failed to regenerate client secret. Please try again.', 'error');
+			btn.disabled = false;
+			btn.textContent = 'regenerate secret';
 		}
-	} catch (error) {
-		console.error('Failed to regenerate secret:', error);
-		showToast('Failed to regenerate client secret. Please try again.', 'error');
+	} else {
+		// First click - set pending state
+		if (btn) {
+			const originalText = btn.textContent;
+			btn.dataset.confirmState = 'pending';
+			btn.textContent = 'you sure?';
+			
+			// Reset after 3 seconds if not confirmed
+			setTimeout(() => {
+				if (btn.dataset.confirmState === 'pending') {
+					delete btn.dataset.confirmState;
+					btn.textContent = originalText;
+				}
+			}, 3000);
+		}
 	}
 };
 
