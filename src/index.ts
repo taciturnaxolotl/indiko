@@ -1,54 +1,54 @@
 import { env } from "bun";
 import { db } from "./db";
-import indexHTML from "./html/index.html";
 import adminHTML from "./html/admin.html";
-import adminInvitesHTML from "./html/admin-invites.html";
 import adminClientsHTML from "./html/admin-clients.html";
-import loginHTML from "./html/login.html";
-import docsHTML from "./html/docs.html";
+import adminInvitesHTML from "./html/admin-invites.html";
 import appsHTML from "./html/apps.html";
+import docsHTML from "./html/docs.html";
+import indexHTML from "./html/index.html";
+import loginHTML from "./html/login.html";
 import {
-	canRegister,
-	registerOptions,
-	registerVerify,
-	loginOptions,
-	loginVerify,
-} from "./routes/auth";
-import {
-	hello,
-	listUsers,
-	getProfile,
-	updateProfile,
-	getAuthorizedApps,
-	revokeApp,
-	listAllApps,
-	getAppDetails,
-	revokeAppForUser,
+	deleteSelfAccount,
+	deleteUser,
 	disableUser,
 	enableUser,
-	deleteUser,
-	deleteSelfAccount,
+	getAppDetails,
+	getAuthorizedApps,
+	getProfile,
+	hello,
+	listAllApps,
+	listUsers,
+	revokeApp,
+	revokeAppForUser,
+	updateProfile,
 } from "./routes/api";
+import {
+	canRegister,
+	loginOptions,
+	loginVerify,
+	registerOptions,
+	registerVerify,
+} from "./routes/auth";
+import {
+	createClient,
+	deleteClient,
+	getClient,
+	listClients,
+	regenerateClientSecret,
+	setUserRole,
+	updateClient,
+} from "./routes/clients";
 import {
 	authorizeGet,
 	authorizePost,
-	token,
-	logout,
-	userProfile,
 	createInvite,
-	listInvites,
-	updateInvite,
 	deleteInvite,
+	listInvites,
+	logout,
+	token,
+	updateInvite,
+	userProfile,
 } from "./routes/indieauth";
-import {
-	listClients,
-	createClient,
-	getClient,
-	updateClient,
-	deleteClient,
-	setUserRole,
-	regenerateClientSecret,
-} from "./routes/clients";
 
 (() => {
 	const required = ["ORIGIN", "RP_ID"];
@@ -63,8 +63,8 @@ import {
 	}
 
 	// Validate ORIGIN is HTTPS in production
-	const origin = process.env.ORIGIN!;
-	const rpId = process.env.RP_ID!;
+	const origin = process.env.ORIGIN as string;
+	const rpId = process.env.RP_ID as string;
 	const nodeEnv = process.env.NODE_ENV || "development";
 
 	if (nodeEnv === "production" && !origin.startsWith("https://")) {
@@ -94,16 +94,20 @@ import {
 const server = Bun.serve({
 	port: env.PORT ? Number.parseInt(env.PORT, 10) : 3000,
 	routes: {
+		"/favicon.svg": Bun.file("./public/favicon.svg"),
 		"/": indexHTML,
 		"/health": () => {
 			try {
 				// Verify database is accessible
 				db.query("SELECT 1").get();
-				return Response.json({ status: "ok", timestamp: new Date().toISOString() });
+				return Response.json({
+					status: "ok",
+					timestamp: new Date().toISOString(),
+				});
 			} catch {
 				return Response.json(
 					{ status: "error", error: "Database unavailable" },
-					{ status: 503 }
+					{ status: 503 },
 				);
 			}
 		},
@@ -193,14 +197,14 @@ Acknowledgments: https://github.com/taciturnaxolotl/indiko/blob/main/SECURITY.md
 			}
 			return new Response("Method not allowed", { status: 405 });
 		},
-	"/api/admin/users/:id/enable": (req: Request) => {
-		if (req.method === "POST") {
-			const url = new URL(req.url);
-			const userId = url.pathname.split("/")[4];
-			return enableUser(req, userId);
-		}
-		return new Response("Method not allowed", { status: 405 });
-	},
+		"/api/admin/users/:id/enable": (req: Request) => {
+			if (req.method === "POST") {
+				const url = new URL(req.url);
+				const userId = url.pathname.split("/")[4];
+				return enableUser(req, userId);
+			}
+			return new Response("Method not allowed", { status: 405 });
+		},
 		"/api/admin/users/:id/delete": (req: Request) => {
 			if (req.method === "DELETE") {
 				const url = new URL(req.url);
@@ -247,7 +251,8 @@ Acknowledgments: https://github.com/taciturnaxolotl/indiko/blob/main/SECURITY.md
 		"/api/admin/clients/:clientId": (req) => {
 			if (req.method === "GET") return getClient(req, req.params.clientId);
 			if (req.method === "PUT") return updateClient(req, req.params.clientId);
-			if (req.method === "DELETE") return deleteClient(req, req.params.clientId);
+			if (req.method === "DELETE")
+				return deleteClient(req, req.params.clientId);
 			return new Response("Method not allowed", { status: 405 });
 		},
 		"/api/admin/clients/:clientId/users/:username/role": (req) => {
@@ -269,15 +274,26 @@ console.log("[Indiko] running on", env.ORIGIN);
 // Cleanup job: runs every hour to remove expired data
 const cleanupJob = setInterval(() => {
 	const now = Math.floor(Date.now() / 1000);
-	
-	const sessionsDeleted = db.query("DELETE FROM sessions WHERE expires_at < ?").run(now);
-	const challengesDeleted = db.query("DELETE FROM challenges WHERE expires_at < ?").run(now);
-	const authcodesDeleted = db.query("DELETE FROM authcodes WHERE expires_at < ?").run(now);
-	
-	const total = sessionsDeleted.changes + challengesDeleted.changes + authcodesDeleted.changes;
-	
+
+	const sessionsDeleted = db
+		.query("DELETE FROM sessions WHERE expires_at < ?")
+		.run(now);
+	const challengesDeleted = db
+		.query("DELETE FROM challenges WHERE expires_at < ?")
+		.run(now);
+	const authcodesDeleted = db
+		.query("DELETE FROM authcodes WHERE expires_at < ?")
+		.run(now);
+
+	const total =
+		sessionsDeleted.changes +
+		challengesDeleted.changes +
+		authcodesDeleted.changes;
+
 	if (total > 0) {
-		console.log(`[Cleanup] Removed ${total} expired records (sessions: ${sessionsDeleted.changes}, challenges: ${challengesDeleted.changes}, authcodes: ${authcodesDeleted.changes})`);
+		console.log(
+			`[Cleanup] Removed ${total} expired records (sessions: ${sessionsDeleted.changes}, challenges: ${challengesDeleted.changes}, authcodes: ${authcodesDeleted.changes})`,
+		);
 	}
 }, 3600000); // 1 hour in milliseconds
 
