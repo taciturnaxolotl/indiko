@@ -182,6 +182,40 @@
 			color: var(--old-rose);
 		}
 
+		/* HTML/CSS syntax highlighting */
+		.html-tag {
+			color: var(--berry-crush);
+		}
+
+		.html-attr {
+			color: var(--old-rose);
+		}
+
+		.html-string {
+			color: #a5d6a7;
+		}
+
+		.html-comment {
+			color: #7a7a7a;
+			font-style: italic;
+		}
+
+		.css-selector {
+			color: var(--berry-crush);
+		}
+
+		.css-property {
+			color: var(--old-rose);
+		}
+
+		.css-value {
+			color: #a5d6a7;
+		}
+
+		.css-unit {
+			color: #81c784;
+		}
+
 		.token.property,
 		.token.tag,
 		.token.boolean,
@@ -467,6 +501,66 @@
 			border-color: var(--rosewood);
 			background: rgba(160, 70, 104, 0.1);
 		}
+
+		/* Demo button styles */
+		.demo-button-wrapper {
+			background: rgba(12, 23, 19, 0.6);
+			padding: 2rem;
+			margin: 1.5rem 0;
+			display: flex;
+			justify-content: center;
+		}
+
+		.indiko-demo-button {
+			position: relative;
+			display: inline-block;
+			padding: 1rem 2rem;
+			background: var(--berry-crush);
+			color: var(--lavender);
+			border: 4px solid var(--mahogany);
+			font-size: 1rem;
+			font-weight: 700;
+			text-decoration: none;
+			font-family: "Space Grotesk", sans-serif;
+			text-transform: uppercase;
+			letter-spacing: 0.1rem;
+			box-shadow: 6px 6px 0 var(--mahogany);
+			transition: all 0.15s ease;
+		}
+
+		.indiko-demo-button::before {
+			content: '';
+			position: absolute;
+			top: -4px;
+			left: -4px;
+			right: -4px;
+			bottom: -4px;
+			background: transparent;
+			border: 4px solid var(--rosewood);
+			pointer-events: none;
+			transition: all 0.15s ease;
+		}
+
+		.indiko-demo-button:hover {
+			transform: translate(3px, 3px);
+			box-shadow: 3px 3px 0 var(--mahogany);
+		}
+
+		.indiko-demo-button:hover::before {
+			top: -7px;
+			left: -7px;
+			right: -7px;
+			bottom: -7px;
+		}
+
+		.indiko-demo-button:active {
+			transform: translate(6px, 6px);
+			box-shadow: 0 0 0 var(--mahogany);
+		}
+
+		.indiko-demo-button:hover {
+			text-decoration: none;
+		}
 	</style>
 </head>
 
@@ -552,84 +646,12 @@
 				Copy this themed button for your app's login page. It matches Indiko's visual style:
 			</p>
 
-			<div style="background: rgba(12, 23, 19, 0.6); padding: 2rem; margin: 1.5rem 0; display: flex; justify-content: center;">
-				<a href="#" id="demoButton" style="
-					position: relative;
-					display: inline-block;
-					padding: 1rem 2rem;
-					background: #ab4967;
-					color: #d9d0de;
-					border: 4px solid #26242b;
-					font-size: 1rem;
-					font-weight: 700;
-					text-decoration: none;
-					font-family: 'Space Grotesk', sans-serif;
-					text-transform: uppercase;
-					letter-spacing: 0.1rem;
-					box-shadow: 6px 6px 0 #26242b;
-					transition: all 0.15s ease;
-				">Sign in with Indiko</a>
+			<div class="demo-button-wrapper">
+				<a href="#" id="demoButton" class="indiko-demo-button">Sign in with Indiko</a>
 			</div>
 
 			<h3>HTML + CSS</h3>
-			<pre><code>&lt;!-- Add Google Fonts to your &lt;head&gt; --&gt;
-&lt;link rel="preconnect" href="https://fonts.googleapis.com"&gt;
-&lt;link rel="preconnect" href="https://fonts.gstatic.com" crossorigin&gt;
-&lt;link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;display=swap" rel="stylesheet"&gt;
-
-&lt;!-- Button HTML --&gt;
-&lt;a href="YOUR_OAUTH_URL_HERE" class="indiko-button"&gt;
-  Sign in with Indiko
-&lt;/a&gt;
-
-&lt;style&gt;
-  .indiko-button {
-    position: relative;
-    display: inline-block;
-    padding: 1rem 2rem;
-    background: #ab4967;
-    color: #d9d0de;
-    border: 4px solid #26242b;
-    font-size: 1rem;
-    font-weight: 700;
-    text-decoration: none;
-    font-family: 'Space Grotesk', sans-serif;
-    text-transform: uppercase;
-    letter-spacing: 0.1rem;
-    box-shadow: 6px 6px 0 #26242b;
-    transition: all 0.15s ease;
-  }
-
-  .indiko-button::before {
-    content: '';
-    position: absolute;
-    top: -4px;
-    left: -4px;
-    right: -4px;
-    bottom: -4px;
-    background: transparent;
-    border: 4px solid #a04668;
-    pointer-events: none;
-    transition: all 0.15s ease;
-  }
-
-  .indiko-button:hover {
-    transform: translate(3px, 3px);
-    box-shadow: 3px 3px 0 #26242b;
-  }
-
-  .indiko-button:hover::before {
-    top: -7px;
-    left: -7px;
-    right: -7px;
-    bottom: -7px;
-  }
-
-  .indiko-button:active {
-    transform: translate(6px, 6px);
-    box-shadow: 0 0 0 #26242b;
-  }
-&lt;/style&gt;</code></pre>
+			<pre><code id="buttonCode"></code></pre>
 
 			<button id="copyButtonCode" class="copy-btn">copy button code</button>
 

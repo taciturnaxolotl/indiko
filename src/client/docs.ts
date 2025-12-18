@@ -10,6 +10,59 @@ function highlightJSON(json: string): string {
 		.replace(/: (true|false|null)/g, ': <span class="json-boolean">$1</span>');
 }
 
+// HTML/CSS syntax highlighter
+function highlightHTMLCSS(code: string): string {
+	// First escape HTML entities
+	let highlighted = code
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
+	
+	// HTML comments
+	highlighted = highlighted.replace(/&lt;!--(.*?)--&gt;/g, '<span class="html-comment">&lt;!--$1--&gt;</span>');
+	
+	// Split by <style> tags to handle CSS separately
+	const parts = highlighted.split(/(&lt;style&gt;[\s\S]*?&lt;\/style&gt;)/g);
+	
+	highlighted = parts.map((part, index) => {
+		// Even indices are HTML, odd indices are CSS blocks
+		if (index % 2 === 0) {
+			// Process HTML
+			return part.replace(/&lt;(\/?)([\w-]+)([\s\S]*?)&gt;/g, (_match, slash, tag, attrs) => {
+				let result = `&lt;${slash}<span class="html-tag">${tag}</span>`;
+				
+				if (attrs) {
+					attrs = attrs.replace(/([\w-]+)="([^"]*)"/g, '<span class="html-attr">$1</span>="<span class="html-string">$2</span>"');
+					attrs = attrs.replace(/(?<=\s)([\w-]+)(?=\s|$)/g, '<span class="html-attr">$1</span>');
+				}
+				
+				result += attrs + '&gt;';
+				return result;
+			});
+		} else {
+			// Process CSS (inside <style> tags)
+			return part
+				.replace(/&lt;style&gt;/g, '&lt;<span class="html-tag">style</span>&gt;')
+				.replace(/&lt;\/style&gt;/g, '&lt;/<span class="html-tag">style</span>&gt;')
+				// CSS selectors (anything before { including pseudo-selectors)
+				.replace(/^(\s*)([\w.-]+(?::+[\w-]+(?:\([^)]*\))?)*)\s*\{/gm, '$1<span class="css-selector">$2</span> {')
+				// CSS properties (word followed by colon, but not :: for pseudo-elements)
+				.replace(/^(\s+)([\w-]+):\s+/gm, '$1<span class="css-property">$2</span>: ')
+				// CSS values (everything between property: and ;)
+				.replace(/(<span class="css-property">[\w-]+<\/span>:\s+)([^;]+);/g, (_match, prop, value) => {
+					const highlightedValue = value
+						.replace(/(#[0-9a-fA-F]{3,6})/g, '<span class="css-value">$1</span>')
+						.replace(/([\d.]+(?:px|rem|em|s|%))/g, '<span class="css-value">$1</span>')
+						.replace(/('.*?')/g, '<span class="css-value">$1</span>')
+						.replace(/([\w-]+\([^)]*\))/g, '<span class="css-value">$1</span>');
+					return `${prop}${highlightedValue};`;
+				});
+		}
+	}).join('');
+
+	return highlighted;
+}
+
 // PKCE helper functions
 function generateRandomString(length: number): string {
 	const array = new Uint8Array(length);
@@ -43,6 +96,72 @@ const resultDiv = document.getElementById('result') as HTMLElement;
 const copyMarkdownBtn = document.getElementById('copyMarkdownBtn') as HTMLButtonElement;
 const copyButtonCodeBtn = document.getElementById('copyButtonCode') as HTMLButtonElement;
 const demoButton = document.getElementById('demoButton') as HTMLAnchorElement;
+const buttonCodeEl = document.getElementById('buttonCode') as HTMLElement;
+
+// Populate and highlight button code
+const buttonCodeRaw = `<!-- Add Google Fonts to your <head> -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+
+<!-- Button HTML -->
+<a href="https://your-indiko-server.com/auth/authorize?response_type=code&client_id=YOUR_CLIENT_ID&redirect_uri=YOUR_REDIRECT_URI&state=RANDOM_STATE&code_challenge=CODE_CHALLENGE&code_challenge_method=S256&scope=profile%20email" class="indiko-button">
+  Sign in with Indiko
+</a>
+
+<style>
+  .indiko-button {
+    position: relative;
+    display: inline-block;
+    padding: 1rem 2rem;
+    background: #ab4967;
+    color: #d9d0de;
+    border: 4px solid #26242b;
+    font-size: 1rem;
+    font-weight: 700;
+    text-decoration: none;
+    font-family: 'Space Grotesk', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.1rem;
+    box-shadow: 6px 6px 0 #26242b;
+    transition: all 0.15s ease;
+  }
+
+  .indiko-button::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    background: transparent;
+    border: 4px solid #a04668;
+    pointer-events: none;
+    transition: all 0.15s ease;
+  }
+
+  .indiko-button:hover {
+    transform: translate(3px, 3px);
+    box-shadow: 3px 3px 0 #26242b;
+  }
+
+  .indiko-button:hover::before {
+    top: -7px;
+    left: -7px;
+    right: -7px;
+    bottom: -7px;
+  }
+
+  .indiko-button:active {
+    transform: translate(6px, 6px);
+    box-shadow: 0 0 0 #26242b;
+  }
+</style>`;
+
+if (buttonCodeEl) {
+	const highlighted = highlightHTMLCSS(buttonCodeRaw);
+	buttonCodeEl.innerHTML = highlighted;
+}
 
 // Auto-fill redirect URI with current page URL
 const currentUrl = window.location.origin + window.location.pathname;
@@ -393,67 +512,8 @@ copyMarkdownBtn.addEventListener('click', async () => {
 
 // Copy button code to clipboard
 copyButtonCodeBtn.addEventListener('click', async () => {
-	const buttonCode = `<!-- Add Google Fonts to your <head> -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
-
-<!-- Button HTML -->
-<a href="YOUR_OAUTH_URL_HERE" class="indiko-button">
-  Sign in with Indiko
-</a>
-
-<style>
-  .indiko-button {
-    position: relative;
-    display: inline-block;
-    padding: 1rem 2rem;
-    background: #ab4967;
-    color: #d9d0de;
-    border: 4px solid #26242b;
-    font-size: 1rem;
-    font-weight: 700;
-    text-decoration: none;
-    font-family: 'Space Grotesk', sans-serif;
-    text-transform: uppercase;
-    letter-spacing: 0.1rem;
-    box-shadow: 6px 6px 0 #26242b;
-    transition: all 0.15s ease;
-  }
-
-  .indiko-button::before {
-    content: '';
-    position: absolute;
-    top: -4px;
-    left: -4px;
-    right: -4px;
-    bottom: -4px;
-    background: transparent;
-    border: 4px solid #a04668;
-    pointer-events: none;
-    transition: all 0.15s ease;
-  }
-
-  .indiko-button:hover {
-    transform: translate(3px, 3px);
-    box-shadow: 3px 3px 0 #26242b;
-  }
-
-  .indiko-button:hover::before {
-    top: -7px;
-    left: -7px;
-    right: -7px;
-    bottom: -7px;
-  }
-
-  .indiko-button:active {
-    transform: translate(6px, 6px);
-    box-shadow: 0 0 0 #26242b;
-  }
-</style>`;
-
 	try {
-		await navigator.clipboard.writeText(buttonCode);
+		await navigator.clipboard.writeText(buttonCodeRaw);
 		copyButtonCodeBtn.textContent = 'copied! ✓';
 		setTimeout(() => {
 			copyButtonCodeBtn.textContent = 'copy button code';
