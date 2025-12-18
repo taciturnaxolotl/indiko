@@ -7,12 +7,12 @@
   <title>dashboard • indiko</title>
   <meta name="description" content="Your Indiko dashboard - manage your profile, apps, and passkeys" />
   <link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
-  
+
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Dashboard • Indiko" />
   <meta property="og:description" content="Your Indiko dashboard - manage your profile, apps, and passkeys" />
-  
+
   <!-- Twitter -->
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Dashboard • Indiko" />
@@ -23,13 +23,24 @@
   <link rel="stylesheet" href="../styles.css">
   <style>
     /* Dashboard-specific styles */
-    .profile-preview {
+    .profile-section {
+      background: rgba(188, 141, 160, 0.05);
+      border: 1px solid var(--old-rose);
+      padding: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .section-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--lavender);
+      margin-bottom: 1.5rem;
+    }
+
+    .avatar-upload {
       display: flex;
       align-items: center;
       gap: 1.5rem;
-      background: rgba(188, 141, 160, 0.05);
-      border: 1px solid var(--old-rose);
-      padding: 1.5rem;
       margin-bottom: 2rem;
     }
 
@@ -37,6 +48,13 @@
       width: 80px;
       height: 80px;
       border: 3px solid var(--berry-crush);
+      font-size: 2rem;
+    }
+
+    .avatar-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
     }
 
     .profile-info {
@@ -91,37 +109,17 @@
     input[type="text"],
     input[type="email"],
     input[type="url"] {
-      padding: 0.75rem;
+      margin-bottom: 1.5rem;
     }
 
-    .save-btn {
-      width: 100%;
-      padding: 0.75rem 1rem;
-      background: var(--berry-crush);
-      border: 2px solid var(--rosewood);
-      color: var(--lavender);
-      font-family: "Space Grotesk", sans-serif;
-      font-size: 1rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05rem;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: none;
+    .button-group {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1.5rem;
     }
 
-    .save-btn::before {
-      display: none;
-    }
-
-    .save-btn:hover:not(:disabled) {
-      background: var(--rosewood);
-      transform: none;
-    }
-
-    .save-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+    .button-group button {
+      flex: 1;
     }
 
     .message {
@@ -177,54 +175,54 @@
   </header>
 
   <main>
-    <div class="profile-preview">
-      <div class="profile-avatar" id="profileAvatar">
-        <span id="avatarInitials"></span>
-      </div>
-      <div class="profile-info">
-        <div class="profile-name" id="profileName">Loading...</div>
-        <div class="profile-username" id="profileUsername">@username</div>
-        <div class="profile-links" id="profileLinks">
-          <a href="/u/" id="publicProfileLink">view public profile</a>
-        </div>
+    <div id="message" class="message"></div>
+
+    <div class="profile-section">
+      <h2 class="section-title">recent apps</h2>
+      <div id="recentApps" class="apps-preview">
+        <div class="loading">loading...</div>
       </div>
     </div>
 
-    <div class="dashboard-grid">
-      <div class="card">
-        <h2 class="card-title">profile</h2>
-        <form id="profileForm">
-          <div class="form-group">
-            <label for="name">name</label>
-            <input type="text" id="name" name="name" required />
+    <div class="profile-section">
+      <h2 class="section-title">profile settings</h2>
+
+      <form id="profileForm">
+        <div class="avatar-upload">
+          <div class="profile-avatar" id="avatarPreview">
+            <!-- Avatar will be rendered here -->
           </div>
-
-          <div class="form-group">
-            <label for="email">email (optional)</label>
-            <input type="email" id="email" name="email" />
+          <div class="avatar-controls">
+            <label for="photo">avatar url</label>
+            <input type="url" id="photo" name="photo" placeholder="https://example.com/avatar.jpg" />
+            <small style="color: var(--old-rose); font-size: 0.75rem;">Enter a URL to an image</small>
           </div>
-
-          <div class="form-group">
-            <label for="photo">photo url (optional)</label>
-            <input type="url" id="photo" name="photo" placeholder="https://example.com/photo.jpg" />
-          </div>
-
-          <div class="form-group">
-            <label for="url">website url (optional)</label>
-            <input type="url" id="url" name="url" placeholder="https://example.com" />
-          </div>
-
-          <button type="submit" class="save-btn" id="saveBtn">save profile</button>
-          <div id="message" class="message"></div>
-        </form>
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">recent apps</h2>
-        <div id="recentApps" class="apps-preview">
-          <div class="loading">loading...</div>
         </div>
-      </div>
+
+        <label for="username">username</label>
+        <input type="text" id="username" name="username" required disabled />
+
+        <label for="name">display name</label>
+        <input type="text" id="name" name="name" required />
+
+        <label for="email">email</label>
+        <input type="email" id="email" name="email" />
+
+        <label for="url">website</label>
+        <input type="url" id="url" name="url" placeholder="https://example.com" />
+
+        <button type="submit" id="saveBtn">save changes</button>
+      </form>
+    </div>
+
+    <div class="profile-section" id="dangerZone" style="border-color: var(--rosewood); display: none;">
+      <h2 class="section-title" style="color: var(--rosewood);">danger zone</h2>
+      <p style="color: var(--old-rose); margin-bottom: 1.5rem; line-height: 1.6;">
+        Permanently delete your account and all associated data. This action cannot be undone.
+      </p>
+      <button type="button" id="deleteAccountBtn" style="width: 100%;">
+        delete my account
+      </button>
     </div>
   </main>
 

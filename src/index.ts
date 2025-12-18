@@ -5,7 +5,6 @@ import adminHTML from "./html/admin.html";
 import adminInvitesHTML from "./html/admin-invites.html";
 import adminClientsHTML from "./html/admin-clients.html";
 import loginHTML from "./html/login.html";
-import profileHTML from "./html/profile.html";
 import docsHTML from "./html/docs.html";
 import appsHTML from "./html/apps.html";
 import {
@@ -28,6 +27,7 @@ import {
 	disableUser,
 	enableUser,
 	deleteUser,
+	deleteSelfAccount,
 } from "./routes/api";
 import {
 	authorizeGet,
@@ -100,7 +100,6 @@ const server = Bun.serve({
 		"/admin/apps": () => Response.redirect("/admin/clients", 302),
 		"/admin/clients": adminClientsHTML,
 		"/login": loginHTML,
-		"/profile": profileHTML,
 		"/docs": docsHTML,
 		"/apps": appsHTML,
 		// Well-known endpoints
@@ -145,6 +144,7 @@ Acknowledgments: https://github.com/taciturnaxolotl/indiko/blob/main/SECURITY.md
 		"/api/profile": (req: Request) => {
 			if (req.method === "GET") return getProfile(req);
 			if (req.method === "PUT") return updateProfile(req);
+			if (req.method === "DELETE") return deleteSelfAccount(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
 		"/api/apps": (req: Request) => {

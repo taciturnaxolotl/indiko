@@ -206,13 +206,25 @@ export function getAuthorizedApps(req: Request): Response {
 	}>;
 
 	return Response.json({
-		apps: apps.map((app) => ({
-			clientId: app.client_id,
-			name: app.name || new URL(app.client_id).hostname,
-			scopes: JSON.parse(app.scopes) as string[],
-			grantedAt: app.granted_at,
-			lastUsed: app.last_used,
-		})),
+		apps: apps.map((app) => {
+			let displayName = app.name || app.client_id;
+			// Try to extract hostname if client_id is a URL
+			if (!app.name) {
+				try {
+					displayName = new URL(app.client_id).hostname;
+				} catch {
+					// Not a URL, use client_id as-is
+					displayName = app.client_id;
+				}
+			}
+			return {
+				clientId: app.client_id,
+				name: displayName,
+				scopes: JSON.parse(app.scopes) as string[],
+				grantedAt: app.granted_at,
+				lastUsed: app.last_used,
+			};
+		}),
 	});
 }
 
@@ -468,11 +480,16 @@ export function deleteUser(req: Request, userId: string): Response {
 	}
 
 	const targetUser = db
-		.query("SELECT id FROM users WHERE id = ?")
-		.get(targetUserId) as { id: number } | undefined;
+		.query("SELECT id, is_admin FROM users WHERE id = ?")
+		.get(targetUserId) as { id: number; is_admin: number } | undefined;
 
 	if (!targetUser) {
 		return Response.json({ error: "User not found" }, { status: 404 });
+	}
+
+	// Prevent admins from deleting other admin accounts
+	if (targetUser.is_admin === 1) {
+		return Response.json({ error: "Cannot delete admin accounts" }, { status: 403 });
 	}
 
 	db.query("DELETE FROM sessions WHERE user_id = ?").run(targetUserId);
@@ -480,6 +497,29 @@ export function deleteUser(req: Request, userId: string): Response {
 	db.query("DELETE FROM permissions WHERE user_id = ?").run(targetUserId);
 	db.query("DELETE FROM authcodes WHERE user_id = ?").run(targetUserId);
 	db.query("DELETE FROM users WHERE id = ?").run(targetUserId);
+
+	return Response.json({ success: true });
+}
+
+export function deleteSelfAccount(req: Request): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	// Prevent admins from deleting their own accounts
+	if (user.is_admin) {
+		return Response.json({ 
+			error: "Admin accounts cannot be self-deleted. Contact another admin for account deletion." 
+		}, { status: 403 });
+	}
+
+	// Delete all user data
+	db.query("DELETE FROM sessions WHERE user_id = ?").run(user.userId);
+	db.query("DELETE FROM credentials WHERE user_id = ?").run(user.userId);
+	db.query("DELETE FROM permissions WHERE user_id = ?").run(user.userId);
+	db.query("DELETE FROM authcodes WHERE user_id = ?").run(user.userId);
+	db.query("DELETE FROM users WHERE id = ?").run(user.userId);
 
 	return Response.json({ success: true });
 }

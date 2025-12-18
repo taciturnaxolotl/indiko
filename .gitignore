@@ -5,3 +5,6 @@ dist/
 .env
 bun.lockb
 data/
+*.db
+*.db-shm
+*.db-wal

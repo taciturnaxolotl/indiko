@@ -3,22 +3,21 @@ const footer = document.getElementById('footer') as HTMLElement;
 const welcome = document.getElementById('welcome') as HTMLElement;
 const subtitle = document.getElementById('subtitle') as HTMLElement;
 const recentApps = document.getElementById('recentApps') as HTMLElement;
-const profileForm = document.getElementById('profileForm') as HTMLFormElement;
-const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
-const message = document.getElementById('message') as HTMLDivElement;
-const profileName = document.getElementById('profileName') as HTMLElement;
-const profileUsername = document.getElementById('profileUsername') as HTMLElement;
-const profileAvatar = document.getElementById('profileAvatar') as HTMLElement;
-const avatarInitials = document.getElementById('avatarInitials') as HTMLElement;
-const publicProfileLink = document.getElementById('publicProfileLink') as HTMLAnchorElement;
-const profileLinks = document.getElementById('profileLinks') as HTMLElement;
+const message = document.getElementById('message') as HTMLElement;
 
+// Profile form elements
+const profileForm = document.getElementById('profileForm') as HTMLFormElement;
+const avatarPreview = document.getElementById('avatarPreview') as HTMLElement;
+const usernameInput = document.getElementById('username') as HTMLInputElement;
 const nameInput = document.getElementById('name') as HTMLInputElement;
 const emailInput = document.getElementById('email') as HTMLInputElement;
 const photoInput = document.getElementById('photo') as HTMLInputElement;
 const urlInput = document.getElementById('url') as HTMLInputElement;
+const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
+const deleteAccountBtn = document.getElementById('deleteAccountBtn') as HTMLButtonElement;
+const dangerZone = document.getElementById('dangerZone') as HTMLElement;
 
-let currentUsername = '';
+let isAdmin = false;
 
 if (!token) {
 	window.location.href = '/login';
@@ -38,14 +37,22 @@ interface Profile {
 	email: string | null;
 	photo: string | null;
 	url: string | null;
+	isAdmin?: boolean;
 }
 
-
-
-function showMessage(text: string, type: 'success' | 'error') {
+function showMessage(text: string, type: 'error' | 'success' = 'error') {
 	message.textContent = text;
 	message.className = `message show ${type}`;
 	setTimeout(() => message.classList.remove('show'), 5000);
+}
+
+function updateAvatarPreview(photo: string | null, username: string) {
+	if (photo) {
+		avatarPreview.innerHTML = `<img src="${photo}" alt="${username}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" />`;
+	} else {
+		const initials = username.substring(0, 2).toUpperCase();
+		avatarPreview.textContent = initials;
+	}
 }
 
 // Check auth and display user
@@ -117,116 +124,31 @@ async function loadProfile() {
 		}
 
 		const profile = await response.json() as Profile;
-		currentUsername = profile.username;
+
+		// Track admin status to hide delete button for admins
+		isAdmin = profile.isAdmin || false;
+		if (!isAdmin) {
+			dangerZone.style.display = 'block';
+		}
 
 		// Populate form
-		nameInput.value = profile.name;
+		usernameInput.value = profile.username;
+		nameInput.value = profile.name || '';
 		emailInput.value = profile.email || '';
 		photoInput.value = profile.photo || '';
 		urlInput.value = profile.url || '';
 
-		// Initial preview update
-		updatePreview();
+		updateAvatarPreview(profile.photo, profile.username);
+
+		// Update avatar preview when photo URL changes
+		photoInput.addEventListener('input', () => {
+			updateAvatarPreview(photoInput.value || null, profile.username);
+		});
 	} catch (error) {
 		console.error('Failed to load profile:', error);
-		showMessage('Failed to load profile', 'error');
+		showMessage('Failed to load profile');
 	}
 }
-
-// Handle profile form submission
-profileForm.addEventListener('submit', async (e) => {
-	e.preventDefault();
-
-	const name = nameInput.value.trim();
-	const email = emailInput.value.trim();
-	const photo = photoInput.value.trim();
-	const url = urlInput.value.trim();
-
-	if (!name) {
-		showMessage('Name is required', 'error');
-		return;
-	}
-
-	saveBtn.disabled = true;
-	saveBtn.textContent = 'saving...';
-
-	try {
-		const response = await fetch('/api/profile', {
-			method: 'PUT',
-			headers: {
-				'Authorization': `Bearer ${token}`,
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				name,
-				email: email || null,
-				photo: photo || null,
-				url: url || null,
-			}),
-		});
-
-		if (!response.ok) {
-			throw new Error('Failed to update profile');
-		}
-
-		showMessage('Profile updated successfully!', 'success');
-	} catch (error) {
-		console.error('Failed to update profile:', error);
-		showMessage('Failed to update profile', 'error');
-	} finally {
-		saveBtn.disabled = false;
-		saveBtn.textContent = 'save profile';
-	}
-});
-
-function updatePreview() {
-	const name = nameInput.value.trim() || 'Your Name';
-	const photo = photoInput.value.trim();
-	const email = emailInput.value.trim();
-	const url = urlInput.value.trim();
-
-	// Update name
-	profileName.textContent = name;
-	profileUsername.textContent = `@${currentUsername}`;
-	avatarInitials.textContent = currentUsername.slice(0, 2).toUpperCase();
-	publicProfileLink.href = `/u/${currentUsername}`;
-
-	// Update photo
-	const existingImg = profileAvatar.querySelector('img');
-	if (photo) {
-		if (existingImg) {
-			existingImg.src = photo;
-			existingImg.alt = name;
-		} else {
-			const img = document.createElement('img');
-			img.src = photo;
-			img.alt = name;
-			profileAvatar.insertBefore(img, avatarInitials);
-		}
-		avatarInitials.style.display = 'none';
-	} else {
-		if (existingImg) {
-			existingImg.remove();
-		}
-		avatarInitials.style.display = '';
-	}
-
-	// Update links
-	let links = `<a href="/u/${currentUsername}" id="publicProfileLink">view public profile</a>`;
-	if (email) {
-		links += ` • <a href="mailto:${email}">email</a>`;
-	}
-	if (url) {
-		links += ` • <a href="${url}" target="_blank" rel="noopener noreferrer">website</a>`;
-	}
-	profileLinks.innerHTML = links;
-}
-
-// Live update listeners
-nameInput.addEventListener('input', updatePreview);
-emailInput.addEventListener('input', updatePreview);
-photoInput.addEventListener('input', updatePreview);
-urlInput.addEventListener('input', updatePreview);
 
 async function loadRecentApps() {
 	try {
@@ -270,5 +192,89 @@ async function loadRecentApps() {
 		recentApps.innerHTML = '<div class="empty">Failed to load apps</div>';
 	}
 }
+
+// Profile form submission
+profileForm.addEventListener('submit', async (e) => {
+	e.preventDefault();
+
+	saveBtn.disabled = true;
+	saveBtn.textContent = 'saving...';
+
+	try {
+		const response = await fetch('/api/profile', {
+			method: 'PUT',
+			headers: {
+				'Authorization': `Bearer ${token}`,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				name: nameInput.value,
+				email: emailInput.value || null,
+				photo: photoInput.value || null,
+				url: urlInput.value || null,
+			}),
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.error || 'Failed to update profile');
+		}
+
+		showMessage('Profile updated successfully!', 'success');
+	} catch (error) {
+		showMessage((error as Error).message || 'Failed to update profile');
+	} finally {
+		saveBtn.disabled = false;
+		saveBtn.textContent = 'save changes';
+	}
+});
+
+// Delete account handler
+deleteAccountBtn.addEventListener('click', async () => {
+	const confirmMessage = 'Are you absolutely sure you want to delete your account?\n\n' +
+		'This will permanently delete:\n' +
+		'• Your profile and credentials\n' +
+		'• All authorized apps\n' +
+		'• All active sessions\n\n' +
+		'This action CANNOT be undone.\n\n' +
+		'Type "DELETE" to confirm:';
+	
+	const confirmation = prompt(confirmMessage);
+	
+	if (confirmation !== 'DELETE') {
+		if (confirmation !== null) {
+			showMessage('Account deletion cancelled. You must type "DELETE" exactly.');
+		}
+		return;
+	}
+
+	deleteAccountBtn.disabled = true;
+	deleteAccountBtn.textContent = 'deleting...';
+
+	try {
+		const response = await fetch('/api/profile', {
+			method: 'DELETE',
+			headers: {
+				'Authorization': `Bearer ${token}`,
+			},
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.error || 'Failed to delete account');
+		}
+
+		// Clear session and redirect
+		localStorage.removeItem('indiko_session');
+		showMessage('Account deleted successfully. Redirecting...', 'success');
+		setTimeout(() => {
+			window.location.href = '/login';
+		}, 2000);
+	} catch (error) {
+		showMessage((error as Error).message || 'Failed to delete account');
+		deleteAccountBtn.disabled = false;
+		deleteAccountBtn.textContent = 'delete my account';
+	}
+});
 
 checkAuth();
