@@ -1,6 +1,7 @@
 const token = localStorage.getItem('indiko_session');
 const footer = document.getElementById('footer') as HTMLElement;
 const usersList = document.getElementById('usersList') as HTMLElement;
+let currentUserId: number;
 
 // Check auth and display user
 async function checkAuth() {
@@ -23,6 +24,7 @@ async function checkAuth() {
 		}
 
 		const data = await response.json();
+		currentUserId = data.id;
 
 		footer.innerHTML = `admin • signed in as <strong><a href="/u/${data.username}">${data.username}</a></strong> • <a href="/login" id="logoutLink">sign out</a>
 		<div class="back-link"><a href="/">← back to dashboard</a></div>`;
@@ -95,12 +97,13 @@ async function loadUsers() {
 			const avatarContent = user.photo 
 				? `<img src="${user.photo}" alt="${user.username}" />`
 				: initials;
+			const isSelf = user.id === currentUserId;
 			
 			return `
 				<div class="user-card ${user.status === 'suspended' ? 'user-suspended' : ''}" data-user-id="${user.id}">
 					<div class="user-avatar">${avatarContent}</div>
 					<div class="user-info">
-						<div class="user-name">${user.username}</div>
+						<div class="user-name">${user.username}${isSelf ? ' (you)' : ''}</div>
 						<div class="user-meta">
 							<span class="user-meta-item">${user.credentialCount} passkey${user.credentialCount !== 1 ? 's' : ''}</span>
 							<span class="user-meta-item">joined ${createdDate}</span>
@@ -112,11 +115,11 @@ async function loadUsers() {
 						<span class="user-badge badge-role">${user.role}</span>
 					</div>
 					<div class="user-actions">
-						${user.status === 'suspended' 
+						${!isSelf ? (user.status === 'suspended' 
 							? `<button class="btn-edit" data-action="enable" data-user-id="${user.id}">enable</button>` 
 							: `<button class="btn-disable" data-action="disable" data-user-id="${user.id}">disable</button>`
-						}
-						<button class="btn-delete" data-action="delete" data-user-id="${user.id}">delete</button>
+						) : ''}
+						${!isSelf ? `<button class="btn-delete" data-action="delete" data-user-id="${user.id}">delete</button>` : ''}
 					</div>
 				</div>
 			`;

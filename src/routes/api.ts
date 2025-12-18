@@ -45,6 +45,7 @@ export function hello(req: Request): Response {
 
 	return Response.json({
 		message: `Hello ${user.username}! You're authenticated with passkeys.`,
+		id: user.userId,
 		username: user.username,
 		isAdmin: user.is_admin,
 	});
@@ -393,6 +394,11 @@ export function disableUser(req: Request, userId: string): Response {
 	const targetUserId = Number.parseInt(userId, 10);
 	if (Number.isNaN(targetUserId)) {
 		return Response.json({ error: "Invalid user ID" }, { status: 400 });
+	}
+
+	// Prevent disabling self
+	if (targetUserId === user.id) {
+		return Response.json({ error: "Cannot disable your own account" }, { status: 400 });
 	}
 
 	const targetUser = db
