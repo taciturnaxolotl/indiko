@@ -119,41 +119,27 @@ const server = Bun.serve({
 		"/docs": docsHTML,
 		"/apps": appsHTML,
 		// Well-known endpoints
-		"/.well-known/security.txt": () =>
-			new Response(
+		"/.well-known/security.txt": () => {
+			const expiryDate = new Date();
+			expiryDate.setMonth(expiryDate.getMonth() + 3);
+			expiryDate.setSeconds(0, 0);
+			const expires = expiryDate.toISOString();
+			return new Response(
 				`# Security Contact Information for Indiko
 # See: https://securitytxt.org/
-
 Contact: mailto:security@dunkirk.sh
-Expires: 2026-12-31T23:59:59.000Z
+Expires: ${expires}
 Preferred-Languages: en
 Canonical: ${env.ORIGIN}/.well-known/security.txt
-
-# Reporting Security Vulnerabilities
-# 
-# If you discover a security vulnerability in Indiko, please report it 
-# responsibly by emailing security@dunkirk.sh with:
-# 
-# - Description of the vulnerability
-# - Steps to reproduce
-# - Potential impact assessment
-# - Any suggested fixes (optional)
-#
-# Please do not open public issues for security vulnerabilities.
-# You will receive a response within 48 hours.
-#
-# We appreciate responsible disclosure and will credit researchers 
-# who report vulnerabilities (unless you prefer to remain anonymous).
-
-Policy: https://github.com/taciturnaxolotl/indiko/blob/main/SECURITY.md
-Acknowledgments: https://github.com/taciturnaxolotl/indiko/blob/main/SECURITY.md#security-audit-history
+Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 `,
 				{
 					headers: {
 						"Content-Type": "text/plain; charset=utf-8",
 					},
 				},
-			),
+			);
+		},
 		// API endpoints
 		"/api/hello": hello,
 		"/api/users": listUsers,
