@@ -279,6 +279,9 @@ export async function registerVerify(req: Request): Promise<Response> {
 			"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
 		).run(token, user.id, expiresAt);
 
+		const isProduction = process.env.NODE_ENV === "production";
+		const secureCookie = isProduction ? "; Secure" : "";
+
 		return Response.json(
 			{
 				token,
@@ -287,7 +290,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 			},
 			{
 				headers: {
-					"Set-Cookie": `indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`,
+					"Set-Cookie": `indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secureCookie}`,
 				},
 			},
 		);
@@ -478,6 +481,9 @@ export async function loginVerify(req: Request): Promise<Response> {
 			"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
 		).run(token, user.id, expiresAt);
 
+		const isProduction = process.env.NODE_ENV === "production";
+		const secureCookie = isProduction ? "; Secure" : "";
+
 		return Response.json(
 			{
 				token,
@@ -485,7 +491,7 @@ export async function loginVerify(req: Request): Promise<Response> {
 			},
 			{
 				headers: {
-					"Set-Cookie": `indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`,
+					"Set-Cookie": `indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secureCookie}`,
 				},
 			},
 		);
