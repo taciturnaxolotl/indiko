@@ -322,7 +322,7 @@ export async function loginOptions(req: Request): Promise<Response> {
 			return Response.json({ error: "Account is suspended" }, { status: 403 });
 		}
 
-		// Get user's credentials
+		// Get user's credentials (just to verify they exist)
 		const credentials = db
 			.query("SELECT credential_id FROM credentials WHERE user_id = ?")
 			.all(user.id) as { credential_id: Buffer }[];
@@ -335,16 +335,11 @@ export async function loginOptions(req: Request): Promise<Response> {
 		}
 
 		// Generate authentication options
-		// Include allowCredentials to filter to only this user's passkeys
+		// Use discoverable credentials (no allowCredentials) for better UX
 		const options: PublicKeyCredentialRequestOptionsJSON =
 			await generateAuthenticationOptions({
 				rpID: process.env.RP_ID!,
 				userVerification: "required",
-				allowCredentials: credentials.map(c => ({
-					id: c.credential_id.toString('base64url'),
-					type: 'public-key' as const,
-					transports: ['hybrid', 'internal', 'usb', 'ble', 'nfc'] as AuthenticatorTransportFuture[],
-				})),
 			});
 
 		// Store challenge
@@ -375,10 +370,8 @@ export async function loginVerify(req: Request): Promise<Response> {
 			);
 		}
 
-		// Look up credential by ID
-		// Current database has credential_id stored as Buffer containing ASCII text of base64url string
-		// So we need to compare the string value, not decode it
-		const credentialIdString = response.id; // This is the base64url string like "rHvdOyMkR-6nxGBcDmtV4g"
+		// Look up credential by ID to discover the username
+		const credentialIdString = response.id;
 		
 		const credentialWithUser = db
 			.query(
@@ -403,8 +396,8 @@ export async function loginVerify(req: Request): Promise<Response> {
 			);
 		}
 
-		// Verify the username matches (if provided)
-		if (username && credentialWithUser.username !== username) {
+		// Verify the username matches
+		if (credentialWithUser.username !== username) {
 			return Response.json(
 				{ error: "Credential does not belong to this user" },
 				{ status: 403 },
@@ -419,12 +412,11 @@ export async function loginVerify(req: Request): Promise<Response> {
 		const user = { id: credentialWithUser.user_id };
 
 		// Verify challenge exists and is valid
-		// Use the discovered username from the credential
 		const challenge = db
 			.query(
 				"SELECT challenge, expires_at FROM challenges WHERE username = ? AND type = 'authentication' ORDER BY created_at DESC LIMIT 1",
 			)
-			.get(credentialWithUser.username) as
+			.get(username) as
 			| { challenge: string; expires_at: number }
 			| undefined;
 
