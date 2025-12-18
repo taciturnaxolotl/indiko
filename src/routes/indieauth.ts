@@ -130,10 +130,219 @@ export function authorizeGet(req: Request): Response {
 		return new Response("Missing required parameters", { status: 400 });
 	}
 
+	// Validate redirect_uri is a valid URL
+	try {
+		new URL(redirectUri);
+	} catch {
+		return new Response(
+			`<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Invalid Redirect URI • Indiko</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+	<style>
+		:root {
+			--mahogany: #26242b;
+			--lavender: #d9d0de;
+			--old-rose: #bc8da0;
+			--rosewood: #a04668;
+			--berry-crush: #ab4967;
+		}
+		* { margin: 0; padding: 0; box-sizing: border-box; }
+		body {
+			font-family: "Space Grotesk", sans-serif;
+			background: var(--mahogany);
+			color: var(--lavender);
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 2rem;
+		}
+		.error-box {
+			max-width: 500px;
+			background: rgba(188, 141, 160, 0.05);
+			border: 2px solid var(--rosewood);
+			padding: 2.5rem;
+		}
+		h1 {
+			font-size: 2rem;
+			font-weight: 700;
+			background: linear-gradient(135deg, var(--old-rose), var(--rosewood));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+			margin-bottom: 1.5rem;
+			letter-spacing: -0.05rem;
+		}
+		p {
+			line-height: 1.8;
+			margin-bottom: 1rem;
+			color: var(--lavender);
+		}
+		code {
+			background: rgba(12, 23, 19, 0.8);
+			padding: 0.25rem 0.5rem;
+			color: var(--berry-crush);
+			font-size: 0.875rem;
+			word-break: break-all;
+			display: inline-block;
+			max-width: 100%;
+		}
+		.error-details {
+			background: rgba(160, 70, 104, 0.1);
+			border-left: 4px solid var(--rosewood);
+			padding: 1rem;
+			margin-top: 1.5rem;
+		}
+		.error-details strong {
+			display: block;
+			margin-bottom: 0.5rem;
+			color: var(--old-rose);
+		}
+	</style>
+</head>
+<body>
+	<div class="error-box">
+		<h1>Invalid Redirect URI</h1>
+		<p>
+			The OAuth authorization request failed because the provided <code>redirect_uri</code> is not a valid URL.
+		</p>
+		<div class="error-details">
+			<strong>Provided redirect_uri:</strong>
+			<code>${redirectUri}</code>
+		</div>
+		<p style="margin-top: 1.5rem; font-size: 0.875rem; color: var(--old-rose);">
+			The redirect URI must be a valid, absolute URL (e.g., https://example.com/callback).
+		</p>
+	</div>
+</body>
+</html>`,
+			{ 
+				status: 400,
+				headers: { "Content-Type": "text/html" }
+			}
+		);
+	}
+
 	if (codeChallengeMethod && codeChallengeMethod !== "S256") {
 		return new Response("Only S256 code_challenge_method supported", {
 			status: 400,
 		});
+	}
+
+	// Auto-register app or get existing app
+	ensureApp(clientId, redirectUri);
+
+	// Validate redirect_uri is in app's allowed list
+	const app = db
+		.query("SELECT name, redirect_uris FROM apps WHERE client_id = ?")
+		.get(clientId) as { name: string | null; redirect_uris: string } | undefined;
+
+	if (!app) {
+		return new Response("App not found", { status: 400 });
+	}
+
+	const allowedRedirects = JSON.parse(app.redirect_uris) as string[];
+	if (!allowedRedirects.includes(redirectUri)) {
+		const appName = app.name || clientId;
+		return new Response(
+			`<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Unauthorized Redirect URI • Indiko</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+	<style>
+		:root {
+			--mahogany: #26242b;
+			--lavender: #d9d0de;
+			--old-rose: #bc8da0;
+			--rosewood: #a04668;
+			--berry-crush: #ab4967;
+		}
+		* { margin: 0; padding: 0; box-sizing: border-box; }
+		body {
+			font-family: "Space Grotesk", sans-serif;
+			background: var(--mahogany);
+			color: var(--lavender);
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 2rem;
+		}
+		.error-box {
+			max-width: 600px;
+			background: rgba(188, 141, 160, 0.05);
+			border: 2px solid var(--rosewood);
+			padding: 2.5rem;
+		}
+		h1 {
+			font-size: 2rem;
+			font-weight: 700;
+			background: linear-gradient(135deg, var(--old-rose), var(--rosewood));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+			margin-bottom: 1.5rem;
+			letter-spacing: -0.05rem;
+		}
+		p {
+			line-height: 1.8;
+			margin-bottom: 1rem;
+			color: var(--lavender);
+		}
+		code {
+			background: rgba(12, 23, 19, 0.8);
+			padding: 0.25rem 0.5rem;
+			color: var(--berry-crush);
+			font-size: 0.875rem;
+			word-break: break-all;
+			display: inline-block;
+			max-width: 100%;
+		}
+		.error-details {
+			background: rgba(160, 70, 104, 0.1);
+			border-left: 4px solid var(--rosewood);
+			padding: 1rem;
+			margin: 1.5rem 0;
+		}
+		.error-details strong {
+			display: block;
+			margin-bottom: 0.5rem;
+			color: var(--old-rose);
+		}
+	</style>
+</head>
+<body>
+	<div class="error-box">
+		<h1>Unauthorized Redirect URI</h1>
+		<p>
+			The OAuth authorization request failed because the provided <code>redirect_uri</code> is not registered for this client application.
+		</p>
+		<div class="error-details">
+			<strong>Requested redirect_uri:</strong>
+			<code>${redirectUri}</code>
+		</div>
+		<p style="margin-top: 1.5rem; font-size: 0.875rem; color: var(--old-rose);">
+			The redirect_uri must exactly match a registered URI for <strong>${appName}</strong>. If you are the application developer, please ensure your redirect_uri matches the one registered with this authorization server.
+		</p>
+	</div>
+</body>
+</html>`,
+			{ 
+				status: 400,
+				headers: { "Content-Type": "text/html" }
+			}
+		);
 	}
 
 	// Check if user is logged in
