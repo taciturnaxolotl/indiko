@@ -254,12 +254,30 @@ Acknowledgments: https://github.com/taciturnaxolotl/indiko/blob/main/SECURITY.md
 
 console.log("[Indiko] running on", env.ORIGIN);
 
+// Cleanup job: runs every hour to remove expired data
+const cleanupJob = setInterval(() => {
+	const now = Math.floor(Date.now() / 1000);
+	
+	const sessionsDeleted = db.query("DELETE FROM sessions WHERE expires_at < ?").run(now);
+	const challengesDeleted = db.query("DELETE FROM challenges WHERE expires_at < ?").run(now);
+	const authcodesDeleted = db.query("DELETE FROM authcodes WHERE expires_at < ?").run(now);
+	
+	const total = sessionsDeleted.changes + challengesDeleted.changes + authcodesDeleted.changes;
+	
+	if (total > 0) {
+		console.log(`[Cleanup] Removed ${total} expired records (sessions: ${sessionsDeleted.changes}, challenges: ${challengesDeleted.changes}, authcodes: ${authcodesDeleted.changes})`);
+	}
+}, 3600000); // 1 hour in milliseconds
+
 let is_shutting_down = false;
 function shutdown(sig: string) {
 	if (is_shutting_down) return;
 	is_shutting_down = true;
 
 	console.log(`[Shutdown] triggering shutdown due to ${sig}`);
+
+	clearInterval(cleanupJob);
+	console.log("[Shutdown] stopped cleanup job");
 
 	server.stop();
 	console.log("[Shutdown] stopped server");
