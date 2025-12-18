@@ -12,6 +12,24 @@ async function checkRegistrationAllowed() {
 		const inviteCode = urlParams.get('invite');
 
 		if (inviteCode) {
+			// Fetch invite details to show message
+			try {
+				const response = await fetch('/auth/register/options', {
+					method: 'POST',
+					headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({username: 'temp', inviteCode})
+				});
+
+				if (response.ok) {
+					const data = await response.json();
+					if (data.inviteMessage) {
+						showMessage(data.inviteMessage, 'success', true);
+					}
+				}
+			} catch {
+				// Ignore errors, just won't show message
+			}
+
 			// Show registration form with invite
 			const subtitleElement = document.querySelector('.subtitle');
 			if (subtitleElement) {
@@ -46,10 +64,12 @@ async function checkRegistrationAllowed() {
 
 checkRegistrationAllowed();
 
-function showMessage(text: string, type: 'error' | 'success' = 'error') {
+function showMessage(text: string, type: 'error' | 'success' = 'error', persist = false) {
 	message.textContent = text;
 	message.className = `message show ${type}`;
-	setTimeout(() => message.classList.remove('show'), 5000);
+	if (!persist) {
+		setTimeout(() => message.classList.remove('show'), 5000);
+	}
 }
 
 // Login flow

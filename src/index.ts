@@ -2,6 +2,7 @@ import { env } from "bun";
 import { db } from "./db";
 import indexHTML from "./html/index.html";
 import adminHTML from "./html/admin.html";
+import adminInvitesHTML from "./html/admin-invites.html";
 import adminClientsHTML from "./html/admin-clients.html";
 import loginHTML from "./html/login.html";
 import profileHTML from "./html/profile.html";
@@ -33,6 +34,8 @@ import {
 	userProfile,
 	createInvite,
 	listInvites,
+	updateInvite,
+	deleteInvite,
 } from "./routes/indieauth";
 import {
 	listClients,
@@ -62,6 +65,7 @@ const server = Bun.serve({
 	routes: {
 		"/": indexHTML,
 		"/admin": adminHTML,
+		"/admin/invites": adminInvitesHTML,
 		"/admin/apps": () => Response.redirect("/admin/clients", 302),
 		"/admin/clients": adminClientsHTML,
 		"/login": loginHTML,
@@ -95,6 +99,11 @@ const server = Bun.serve({
 		},
 		"/api/invites": (req: Request) => {
 			if (req.method === "GET") return listInvites(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/invites/:id": (req: Request) => {
+			if (req.method === "PATCH") return updateInvite(req);
+			if (req.method === "DELETE") return deleteInvite(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
 		// IndieAuth/OAuth 2.0 endpoints

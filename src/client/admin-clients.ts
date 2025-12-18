@@ -575,4 +575,25 @@ copySecretBtn?.addEventListener('click', async () => {
 	}
 });
 
+// Close modals on escape key
+document.addEventListener('keydown', (e) => {
+	if (e.key === 'Escape') {
+		clientModal?.classList.remove('active');
+		secretModal?.classList.remove('active');
+	}
+});
+
+// Close modals on outside click
+clientModal?.addEventListener('click', (e) => {
+	if (e.target === clientModal) {
+		clientModal.classList.remove('active');
+	}
+});
+
+secretModal?.addEventListener('click', (e) => {
+	if (e.target === secretModal) {
+		secretModal.classList.remove('active');
+	}
+});
+
 checkAuth();

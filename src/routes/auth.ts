@@ -52,6 +52,7 @@ export async function registerOptions(req: Request): Promise<Response> {
 			.get() as { count: number };
 
 		const isBootstrap = userCount.count === 0;
+		let inviteMessage: string | null = null;
 
 		// If not bootstrap, require valid invite code
 		if (!isBootstrap) {
@@ -61,8 +62,8 @@ export async function registerOptions(req: Request): Promise<Response> {
 
 			// Validate invite code
 			const invite = db
-				.query("SELECT id, max_uses, current_uses, expires_at FROM invites WHERE code = ?")
-				.get(inviteCode) as { id: number; max_uses: number; current_uses: number; expires_at: number | null } | undefined;
+				.query("SELECT id, max_uses, current_uses, expires_at, message FROM invites WHERE code = ?")
+				.get(inviteCode) as { id: number; max_uses: number; current_uses: number; expires_at: number | null; message: string | null } | undefined;
 
 			if (!invite) {
 				return Response.json({ error: "Invalid invite code" }, { status: 403 });
@@ -76,6 +77,9 @@ export async function registerOptions(req: Request): Promise<Response> {
 			if (invite.current_uses >= invite.max_uses) {
 				return Response.json({ error: "Invite code fully used" }, { status: 403 });
 			}
+			
+			// Store invite message to return with options
+			inviteMessage = invite.message;
 		}
 
 		// Generate WebAuthn registration options
@@ -99,7 +103,7 @@ export async function registerOptions(req: Request): Promise<Response> {
 			"INSERT INTO challenges (challenge, username, type, expires_at) VALUES (?, ?, 'registration', ?)",
 		).run(options.challenge, username, expiresAt);
 
-		return Response.json(options);
+		return Response.json({ ...options, inviteMessage });
 	} catch (error) {
 		console.error("Registration options error:", error);
 		return Response.json({ error: "Internal server error" }, { status: 500 });

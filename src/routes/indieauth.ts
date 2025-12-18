@@ -1291,7 +1291,7 @@ export function userProfile(req: Request, username: string): Response {
 }
 
 // POST /api/invites/create - Create invite link (admin only)
-export function createInvite(req: Request): Response {
+export async function createInvite(req: Request): Promise<Response> {
 	const user = getSessionUser(req);
 	if (user instanceof Response) {
 		return user;
@@ -1301,11 +1301,35 @@ export function createInvite(req: Request): Response {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
-	const inviteCode = crypto.randomBytes(16).toString("base64url");
+	const body = await req.json() as {
+		maxUses?: number;
+		expiresAt?: number | null;
+		note?: string | null;
+		message?: string | null;
+		appRoles?: Array<{ appId: number; role: string }>;
+	};
 
-	db.query(
-		"INSERT INTO invites (code, created_by) VALUES (?, ?)",
-	).run(inviteCode, user.userId);
+	const inviteCode = crypto.randomBytes(16).toString("base64url");
+	const maxUses = body.maxUses || 1;
+	const expiresAt = body.expiresAt || null;
+	const note = body.note || null;
+	const message = body.message || null;
+
+	const result = db.query(
+		"INSERT INTO invites (code, created_by, max_uses, expires_at, note, message) VALUES (?, ?, ?, ?, ?, ?)",
+	).run(inviteCode, user.userId, maxUses, expiresAt, note, message);
+
+	const inviteId = Number(result.lastInsertRowid);
+
+	// Insert app role assignments if provided
+	if (body.appRoles && body.appRoles.length > 0) {
+		const stmt = db.prepare(
+			"INSERT INTO invite_roles (invite_id, app_id, role) VALUES (?, ?, ?)",
+		);
+		for (const appRole of body.appRoles) {
+			stmt.run(inviteId, appRole.appId, appRole.role);
+		}
+	}
 
 	return Response.json({
 		inviteCode,
@@ -1325,7 +1349,7 @@ export function listInvites(req: Request): Response {
 	}
 
 	const invites = db.query(`
-		SELECT i.id, i.code, i.max_uses, i.current_uses, i.expires_at, i.note, i.created_at,
+		SELECT i.id, i.code, i.max_uses, i.current_uses, i.expires_at, i.note, i.message, i.created_at,
 			creator.username as created_by_username
 		FROM invites i
 		LEFT JOIN users creator ON i.created_by = creator.id
@@ -1337,13 +1361,14 @@ export function listInvites(req: Request): Response {
 		current_uses: number;
 		expires_at: number | null;
 		note: string | null;
+		message: string | null;
 		created_at: number;
 		created_by_username: string;
 	}>;
 
 	// Get app roles for each invite
 	const inviteRoles = db.query(`
-		SELECT ir.invite_id, ir.app_id, ir.role, a.client_id
+		SELECT ir.invite_id, ir.app_id, ir.role, a.client_id, a.name
 		FROM invite_roles ir
 		JOIN apps a ON ir.app_id = a.id
 	`).all() as Array<{
@@ -1351,6 +1376,7 @@ export function listInvites(req: Request): Response {
 		app_id: number;
 		role: string;
 		client_id: string;
+		name: string | null;
 	}>;
 
 	// Get users who used each invite
@@ -1377,6 +1403,7 @@ export function listInvites(req: Request): Response {
 			isFullyUsed: inv.current_uses >= inv.max_uses,
 			expiresAt: inv.expires_at,
 			note: inv.note,
+			message: inv.message,
 			createdAt: inv.created_at,
 			createdBy: inv.created_by_username,
 			inviteUrl: `${process.env.ORIGIN}/login?invite=${inv.code}`,
@@ -1385,6 +1412,7 @@ export function listInvites(req: Request): Response {
 				.map((r) => ({
 					appId: r.app_id,
 					clientId: r.client_id,
+					name: r.name,
 					role: r.role,
 				})),
 			usedBy: inviteUses
@@ -1396,3 +1424,86 @@ export function listInvites(req: Request): Response {
 		})),
 	});
 }
+
+// PATCH /api/invites/:id - Update invite (admin only)
+export async function updateInvite(req: Request): Promise<Response> {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	if (!user.isAdmin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	const url = new URL(req.url);
+	const parts = url.pathname.split("/");
+	const inviteId = parts[parts.length - 1];
+
+	if (!inviteId || Number.isNaN(Number(inviteId))) {
+		return Response.json({ error: "Invalid invite ID" }, { status: 400 });
+	}
+
+	const body = await req.json() as {
+		maxUses?: number | null;
+		expiresAt?: number | null;
+		note?: string | null;
+		message?: string | null;
+	};
+
+	const updates: string[] = [];
+	const values: (number | string | null)[] = [];
+
+	if (body.maxUses !== undefined) {
+		updates.push("max_uses = ?");
+		values.push(body.maxUses);
+	}
+	if (body.expiresAt !== undefined) {
+		updates.push("expires_at = ?");
+		values.push(body.expiresAt);
+	}
+	if (body.note !== undefined) {
+		updates.push("note = ?");
+		values.push(body.note);
+	}
+	if (body.message !== undefined) {
+		updates.push("message = ?");
+		values.push(body.message);
+	}
+
+	if (updates.length === 0) {
+		return Response.json({ error: "No fields to update" }, { status: 400 });
+	}
+
+	values.push(inviteId);
+
+	db.query(`UPDATE invites SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+
+	return Response.json({ success: true });
+}
+
+// DELETE /api/invites/:id - Delete an invite (admin only)
+export function deleteInvite(req: Request): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	if (!user.isAdmin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	const url = new URL(req.url);
+	const parts = url.pathname.split("/");
+	const inviteId = parts[parts.length - 1];
+
+	if (!inviteId || Number.isNaN(Number(inviteId))) {
+		return Response.json({ error: "Invalid invite ID" }, { status: 400 });
+	}
+
+	// Delete invite (cascade will handle invite_roles and invite_uses)
+	db.query("DELETE FROM invites WHERE id = ?").run(inviteId);
+
+	return Response.json({ success: true });
+}
+
