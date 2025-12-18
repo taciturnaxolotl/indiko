@@ -150,10 +150,10 @@ Indiko is designed to run behind a reverse proxy in production. See the [README 
 
 **User rights:**
 
-- **Right to access:** Users can view profile at `/profile`
-- **Right to erasure:** Admins can delete user accounts (cascading delete)
+- **Right to access:** Users can view profile at `/`
+- **Right to erasure:** Users can delete their account at `/`
 - **Right to data portability:** Export database manually (SQLite dump)
-- **Right to rectification:** Users can edit profile at `/profile`
+- **Right to rectification:** Users can edit profile at `/`
 
 **Data retention:**
 
@@ -163,7 +163,7 @@ Indiko is designed to run behind a reverse proxy in production. See the [README 
 
 ### CCPA (California Consumer Privacy Act)
 
-Indiko does not sell personal information. Users can request data deletion via admin.
+Indiko does not sell personal information. Users can initiate data deletion via dashboard.
 
 ### Cookie Policy
 
