@@ -97,7 +97,7 @@ async function loadUsers() {
 				: initials;
 			
 			return `
-				<div class="user-card">
+				<div class="user-card" data-user-id="${user.id}">
 					<div class="user-avatar">${avatarContent}</div>
 					<div class="user-info">
 						<div class="user-name">${user.username}</div>
@@ -111,12 +111,61 @@ async function loadUsers() {
 						<span class="user-badge badge-status ${user.status}">${user.status}</span>
 						<span class="user-badge badge-role">${user.role}</span>
 					</div>
+					<div class="user-actions">
+						${user.status !== 'suspended' ? `<button class="btn btn-disable" data-action="disable" data-user-id="${user.id}">disable</button>` : ''}
+						<button class="btn btn-delete" data-action="delete" data-user-id="${user.id}">delete</button>
+					</div>
 				</div>
 			`;
 		}).join('');
+
+		// Add event listeners for action buttons
+		document.querySelectorAll('.btn[data-action]').forEach(btn => {
+			btn.addEventListener('click', handleUserAction);
+		});
 	} catch (error) {
 		console.error('Failed to load users:', error);
 		usersList.innerHTML = '<div class="error">Failed to load users</div>';
+	}
+}
+
+async function handleUserAction(e: Event) {
+	const btn = e.target as HTMLButtonElement;
+	const action = btn.dataset.action;
+	const userId = btn.dataset.userId;
+	
+	if (!userId || !action) return;
+
+	const confirmMessage = action === 'delete' 
+		? 'Are you sure you want to delete this user? This cannot be undone.'
+		: 'Are you sure you want to disable this user? They will be logged out and unable to sign in.';
+
+	if (!confirm(confirmMessage)) return;
+
+	try {
+		const endpoint = action === 'delete' 
+			? `/api/admin/users/${userId}/delete`
+			: `/api/admin/users/${userId}/disable`;
+		
+		const method = action === 'delete' ? 'DELETE' : 'POST';
+
+		const response = await fetch(endpoint, {
+			method,
+			headers: {
+				'Authorization': `Bearer ${token}`,
+			},
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.error || 'Failed to perform action');
+		}
+
+		// Reload users list
+		loadUsers();
+	} catch (error) {
+		console.error(`Failed to ${action} user:`, error);
+		alert(`Failed to ${action} user: ${error instanceof Error ? error.message : 'Unknown error'}`);
 	}
 }
 

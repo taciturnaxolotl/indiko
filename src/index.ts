@@ -25,6 +25,8 @@ import {
 	listAllApps,
 	getAppDetails,
 	revokeAppForUser,
+	disableUser,
+	deleteUser,
 } from "./routes/api";
 import {
 	authorizeGet,
@@ -104,6 +106,22 @@ const server = Bun.serve({
 		"/api/invites/:id": (req: Request) => {
 			if (req.method === "PATCH") return updateInvite(req);
 			if (req.method === "DELETE") return deleteInvite(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/users/:id/disable": (req: Request) => {
+			if (req.method === "POST") {
+				const url = new URL(req.url);
+				const userId = url.pathname.split("/")[4];
+				return disableUser(req, userId);
+			}
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/users/:id/delete": (req: Request) => {
+			if (req.method === "DELETE") {
+				const url = new URL(req.url);
+				const userId = url.pathname.split("/")[4];
+				return deleteUser(req, userId);
+			}
 			return new Response("Method not allowed", { status: 405 });
 		},
 		// IndieAuth/OAuth 2.0 endpoints

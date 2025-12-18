@@ -379,3 +379,69 @@ export function revokeAppForUser(
 
 	return Response.json({ success: true });
 }
+
+export function disableUser(req: Request, userId: string): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	if (!user.is_admin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	const targetUserId = Number.parseInt(userId, 10);
+	if (Number.isNaN(targetUserId)) {
+		return Response.json({ error: "Invalid user ID" }, { status: 400 });
+	}
+
+	const targetUser = db
+		.query("SELECT id, username FROM users WHERE id = ?")
+		.get(targetUserId) as { id: number; username: string } | undefined;
+
+	if (!targetUser) {
+		return Response.json({ error: "User not found" }, { status: 404 });
+	}
+
+	db.query("UPDATE users SET status = 'suspended' WHERE id = ?").run(targetUserId);
+
+	db.query("DELETE FROM sessions WHERE user_id = ?").run(targetUserId);
+
+	return Response.json({ success: true });
+}
+
+export function deleteUser(req: Request, userId: string): Response {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	if (!user.is_admin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	const targetUserId = Number.parseInt(userId, 10);
+	if (Number.isNaN(targetUserId)) {
+		return Response.json({ error: "Invalid user ID" }, { status: 400 });
+	}
+
+	if (targetUserId === user.userId) {
+		return Response.json({ error: "Cannot delete your own account" }, { status: 400 });
+	}
+
+	const targetUser = db
+		.query("SELECT id FROM users WHERE id = ?")
+		.get(targetUserId) as { id: number } | undefined;
+
+	if (!targetUser) {
+		return Response.json({ error: "User not found" }, { status: 404 });
+	}
+
+	db.query("DELETE FROM sessions WHERE user_id = ?").run(targetUserId);
+	db.query("DELETE FROM credentials WHERE user_id = ?").run(targetUserId);
+	db.query("DELETE FROM permissions WHERE user_id = ?").run(targetUserId);
+	db.query("DELETE FROM authcodes WHERE user_id = ?").run(targetUserId);
+	db.query("DELETE FROM users WHERE id = ?").run(targetUserId);
+
+	return Response.json({ success: true });
+}
