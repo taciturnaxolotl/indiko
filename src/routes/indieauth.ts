@@ -94,24 +94,41 @@ function verifyPKCE(verifier: string, challenge: string): boolean {
 	return hash === challenge;
 }
 
-// Auto-register app if it doesn't exist
-function ensureApp(clientId: string, redirectUri: string): void {
+// Auto-register app if it doesn't exist (only for valid URLs, not generated client_ids)
+function ensureApp(clientId: string, redirectUri: string): { error?: string; app?: { name: string | null; redirect_uris: string } } {
 	const existing = db
-		.query("SELECT id FROM apps WHERE client_id = ?")
-		.get(clientId);
+		.query("SELECT name, redirect_uris FROM apps WHERE client_id = ?")
+		.get(clientId) as { name: string | null; redirect_uris: string } | undefined;
 
 	if (!existing) {
+		// Only allow auto-registration for valid URLs (IndieAuth standard)
+		// Reject generated client_ids like "ikc_xxxxx"
+		try {
+			new URL(clientId);
+		} catch {
+			return { error: "Client ID must be a valid URL for auto-registration. Non-URL clients must be pre-registered by an admin." };
+		}
+
 		// New app - auto-register (without pre-registration, no client secret or role)
 		db.query(
 			"INSERT INTO apps (client_id, redirect_uris, is_preregistered, first_seen, last_used) VALUES (?, ?, 0, ?, ?)",
 		).run(clientId, JSON.stringify([redirectUri]), Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000));
-	} else {
-		// Update last_used
-		db.query("UPDATE apps SET last_used = ? WHERE client_id = ?").run(
-			Math.floor(Date.now() / 1000),
-			clientId,
-		);
+
+		// Fetch the newly created app
+		const newApp = db
+			.query("SELECT name, redirect_uris FROM apps WHERE client_id = ?")
+			.get(clientId) as { name: string | null; redirect_uris: string };
+		
+		return { app: newApp };
 	}
+
+	// Update last_used
+	db.query("UPDATE apps SET last_used = ? WHERE client_id = ?").run(
+		Math.floor(Date.now() / 1000),
+		clientId,
+	);
+
+	return { app: existing };
 }
 
 // GET /auth/authorize - Authorization request
@@ -241,17 +258,14 @@ export function authorizeGet(req: Request): Response {
 		});
 	}
 
-	// Auto-register app or get existing app
-	ensureApp(clientId, redirectUri);
-
-	// Validate redirect_uri is in app's allowed list
-	const app = db
-		.query("SELECT name, redirect_uris FROM apps WHERE client_id = ?")
-		.get(clientId) as { name: string | null; redirect_uris: string } | undefined;
-
-	if (!app) {
-		return new Response("App not found", { status: 400 });
+	// Verify app is registered
+	const appResult = ensureApp(clientId, redirectUri);
+	
+	if (appResult.error) {
+		return new Response(appResult.error, { status: 400 });
 	}
+	
+	const app = appResult.app!;
 
 	const allowedRedirects = JSON.parse(app.redirect_uris) as string[];
 	if (!allowedRedirects.includes(redirectUri)) {
@@ -360,8 +374,12 @@ export function authorizeGet(req: Request): Response {
 		return Response.redirect(`/login?return=${encodeURIComponent(returnUrl)}`);
 	}
 
-	// Auto-register app
-	ensureApp(clientId, redirectUri);
+	// Verify app is registered
+	const appCheckResult = ensureApp(clientId, redirectUri);
+	
+	if (appCheckResult.error) {
+		return new Response(appCheckResult.error, { status: 400 });
+	}
 
 	// Check if user has previously granted permission to this app
 	const permission = db
