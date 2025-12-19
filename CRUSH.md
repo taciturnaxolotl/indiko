@@ -56,6 +56,7 @@ src/
 - User profile endpoints with h-card microformats
 - Token exchange endpoint for client apps
 - Invite-based registration for new users (admin only)
+- **`me` parameter delegation**: When a client passes `me=https://example.com` in the authorization request and it matches the user's website URL, the token response returns that URL instead of the canonical `/u/{username}` URL
 
 ### Database Schema
 - **users**: username, name, email, photo, url, status, role, is_admin
@@ -64,7 +65,7 @@ src/
 - **challenges**: WebAuthn challenges (5-minute expiry)
 - **apps**: auto-registered OAuth clients
 - **permissions**: per-user, per-app granted scopes
-- **authcodes**: short-lived authorization codes (60-second expiry, single-use)
+- **authcodes**: short-lived authorization codes (60-second expiry, single-use), includes `me` parameter for delegation
 - **invites**: admin-created invite codes
 
 ### WebAuthn/Passkey Settings

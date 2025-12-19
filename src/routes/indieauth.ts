@@ -144,6 +144,7 @@ export function authorizeGet(req: Request): Response {
 	const codeChallenge = params.get("code_challenge");
 	const codeChallengeMethod = params.get("code_challenge_method");
 	const scope = params.get("scope") || "profile";
+	const me = params.get("me");
 
 	if (responseType !== "code") {
 		return new Response("Unsupported response_type", { status: 400 });
@@ -401,7 +402,7 @@ export function authorizeGet(req: Request): Response {
 			const expiresAt = Math.floor(Date.now() / 1000) + 60; // 60 seconds
 
 			db.query(
-				"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+				"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 			).run(
 				code,
 				user.userId,
@@ -410,6 +411,7 @@ export function authorizeGet(req: Request): Response {
 				JSON.stringify(requestedScopes),
 				codeChallenge,
 				expiresAt,
+				me,
 			);
 
 			// Update permission last_used
@@ -429,6 +431,7 @@ export function authorizeGet(req: Request): Response {
 		state,
 		codeChallenge,
 		requestedScopes,
+		me,
 	);
 }
 
@@ -439,6 +442,7 @@ function showConsentScreen(
 	state: string,
 	codeChallenge: string,
 	scopes: string[],
+	me: string | null,
 ): Response {
 	// Load app metadata if pre-registered
 	const appData = db
@@ -745,6 +749,7 @@ function showConsentScreen(
       <input type="hidden" name="redirect_uri" value="${redirectUri}" />
       <input type="hidden" name="state" value="${state}" />
       <input type="hidden" name="code_challenge" value="${codeChallenge}" />
+      ${me ? `<input type="hidden" name="me" value="${me}" />` : ""}
       <!-- Always include profile scope as it's required -->
       <input type="hidden" name="scope" value="profile" />
       
@@ -776,6 +781,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 	const redirectUri = formData.get("redirect_uri") as string;
 	const state = formData.get("state") as string;
 	const codeChallenge = formData.get("code_challenge") as string;
+	const me = formData.get("me") as string | null;
 
 	if (!clientId || !redirectUri || !state || !codeChallenge) {
 		return new Response("Missing required parameters", { status: 400 });
@@ -800,7 +806,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 	const expiresAt = Math.floor(Date.now() / 1000) + 60; // 60 seconds
 
 	db.query(
-		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		code,
 		user.userId,
@@ -809,6 +815,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 		JSON.stringify(approvedScopes),
 		codeChallenge,
 		expiresAt,
+		me,
 	);
 
 	// Store or update permission grant
@@ -953,7 +960,7 @@ export async function token(req: Request): Promise<Response> {
 		// Look up authorization code
 		const authcode = db
 			.query(
-				"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used FROM authcodes WHERE code = ?",
+				"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me FROM authcodes WHERE code = ?",
 			)
 			.get(code) as
 			| {
@@ -964,6 +971,7 @@ export async function token(req: Request): Promise<Response> {
 					code_challenge: string;
 					expires_at: number;
 					used: number;
+					me: string | null;
 			  }
 			| undefined;
 
@@ -1081,8 +1089,14 @@ export async function token(req: Request): Promise<Response> {
 			.query("SELECT role FROM permissions WHERE user_id = ? AND client_id = ?")
 			.get(authcode.user_id, client_id) as { role: string | null } | undefined;
 
+		// Use the me parameter from authorization if it matches user's website, otherwise use canonical URL
+		let meValue = `${process.env.ORIGIN}/u/${user.username}`;
+		if (authcode.me && user.url && authcode.me === user.url) {
+			meValue = authcode.me;
+		}
+
 		const response: Record<string, unknown> = {
-			me: `${process.env.ORIGIN}/u/${user.username}`,
+			me: meValue,
 			profile,
 			scope: scopes.join(" "),
 		};
