@@ -165,6 +165,37 @@
     .view-all:hover {
       text-decoration: underline;
     }
+
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--mahogany);
+      border: 2px solid var(--berry-crush);
+      padding: 1rem 1.5rem;
+      color: var(--lavender);
+      font-size: 0.875rem;
+      font-weight: 500;
+      z-index: 2000;
+      opacity: 0;
+      transform: translateY(1rem);
+      transition: opacity 0.3s, transform 0.3s;
+      max-width: 25rem;
+      box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5);
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .toast.error {
+      border-color: var(--rosewood);
+    }
+
+    .toast.success {
+      border-color: var(--berry-crush);
+    }
   </style>
 </head>
 
@@ -175,8 +206,6 @@
   </header>
 
   <main>
-    <div id="message" class="message"></div>
-
     <div class="profile-section">
       <h2 class="section-title">recent apps</h2>
       <div id="recentApps" class="apps-preview">
@@ -229,6 +258,8 @@
   <footer id="footer">
     loading...
   </footer>
+
+  <div id="toast" class="toast"></div>
 
   <script type="module" src="../client/index.ts"></script>
 </body>

@@ -3,7 +3,7 @@ const footer = document.getElementById('footer') as HTMLElement;
 const welcome = document.getElementById('welcome') as HTMLElement;
 const subtitle = document.getElementById('subtitle') as HTMLElement;
 const recentApps = document.getElementById('recentApps') as HTMLElement;
-const message = document.getElementById('message') as HTMLElement;
+const toast = document.getElementById('toast') as HTMLElement;
 
 // Profile form elements
 const profileForm = document.getElementById('profileForm') as HTMLFormElement;
@@ -40,10 +40,13 @@ interface Profile {
 	isAdmin?: boolean;
 }
 
-function showMessage(text: string, type: 'error' | 'success' = 'error') {
-	message.textContent = text;
-	message.className = `message show ${type}`;
-	setTimeout(() => message.classList.remove('show'), 5000);
+function showToast(message: string, type: 'success' | 'error' = 'success') {
+	toast.textContent = message;
+	toast.className = `toast ${type} show`;
+	
+	setTimeout(() => {
+		toast.classList.remove('show');
+	}, 3000);
 }
 
 function updateAvatarPreview(photo: string | null, username: string) {
@@ -146,7 +149,7 @@ async function loadProfile() {
 		});
 	} catch (error) {
 		console.error('Failed to load profile:', error);
-		showMessage('Failed to load profile');
+		showToast('Failed to load profile', 'error');
 	}
 }
 
@@ -220,9 +223,9 @@ profileForm.addEventListener('submit', async (e) => {
 			throw new Error(error.error || 'Failed to update profile');
 		}
 
-		showMessage('Profile updated successfully!', 'success');
+		showToast('Profile updated successfully!', 'success');
 	} catch (error) {
-		showMessage((error as Error).message || 'Failed to update profile');
+		showToast((error as Error).message || 'Failed to update profile', 'error');
 	} finally {
 		saveBtn.disabled = false;
 		saveBtn.textContent = 'save changes';
@@ -243,7 +246,7 @@ deleteAccountBtn.addEventListener('click', async () => {
 	
 	if (confirmation !== 'DELETE') {
 		if (confirmation !== null) {
-			showMessage('Account deletion cancelled. You must type "DELETE" exactly.');
+			showToast('Account deletion cancelled. You must type "DELETE" exactly.', 'error');
 		}
 		return;
 	}
@@ -266,12 +269,12 @@ deleteAccountBtn.addEventListener('click', async () => {
 
 		// Clear session and redirect
 		localStorage.removeItem('indiko_session');
-		showMessage('Account deleted successfully. Redirecting...', 'success');
+		showToast('Account deleted successfully. Redirecting...', 'success');
 		setTimeout(() => {
 			window.location.href = '/login';
 		}, 2000);
 	} catch (error) {
-		showMessage((error as Error).message || 'Failed to delete account');
+		showToast((error as Error).message || 'Failed to delete account', 'error');
 		deleteAccountBtn.disabled = false;
 		deleteAccountBtn.textContent = 'delete my account';
 	}
