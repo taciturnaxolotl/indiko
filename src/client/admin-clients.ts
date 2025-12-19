@@ -255,7 +255,7 @@ function displayClients(clients: Client[]) {
 											Granted ${grantedDate} • Last used ${lastUsedDate} • Scopes: ${user.scopes.join(', ')}
 										</div>
 									</div>
-									<button class="revoke-btn" onclick="event.stopPropagation(); revokeUserPermission('${clientId}', '${user.username}')">revoke</button>
+									<button class="revoke-btn" onclick="event.stopPropagation(); revokeUserPermission('${clientId}', '${user.username}', event)">revoke</button>
 								</div>
 							`;
 						}).join('')}
@@ -563,38 +563,61 @@ clientForm.addEventListener('submit', async (e) => {
 	}
 };
 
-(window as any).revokeUserPermission = async function(clientId: string, username: string) {
-	if (!confirm(`Are you sure you want to revoke access for ${username}? They will need to authorize this app again.`)) {
-		return;
-	}
+(window as any).revokeUserPermission = async function(clientId: string, username: string, event?: Event) {
+	const btn = event?.target as HTMLButtonElement | undefined;
+	
+	// Double-click confirmation pattern
+	if (btn?.dataset.confirmState === 'pending') {
+		// Second click - execute revoke
+		delete btn.dataset.confirmState;
+		btn.disabled = true;
+		btn.textContent = 'revoking...';
+		
+		try {
+			const response = await fetch(`/api/admin/apps/${encodeURIComponent(clientId)}/users/${encodeURIComponent(username)}`, {
+				method: 'DELETE',
+				headers: {
+					'Authorization': `Bearer ${token}`,
+				},
+			});
 
-	try {
-		const response = await fetch(`/api/admin/apps/${encodeURIComponent(clientId)}/users/${encodeURIComponent(username)}`, {
-			method: 'DELETE',
-			headers: {
-				'Authorization': `Bearer ${token}`,
-			},
-		});
+			if (!response.ok) {
+				throw new Error('Failed to revoke permission');
+			}
 
-		if (!response.ok) {
-			throw new Error('Failed to revoke permission');
+			// Reload the client details
+			const detailsDiv = document.getElementById(`details-${encodeURIComponent(clientId)}`);
+			if (detailsDiv) {
+				detailsDiv.dataset.loaded = 'false';
+			}
+
+			const card = document.querySelector(`[data-client-id="${clientId}"]`) as HTMLElement;
+			if (card) {
+				card.classList.remove('expanded');
+			}
+
+			await loadClients();
+		} catch (error) {
+			console.error('Failed to revoke permission:', error);
+			showToast('Failed to revoke permission. Please try again.', 'error');
+			btn.disabled = false;
+			btn.textContent = 'revoke';
 		}
-
-		// Reload the client details
-		const detailsDiv = document.getElementById(`details-${encodeURIComponent(clientId)}`);
-		if (detailsDiv) {
-			detailsDiv.dataset.loaded = 'false';
+	} else {
+		// First click - set pending state
+		if (btn) {
+			const originalText = btn.textContent;
+			btn.dataset.confirmState = 'pending';
+			btn.textContent = 'you sure?';
+			
+			// Reset after 3 seconds if not confirmed
+			setTimeout(() => {
+				if (btn.dataset.confirmState === 'pending') {
+					delete btn.dataset.confirmState;
+					btn.textContent = originalText;
+				}
+			}, 3000);
 		}
-
-		const card = document.querySelector(`[data-client-id="${clientId}"]`) as HTMLElement;
-		if (card) {
-			card.classList.remove('expanded');
-		}
-
-		await loadClients();
-	} catch (error) {
-		console.error('Failed to revoke permission:', error);
-		showToast('Failed to revoke permission. Please try again.', 'error');
 	}
 };
 
