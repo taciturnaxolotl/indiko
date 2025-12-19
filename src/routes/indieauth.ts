@@ -263,7 +263,104 @@ export function authorizeGet(req: Request): Response {
 	const appResult = ensureApp(clientId, redirectUri);
 	
 	if (appResult.error) {
-		return new Response(appResult.error, { status: 400 });
+		return new Response(
+			`<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Invalid Client ID • Indiko</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+	<style>
+		:root {
+			--mahogany: #26242b;
+			--lavender: #d9d0de;
+			--old-rose: #bc8da0;
+			--rosewood: #a04668;
+			--berry-crush: #ab4967;
+		}
+		* { margin: 0; padding: 0; box-sizing: border-box; }
+		body {
+			font-family: "Space Grotesk", sans-serif;
+			background: var(--mahogany);
+			color: var(--lavender);
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 2rem;
+		}
+		.error-box {
+			max-width: 600px;
+			background: rgba(188, 141, 160, 0.05);
+			border: 2px solid var(--rosewood);
+			padding: 2.5rem;
+		}
+		h1 {
+			font-size: 2rem;
+			font-weight: 700;
+			background: linear-gradient(135deg, var(--old-rose), var(--rosewood));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+			margin-bottom: 1.5rem;
+			letter-spacing: -0.05rem;
+		}
+		p {
+			line-height: 1.8;
+			margin-bottom: 1rem;
+			color: var(--lavender);
+		}
+		code {
+			background: rgba(12, 23, 19, 0.8);
+			padding: 0.25rem 0.5rem;
+			color: var(--berry-crush);
+			font-size: 0.875rem;
+			word-break: break-all;
+			display: inline-block;
+			max-width: 100%;
+		}
+		.error-details {
+			background: rgba(160, 70, 104, 0.1);
+			border-left: 4px solid var(--rosewood);
+			padding: 1rem;
+			margin: 1.5rem 0;
+		}
+		.error-details strong {
+			display: block;
+			margin-bottom: 0.5rem;
+			color: var(--old-rose);
+		}
+	</style>
+</head>
+<body>
+	<div class="error-box">
+		<h1>Invalid Client ID</h1>
+		<p>
+			The OAuth authorization request failed because the provided <code>client_id</code> is not valid.
+		</p>
+		<div class="error-details">
+			<strong>Error:</strong>
+			<p>${appResult.error}</p>
+		</div>
+		<div class="error-details">
+			<strong>Provided client_id:</strong>
+			<code>${clientId}</code>
+		</div>
+		<p style="margin-top: 1.5rem; font-size: 0.875rem; color: var(--old-rose);">
+			For auto-registration, the client_id must be a valid URL (e.g., https://example.com). 
+			Non-URL client IDs (like <code>ikc_xxxxx</code>) must be pre-registered by an administrator.
+		</p>
+	</div>
+</body>
+</html>`,
+			{ 
+				status: 400,
+				headers: { "Content-Type": "text/html" }
+			}
+		);
 	}
 	
 	const app = appResult.app!;
