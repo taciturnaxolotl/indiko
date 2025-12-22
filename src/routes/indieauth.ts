@@ -328,6 +328,80 @@ async function fetchClientMetadata(clientId: string): Promise<{
 	}
 }
 
+// Verify domain has rel="me" link back to user profile
+export async function verifyDomain(domainUrl: string, indikoProfileUrl: string): Promise<{
+	success: boolean;
+	error?: string;
+}> {
+	try {
+		// Set timeout for fetch
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+		const response = await fetch(domainUrl, {
+			method: "GET",
+			headers: {
+				Accept: "text/html",
+			},
+			signal: controller.signal,
+		});
+
+		clearTimeout(timeoutId);
+
+		if (!response.ok) {
+			return { success: false, error: `Failed to fetch domain: HTTP ${response.status}` };
+		}
+
+		const html = await response.text();
+
+		// Look for <link rel="me"> or <a rel="me"> pointing to indiko profile
+		// Match both <link> and <a> tags with rel="me"
+		const relMeRegex = /<(?:link|a)\s+[^>]*rel=["']me["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
+		const relMeRegex2 = /<(?:link|a)\s+[^>]*href=["']([^"']+)["'][^>]*rel=["']me["'][^>]*>/gi;
+
+		const relMeLinks: string[] = [];
+		let match: RegExpExecArray | null;
+
+		while ((match = relMeRegex.exec(html)) !== null) {
+			relMeLinks.push(match[1]);
+		}
+
+		while ((match = relMeRegex2.exec(html)) !== null) {
+			if (!relMeLinks.includes(match[1])) {
+				relMeLinks.push(match[1]);
+			}
+		}
+
+		// Check if any rel="me" link matches the indiko profile URL
+		const normalizedIndikoUrl = canonicalizeURL(indikoProfileUrl);
+		const hasRelMe = relMeLinks.some(link => {
+			try {
+				const normalizedLink = canonicalizeURL(link);
+				return normalizedLink === normalizedIndikoUrl;
+			} catch {
+				return false;
+			}
+		});
+
+		if (!hasRelMe) {
+			return {
+				success: false,
+				error: `Domain must have <link rel="me" href="${indikoProfileUrl}" /> or <a rel="me" href="${indikoProfileUrl}">...</a> to verify ownership`,
+			};
+		}
+
+		return { success: true };
+	} catch (error) {
+		if (error instanceof Error) {
+			if (error.name === "AbortError") {
+				return { success: false, error: "Timeout verifying domain" };
+			}
+			return { success: false, error: `Failed to verify domain: ${error.message}` };
+		}
+		return { success: false, error: "Failed to verify domain" };
+	}
+}
+
 // Validate and register app with client information discovery
 async function ensureApp(
 	clientId: string,
@@ -1525,10 +1599,11 @@ export async function token(req: Request): Promise<Response> {
 			.query("SELECT role FROM permissions WHERE user_id = ? AND client_id = ?")
 			.get(authcode.user_id, client_id) as { role: string | null } | undefined;
 
-		// Use the me parameter from authorization if it matches user's website, otherwise use canonical URL
+		// Use custom domain as identity if user has verified one, otherwise use indiko profile
 		let meValue = `${process.env.ORIGIN}/u/${user.username}`;
-		if (authcode.me && user.url && authcode.me === user.url) {
-			meValue = authcode.me;
+		if (user.url) {
+			// User has verified custom domain - use it as their identity
+			meValue = user.url;
 		}
 
 		const response: Record<string, unknown> = {

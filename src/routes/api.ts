@@ -1,4 +1,5 @@
 import { db } from "../db";
+import { verifyDomain } from "./indieauth";
 
 function getSessionUser(
 	req: Request,
@@ -168,6 +169,20 @@ export async function updateProfile(req: Request): Promise<Response> {
 
 		if (!name || typeof name !== "string") {
 			return Response.json({ error: "Name is required" }, { status: 400 });
+		}
+
+		// If URL is being set, verify domain has rel="me" link back to profile
+		if (url && typeof url === "string") {
+			const origin = process.env.ORIGIN || "http://localhost:3000";
+			const indikoProfileUrl = `${origin}/u/${user.username}`;
+
+			const verification = await verifyDomain(url, indikoProfileUrl);
+			if (!verification.success) {
+				return Response.json(
+					{ error: verification.error || "Failed to verify domain" },
+					{ status: 400 },
+				);
+			}
 		}
 
 		// Update profile
