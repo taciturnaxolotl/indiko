@@ -342,6 +342,7 @@ export async function verifyDomain(domainUrl: string, indikoProfileUrl: string):
 			method: "GET",
 			headers: {
 				Accept: "text/html",
+				"User-Agent": "indiko/1.0 (+https://indiko.dunkirk.sh/)",
 			},
 			signal: controller.signal,
 		});
@@ -349,26 +350,56 @@ export async function verifyDomain(domainUrl: string, indikoProfileUrl: string):
 		clearTimeout(timeoutId);
 
 		if (!response.ok) {
+			const errorBody = await response.text();
+			console.error(`[verifyDomain] Failed to fetch ${domainUrl}: HTTP ${response.status}`, {
+				status: response.status,
+				contentType: response.headers.get("content-type"),
+				bodyPreview: errorBody.substring(0, 200),
+			});
 			return { success: false, error: `Failed to fetch domain: HTTP ${response.status}` };
 		}
 
 		const html = await response.text();
 
-		// Look for <link rel="me"> or <a rel="me"> pointing to indiko profile
-		// Match both <link> and <a> tags with rel="me"
-		const relMeRegex = /<(?:link|a)\s+[^>]*rel=["']me["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
-		const relMeRegex2 = /<(?:link|a)\s+[^>]*href=["']([^"']+)["'][^>]*rel=["']me["'][^>]*>/gi;
-
+		// Extract rel="me" links using regex
+		// Matches both <link> and <a> tags with rel attribute containing "me"
 		const relMeLinks: string[] = [];
-		let match: RegExpExecArray | null;
 
-		while ((match = relMeRegex.exec(html)) !== null) {
-			relMeLinks.push(match[1]);
+		// Simpler approach: find all link and a tags, then check if they have rel="me" and href
+		const linkRegex = /<link\s+[^>]*>/gi;
+		const aRegex = /<a\s+[^>]*>/gi;
+
+		const processTag = (tagHtml: string) => {
+			// Check if has rel containing "me" (handle quoted and unquoted attributes)
+			const relMatch = tagHtml.match(/rel=["']?([^"'\s>]+)["']?/i);
+			if (!relMatch) return null;
+
+			const relValue = relMatch[1];
+			// Check if "me" is a separate word in the rel attribute
+			if (!relValue.split(/\s+/).includes("me")) return null;
+
+			// Extract href (handle quoted and unquoted attributes)
+			const hrefMatch = tagHtml.match(/href=["']?([^"'\s>]+)["']?/i);
+			if (!hrefMatch) return null;
+
+			return hrefMatch[1];
+		};
+
+		// Process all link tags
+		let linkMatch;
+		while ((linkMatch = linkRegex.exec(html)) !== null) {
+			const href = processTag(linkMatch[0]);
+			if (href && !relMeLinks.includes(href)) {
+				relMeLinks.push(href);
+			}
 		}
 
-		while ((match = relMeRegex2.exec(html)) !== null) {
-			if (!relMeLinks.includes(match[1])) {
-				relMeLinks.push(match[1]);
+		// Process all a tags
+		let aMatch;
+		while ((aMatch = aRegex.exec(html)) !== null) {
+			const href = processTag(aMatch[0]);
+			if (href && !relMeLinks.includes(href)) {
+				relMeLinks.push(href);
 			}
 		}
 
@@ -384,6 +415,10 @@ export async function verifyDomain(domainUrl: string, indikoProfileUrl: string):
 		});
 
 		if (!hasRelMe) {
+			console.error(`[verifyDomain] No rel="me" link found on ${domainUrl} pointing to ${indikoProfileUrl}`, {
+				foundLinks: relMeLinks,
+				normalizedTarget: normalizedIndikoUrl,
+			});
 			return {
 				success: false,
 				error: `Domain must have <link rel="me" href="${indikoProfileUrl}" /> or <a rel="me" href="${indikoProfileUrl}">...</a> to verify ownership`,
@@ -394,10 +429,16 @@ export async function verifyDomain(domainUrl: string, indikoProfileUrl: string):
 	} catch (error) {
 		if (error instanceof Error) {
 			if (error.name === "AbortError") {
+				console.error(`[verifyDomain] Timeout verifying ${domainUrl}`);
 				return { success: false, error: "Timeout verifying domain" };
 			}
+			console.error(`[verifyDomain] Error verifying ${domainUrl}: ${error.message}`, {
+				name: error.name,
+				stack: error.stack,
+			});
 			return { success: false, error: `Failed to verify domain: ${error.message}` };
 		}
+		console.error(`[verifyDomain] Unknown error verifying ${domainUrl}:`, error);
 		return { success: false, error: "Failed to verify domain" };
 	}
 }
