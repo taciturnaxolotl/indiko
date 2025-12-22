@@ -1,23 +1,23 @@
-import { db } from "../db";
 import {
-	generateRegistrationOptions,
-	verifyRegistrationResponse,
-	generateAuthenticationOptions,
-	verifyAuthenticationResponse,
-	type VerifiedRegistrationResponse,
-	type VerifiedAuthenticationResponse,
-	type PublicKeyCredentialCreationOptionsJSON,
-	type RegistrationResponseJSON,
-	type PublicKeyCredentialRequestOptionsJSON,
 	type AuthenticationResponseJSON,
+	generateAuthenticationOptions,
+	generateRegistrationOptions,
+	type PublicKeyCredentialCreationOptionsJSON,
+	type PublicKeyCredentialRequestOptionsJSON,
+	type RegistrationResponseJSON,
+	type VerifiedAuthenticationResponse,
+	type VerifiedRegistrationResponse,
+	verifyAuthenticationResponse,
+	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
+import { db } from "../db";
 
 const RP_NAME = "Indiko";
 
 export function canRegister(req: Request): Response {
-	const userCount = db
-		.query("SELECT COUNT(*) as count FROM users")
-		.get() as { count: number };
+	const userCount = db.query("SELECT COUNT(*) as count FROM users").get() as {
+		count: number;
+	};
 
 	return Response.json({
 		canRegister: userCount.count === 0,
@@ -47,9 +47,9 @@ export async function registerOptions(req: Request): Promise<Response> {
 		}
 
 		// Check if this is bootstrap (first user)
-		const userCount = db
-			.query("SELECT COUNT(*) as count FROM users")
-			.get() as { count: number };
+		const userCount = db.query("SELECT COUNT(*) as count FROM users").get() as {
+			count: number;
+		};
 
 		const isBootstrap = userCount.count === 0;
 		let inviteMessage: string | null = null;
@@ -57,13 +57,26 @@ export async function registerOptions(req: Request): Promise<Response> {
 		// If not bootstrap, require valid invite code
 		if (!isBootstrap) {
 			if (!inviteCode) {
-				return Response.json({ error: "Invite code required" }, { status: 403 });
+				return Response.json(
+					{ error: "Invite code required" },
+					{ status: 403 },
+				);
 			}
 
 			// Validate invite code
 			const invite = db
-				.query("SELECT id, max_uses, current_uses, expires_at, message FROM invites WHERE code = ?")
-				.get(inviteCode) as { id: number; max_uses: number; current_uses: number; expires_at: number | null; message: string | null } | undefined;
+				.query(
+					"SELECT id, max_uses, current_uses, expires_at, message FROM invites WHERE code = ?",
+				)
+				.get(inviteCode) as
+				| {
+						id: number;
+						max_uses: number;
+						current_uses: number;
+						expires_at: number | null;
+						message: string | null;
+				  }
+				| undefined;
 
 			if (!invite) {
 				return Response.json({ error: "Invalid invite code" }, { status: 403 });
@@ -75,9 +88,12 @@ export async function registerOptions(req: Request): Promise<Response> {
 			}
 
 			if (invite.current_uses >= invite.max_uses) {
-				return Response.json({ error: "Invite code fully used" }, { status: 403 });
+				return Response.json(
+					{ error: "Invite code fully used" },
+					{ status: 403 },
+				);
 			}
-			
+
 			// Store invite message to return with options
 			inviteMessage = invite.message;
 		}
@@ -113,7 +129,12 @@ export async function registerOptions(req: Request): Promise<Response> {
 export async function registerVerify(req: Request): Promise<Response> {
 	try {
 		const body = await req.json();
-		const { username, response, challenge: expectedChallenge, inviteCode } = body as {
+		const {
+			username,
+			response,
+			challenge: expectedChallenge,
+			inviteCode,
+		} = body as {
 			username: string;
 			response: RegistrationResponseJSON;
 			challenge?: string;
@@ -158,9 +179,9 @@ export async function registerVerify(req: Request): Promise<Response> {
 		}
 
 		// Check if this is bootstrap (first user)
-		const userCount = db
-			.query("SELECT COUNT(*) as count FROM users")
-			.get() as { count: number };
+		const userCount = db.query("SELECT COUNT(*) as count FROM users").get() as {
+			count: number;
+		};
 
 		const isBootstrap = userCount.count === 0;
 
@@ -169,12 +190,24 @@ export async function registerVerify(req: Request): Promise<Response> {
 		let inviteRoles: Array<{ app_id: number; role: string }> = [];
 		if (!isBootstrap) {
 			if (!inviteCode) {
-				return Response.json({ error: "Invite code required" }, { status: 403 });
+				return Response.json(
+					{ error: "Invite code required" },
+					{ status: 403 },
+				);
 			}
 
 			const invite = db
-				.query("SELECT id, max_uses, current_uses, expires_at FROM invites WHERE code = ?")
-				.get(inviteCode) as { id: number; max_uses: number; current_uses: number; expires_at: number | null } | undefined;
+				.query(
+					"SELECT id, max_uses, current_uses, expires_at FROM invites WHERE code = ?",
+				)
+				.get(inviteCode) as
+				| {
+						id: number;
+						max_uses: number;
+						current_uses: number;
+						expires_at: number | null;
+				  }
+				| undefined;
 
 			if (!invite) {
 				return Response.json({ error: "Invalid invite code" }, { status: 403 });
@@ -186,15 +219,18 @@ export async function registerVerify(req: Request): Promise<Response> {
 			}
 
 			if (invite.current_uses >= invite.max_uses) {
-				return Response.json({ error: "Invite code fully used" }, { status: 403 });
+				return Response.json(
+					{ error: "Invite code fully used" },
+					{ status: 403 },
+				);
 			}
 
 			inviteId = invite.id;
 
 			// Get app role assignments for this invite
-			inviteRoles = db.query(
-				"SELECT app_id, role FROM invite_roles WHERE invite_id = ?"
-			).all(inviteId) as Array<{ app_id: number; role: string }>;
+			inviteRoles = db
+				.query("SELECT app_id, role FROM invite_roles WHERE invite_id = ?")
+				.all(inviteId) as Array<{ app_id: number; role: string }>;
 		}
 
 		// Verify WebAuthn response
@@ -208,17 +244,11 @@ export async function registerVerify(req: Request): Promise<Response> {
 			});
 		} catch (error) {
 			console.error("WebAuthn verification failed:", error);
-			return Response.json(
-				{ error: "Verification failed" },
-				{ status: 400 },
-			);
+			return Response.json({ error: "Verification failed" }, { status: 400 });
 		}
 
 		if (!verification.verified || !verification.registrationInfo) {
-			return Response.json(
-				{ error: "Verification failed" },
-				{ status: 400 },
-			);
+			return Response.json({ error: "Verification failed" }, { status: 400 });
 		}
 
 		const { credential } = verification.registrationInfo;
@@ -227,7 +257,12 @@ export async function registerVerify(req: Request): Promise<Response> {
 		const insertUser = db.query(
 			"INSERT INTO users (username, name, is_admin, role) VALUES (?, ?, ?, ?) RETURNING id",
 		);
-		const user = insertUser.get(username, username, isBootstrap ? 1 : 0, isBootstrap ? 'admin' : 'user') as {
+		const user = insertUser.get(
+			username,
+			username,
+			isBootstrap ? 1 : 0,
+			isBootstrap ? "admin" : "user",
+		) as {
 			id: number;
 		};
 
@@ -245,17 +280,17 @@ export async function registerVerify(req: Request): Promise<Response> {
 		// Mark invite as used if applicable
 		if (inviteId) {
 			const usedAt = Math.floor(Date.now() / 1000);
-			
+
 			// Increment invite usage counter
 			db.query(
 				"UPDATE invites SET current_uses = current_uses + 1 WHERE id = ?",
 			).run(inviteId);
-			
+
 			// Record this invite use
 			db.query(
 				"INSERT INTO invite_uses (invite_id, user_id, used_at) VALUES (?, ?, ?)",
 			).run(inviteId, user.id, usedAt);
-			
+
 			// Assign app roles to the new user
 			if (inviteRoles.length > 0) {
 				const insertPermission = db.query(
@@ -318,7 +353,7 @@ export async function loginOptions(req: Request): Promise<Response> {
 			return Response.json({ error: "User not found" }, { status: 404 });
 		}
 
-		if (user.status !== 'active') {
+		if (user.status !== "active") {
 			return Response.json({ error: "Account is suspended" }, { status: 403 });
 		}
 
@@ -328,10 +363,7 @@ export async function loginOptions(req: Request): Promise<Response> {
 			.all(user.id) as { credential_id: Buffer }[];
 
 		if (credentials.length === 0) {
-			return Response.json(
-				{ error: "No credentials found" },
-				{ status: 404 },
-			);
+			return Response.json({ error: "No credentials found" }, { status: 404 });
 		}
 
 		// Generate authentication options
@@ -372,28 +404,29 @@ export async function loginVerify(req: Request): Promise<Response> {
 
 		// Look up credential by ID to discover the username
 		const credentialIdString = response.id;
-		
+
 		const credentialWithUser = db
 			.query(
 				"SELECT c.credential_id, c.public_key, c.counter, c.user_id, u.username, u.status FROM credentials c JOIN users u ON c.user_id = u.id WHERE c.credential_id = ?",
 			)
 			.get(Buffer.from(credentialIdString)) as
-			| { credential_id: Buffer; public_key: Buffer; counter: number; user_id: number; username: string; status: string }
+			| {
+					credential_id: Buffer;
+					public_key: Buffer;
+					counter: number;
+					user_id: number;
+					username: string;
+					status: string;
+			  }
 			| undefined;
 
 		if (!credentialWithUser) {
-			return Response.json(
-				{ error: "Credential not found" },
-				{ status: 404 },
-			);
+			return Response.json({ error: "Credential not found" }, { status: 404 });
 		}
 
 		// Check if user account is active
-		if (credentialWithUser.status !== 'active') {
-			return Response.json(
-				{ error: "Account is suspended" },
-				{ status: 403 },
-			);
+		if (credentialWithUser.status !== "active") {
+			return Response.json({ error: "Account is suspended" }, { status: 403 });
 		}
 
 		// Verify the username matches
@@ -416,9 +449,7 @@ export async function loginVerify(req: Request): Promise<Response> {
 			.query(
 				"SELECT challenge, expires_at FROM challenges WHERE username = ? AND type = 'authentication' ORDER BY created_at DESC LIMIT 1",
 			)
-			.get(username) as
-			| { challenge: string; expires_at: number }
-			| undefined;
+			.get(username) as { challenge: string; expires_at: number } | undefined;
 
 		if (!challenge) {
 			return Response.json({ error: "Invalid challenge" }, { status: 400 });
@@ -445,21 +476,17 @@ export async function loginVerify(req: Request): Promise<Response> {
 			});
 		} catch (error) {
 			console.error("WebAuthn verification failed:", error);
-			return Response.json(
-				{ error: "Verification failed" },
-				{ status: 400 },
-			);
+			return Response.json({ error: "Verification failed" }, { status: 400 });
 		}
 
 		if (!verification.verified) {
-			return Response.json(
-				{ error: "Verification failed" },
-				{ status: 400 },
-			);
+			return Response.json({ error: "Verification failed" }, { status: 400 });
 		}
 
 		// Update credential counter
-		db.query("UPDATE credentials SET counter = ? WHERE user_id = ? AND credential_id = ?").run(
+		db.query(
+			"UPDATE credentials SET counter = ? WHERE user_id = ? AND credential_id = ?",
+		).run(
 			verification.authenticationInfo.newCounter,
 			user.id,
 			credential.credential_id,

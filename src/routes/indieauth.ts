@@ -1,5 +1,5 @@
-import { db } from "../db";
 import crypto from "crypto";
+import { db } from "../db";
 
 interface SessionUser {
 	username: string;
@@ -25,7 +25,13 @@ function getSessionUser(req: Request): SessionUser | Response {
 			WHERE s.token = ?`,
 		)
 		.get(token) as
-		| { expires_at: number; id: number; username: string; is_admin: number; status: string }
+		| {
+				expires_at: number;
+				id: number;
+				username: string;
+				is_admin: number;
+				status: string;
+		  }
 		| undefined;
 
 	if (!session) {
@@ -37,7 +43,7 @@ function getSessionUser(req: Request): SessionUser | Response {
 		return Response.json({ error: "Session expired" }, { status: 401 });
 	}
 
-	if (session.status !== 'active') {
+	if (session.status !== "active") {
 		return Response.json({ error: "Account is suspended" }, { status: 403 });
 	}
 
@@ -71,7 +77,13 @@ function getUserFromCookie(req: Request): SessionUser | null {
 			WHERE s.token = ?`,
 		)
 		.get(sessionToken) as
-		| { expires_at: number; id: number; username: string; is_admin: number; status: string }
+		| {
+				expires_at: number;
+				id: number;
+				username: string;
+				is_admin: number;
+				status: string;
+		  }
 		| undefined;
 
 	if (!session) return null;
@@ -79,7 +91,7 @@ function getUserFromCookie(req: Request): SessionUser | null {
 	const now = Math.floor(Date.now() / 1000);
 	if (session.expires_at < now) return null;
 
-	if (session.status !== 'active') return null;
+	if (session.status !== "active") return null;
 
 	return {
 		username: session.username,
@@ -95,10 +107,15 @@ function verifyPKCE(verifier: string, challenge: string): boolean {
 }
 
 // Auto-register app if it doesn't exist (only for valid URLs, not generated client_ids)
-function ensureApp(clientId: string, redirectUri: string): { error?: string; app?: { name: string | null; redirect_uris: string } } {
+function ensureApp(
+	clientId: string,
+	redirectUri: string,
+): { error?: string; app?: { name: string | null; redirect_uris: string } } {
 	const existing = db
 		.query("SELECT name, redirect_uris FROM apps WHERE client_id = ?")
-		.get(clientId) as { name: string | null; redirect_uris: string } | undefined;
+		.get(clientId) as
+		| { name: string | null; redirect_uris: string }
+		| undefined;
 
 	if (!existing) {
 		// Only allow auto-registration for valid URLs (IndieAuth standard)
@@ -106,19 +123,27 @@ function ensureApp(clientId: string, redirectUri: string): { error?: string; app
 		try {
 			new URL(clientId);
 		} catch {
-			return { error: "Client ID must be a valid URL for auto-registration. Non-URL clients must be pre-registered by an admin." };
+			return {
+				error:
+					"Client ID must be a valid URL for auto-registration. Non-URL clients must be pre-registered by an admin.",
+			};
 		}
 
 		// New app - auto-register (without pre-registration, no client secret or role)
 		db.query(
 			"INSERT INTO apps (client_id, redirect_uris, is_preregistered, first_seen, last_used) VALUES (?, ?, 0, ?, ?)",
-		).run(clientId, JSON.stringify([redirectUri]), Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000));
+		).run(
+			clientId,
+			JSON.stringify([redirectUri]),
+			Math.floor(Date.now() / 1000),
+			Math.floor(Date.now() / 1000),
+		);
 
 		// Fetch the newly created app
 		const newApp = db
 			.query("SELECT name, redirect_uris FROM apps WHERE client_id = ?")
 			.get(clientId) as { name: string | null; redirect_uris: string };
-		
+
 		return { app: newApp };
 	}
 
@@ -246,10 +271,10 @@ export function authorizeGet(req: Request): Response {
 	</div>
 </body>
 </html>`,
-			{ 
+			{
 				status: 400,
-				headers: { "Content-Type": "text/html" }
-			}
+				headers: { "Content-Type": "text/html" },
+			},
 		);
 	}
 
@@ -261,7 +286,7 @@ export function authorizeGet(req: Request): Response {
 
 	// Verify app is registered
 	const appResult = ensureApp(clientId, redirectUri);
-	
+
 	if (appResult.error) {
 		return new Response(
 			`<!DOCTYPE html>
@@ -356,13 +381,13 @@ export function authorizeGet(req: Request): Response {
 	</div>
 </body>
 </html>`,
-			{ 
+			{
 				status: 400,
-				headers: { "Content-Type": "text/html" }
-			}
+				headers: { "Content-Type": "text/html" },
+			},
 		);
 	}
-	
+
 	const app = appResult.app!;
 
 	const allowedRedirects = JSON.parse(app.redirect_uris) as string[];
@@ -456,10 +481,10 @@ export function authorizeGet(req: Request): Response {
 	</div>
 </body>
 </html>`,
-			{ 
+			{
 				status: 400,
-				headers: { "Content-Type": "text/html" }
-			}
+				headers: { "Content-Type": "text/html" },
+			},
 		);
 	}
 
@@ -474,16 +499,14 @@ export function authorizeGet(req: Request): Response {
 
 	// Verify app is registered
 	const appCheckResult = ensureApp(clientId, redirectUri);
-	
+
 	if (appCheckResult.error) {
 		return new Response(appCheckResult.error, { status: 400 });
 	}
 
 	// Check if user has previously granted permission to this app
 	const permission = db
-		.query(
-			"SELECT scopes FROM permissions WHERE user_id = ? AND client_id = ?",
-		)
+		.query("SELECT scopes FROM permissions WHERE user_id = ? AND client_id = ?")
 		.get(user.userId, clientId) as { scopes: string } | undefined;
 
 	const requestedScopes = scope.split(" ").filter(Boolean);
@@ -491,7 +514,9 @@ export function authorizeGet(req: Request): Response {
 	// If permission exists and covers all requested scopes, auto-approve
 	if (permission) {
 		const grantedScopes = JSON.parse(permission.scopes) as string[];
-		const hasAllScopes = requestedScopes.every((s) => grantedScopes.includes(s));
+		const hasAllScopes = requestedScopes.every((s) =>
+			grantedScopes.includes(s),
+		);
 
 		if (hasAllScopes) {
 			// Auto-approve - create auth code and redirect
@@ -544,13 +569,19 @@ function showConsentScreen(
 	// Load app metadata if pre-registered
 	const appData = db
 		.query("SELECT name, logo_url, description FROM apps WHERE client_id = ?")
-		.get(clientId) as { name: string | null; logo_url: string | null; description: string | null } | undefined;
-	
+		.get(clientId) as
+		| {
+				name: string | null;
+				logo_url: string | null;
+				description: string | null;
+		  }
+		| undefined;
+
 	// Determine app name and URL - custom apps have ikc_ prefix and should use name from DB
 	let appName: string;
 	let appUrl: string | null = null;
-	
-	if (clientId.startsWith('ikc_')) {
+
+	if (clientId.startsWith("ikc_")) {
 		// Custom app with generated ID
 		appName = appData?.name || clientId;
 	} else {
@@ -564,7 +595,7 @@ function showConsentScreen(
 			appName = appData?.name || clientId;
 		}
 	}
-	
+
 	const appLogo = appData?.logo_url;
 	const appDescription = appData?.description;
 
@@ -805,12 +836,12 @@ function showConsentScreen(
 
     <div class="app-header">
       <div class="app-logo">
-        ${appLogo ? `<img src="${appLogo}" alt="${appName}" />` : '🔐'}
+        ${appLogo ? `<img src="${appLogo}" alt="${appName}" />` : "🔐"}
       </div>
       <div class="app-info">
         <div class="app-name">${appName}</div>
-        ${appUrl ? `<div class="app-url">${appUrl}</div>` : ''}
-        ${appDescription ? `<div class="app-description">${appDescription}</div>` : ''}
+        ${appUrl ? `<div class="app-url">${appUrl}</div>` : ""}
+        ${appDescription ? `<div class="app-description">${appDescription}</div>` : ""}
       </div>
     </div>
 
@@ -822,21 +853,26 @@ function showConsentScreen(
       <div class="scope-title">requested permissions</div>
       <ul class="scope-list">
         ${scopes
-					.map(
-						(scope) => {
-							const isProfile = scope === "profile";
-							const description = scope === "profile" ? "Your profile (name, photo, URL)" : scope === "email" ? "Your email address" : scope;
-							const required = isProfile ? ' <span style="color: var(--old-rose); font-size: 0.875rem; margin-left: 0.5rem;">(required)</span>' : '';
-							return `
+					.map((scope) => {
+						const isProfile = scope === "profile";
+						const description =
+							scope === "profile"
+								? "Your profile (name, photo, URL)"
+								: scope === "email"
+									? "Your email address"
+									: scope;
+						const required = isProfile
+							? ' <span style="color: var(--old-rose); font-size: 0.875rem; margin-left: 0.5rem;">(required)</span>'
+							: "";
+						return `
           <li>
             <label>
-              <input type="checkbox" name="scope" value="${scope}" ${isProfile ? 'checked disabled' : 'checked'} />
+              <input type="checkbox" name="scope" value="${scope}" ${isProfile ? "checked disabled" : "checked"} />
               <span>${description}${required}</span>
             </label>
           </li>
         `;
-						},
-					)
+					})
 					.join("")}
       </ul>
     </div>
@@ -923,16 +959,26 @@ export async function authorizePost(req: Request): Promise<Response> {
 	if (existing) {
 		db.query(
 			"UPDATE permissions SET scopes = ?, last_used = ? WHERE user_id = ? AND client_id = ?",
-		).run(JSON.stringify(approvedScopes), Math.floor(Date.now() / 1000), user.userId, clientId);
+		).run(
+			JSON.stringify(approvedScopes),
+			Math.floor(Date.now() / 1000),
+			user.userId,
+			clientId,
+		);
 	} else {
 		// Get app's default role for new permissions
 		const app = db
 			.query("SELECT default_role FROM apps WHERE client_id = ?")
 			.get(clientId) as { default_role: string | null } | undefined;
-		
+
 		db.query(
 			"INSERT INTO permissions (user_id, client_id, scopes, role) VALUES (?, ?, ?, ?)",
-		).run(user.userId, clientId, JSON.stringify(approvedScopes), app?.default_role || null);
+		).run(
+			user.userId,
+			clientId,
+			JSON.stringify(approvedScopes),
+			app?.default_role || null,
+		);
 	}
 
 	// Update app last_used
@@ -941,7 +987,10 @@ export async function authorizePost(req: Request): Promise<Response> {
 		clientId,
 	);
 
-	return Response.redirect(`${redirectUri}?code=${code}&state=${state}`);
+	const origin = process.env.ORIGIN || "http://localhost:3000";
+	return Response.redirect(
+		`${redirectUri}?code=${code}&state=${state}&iss=${encodeURIComponent(origin)}`,
+	);
 }
 
 // POST /auth/token - Exchange authorization code for user identity
@@ -949,7 +998,7 @@ export async function token(req: Request): Promise<Response> {
 	try {
 		const contentType = req.headers.get("Content-Type");
 		let body: Record<string, string>;
-		
+
 		// Support both JSON and form-encoded requests
 		if (contentType?.includes("application/json")) {
 			body = await req.json();
@@ -961,98 +1010,106 @@ export async function token(req: Request): Promise<Response> {
 			return Response.json(
 				{
 					error: "invalid_request",
-					error_description: "Content-Type must be application/json or application/x-www-form-urlencoded",
+					error_description:
+						"Content-Type must be application/json or application/x-www-form-urlencoded",
 				},
 				{ status: 400 },
 			);
 		}
-		
+
 		const {
-		grant_type,
-		code,
-		client_id,
-		client_secret,
-		redirect_uri,
-		 code_verifier,
-	} = body;
+			grant_type,
+			code,
+			client_id,
+			client_secret,
+			redirect_uri,
+			code_verifier,
+		} = body;
 
 		if (grant_type !== "authorization_code") {
-		return Response.json(
-		{
-		error: "unsupported_grant_type",
-		 error_description: "Only authorization_code grant type is supported",
-		},
-		 { status: 400 },
-		 );
-	}
+			return Response.json(
+				{
+					error: "unsupported_grant_type",
+					error_description: "Only authorization_code grant type is supported",
+				},
+				{ status: 400 },
+			);
+		}
 
 		// Check if client is pre-registered and requires secret
 		const app = db
-		.query("SELECT is_preregistered, client_secret_hash FROM apps WHERE client_id = ?")
-		.get(client_id) as
-		| { is_preregistered: number; client_secret_hash: string | null }
-		| undefined;
+			.query(
+				"SELECT is_preregistered, client_secret_hash FROM apps WHERE client_id = ?",
+			)
+			.get(client_id) as
+			| { is_preregistered: number; client_secret_hash: string | null }
+			| undefined;
 
 		// If client is pre-registered, verify client secret
 		if (app && app.is_preregistered === 1) {
-		if (!client_secret) {
+			if (!client_secret) {
+				return Response.json(
+					{
+						error: "invalid_client",
+						error_description:
+							"client_secret is required for pre-registered clients",
+					},
+					{ status: 401 },
+				);
+			}
+
+			if (!app.client_secret_hash) {
+				return Response.json(
+					{
+						error: "server_error",
+						error_description: "Client secret not configured",
+					},
+					{ status: 500 },
+				);
+			}
+
+			// Verify client secret
+			const providedSecretHash = crypto
+				.createHash("sha256")
+				.update(client_secret)
+				.digest("hex");
+
+			if (providedSecretHash !== app.client_secret_hash) {
+				return Response.json(
+					{
+						error: "invalid_client",
+						error_description: "Invalid client_secret",
+					},
+					{ status: 401 },
+				);
+			}
+		}
+
+		if (!code || !client_id || !redirect_uri) {
+			console.error("Token endpoint: missing parameters", {
+				code: !!code,
+				client_id: !!client_id,
+				redirect_uri: !!redirect_uri,
+			});
 			return Response.json(
 				{
-					error: "invalid_client",
-					error_description: "client_secret is required for pre-registered clients",
+					error: "invalid_request",
+					error_description: "Missing required parameters",
 				},
-				{ status: 401 },
+				{ status: 400 },
 			);
 		}
 
-		if (!app.client_secret_hash) {
+		// PKCE is required for all clients per IndieAuth spec
+		if (!code_verifier) {
 			return Response.json(
 				{
-					error: "server_error",
-					error_description: "Client secret not configured",
+					error: "invalid_request",
+					error_description: "code_verifier is required (PKCE)",
 				},
-				{ status: 500 },
+				{ status: 400 },
 			);
 		}
-
-		// Verify client secret
-		const providedSecretHash = crypto
-			.createHash("sha256")
-			.update(client_secret)
-			.digest("hex");
-
-		if (providedSecretHash !== app.client_secret_hash) {
-			return Response.json(
-				{
-					error: "invalid_client",
-					error_description: "Invalid client_secret",
-				},
-				{ status: 401 },
-			);
-		}
-	}
-
-	if (!code || !client_id || !redirect_uri) {
-		console.error("Token endpoint: missing parameters", { code: !!code, client_id: !!client_id, redirect_uri: !!redirect_uri });
-		return Response.json(
-			{
-				error: "invalid_request",
-				error_description: "Missing required parameters",
-			},
-			{ status: 400 },
-		);
-	}
-
-	// For auto-registered clients, code_verifier (PKCE) is still required
-	if ((!app || app.is_preregistered === 0) && !code_verifier) {
-		return Response.json(
-			{
-				error: "invalid_request",
-				error_description: "code_verifier is required for public clients",
-			},
-			{ status: 400 },
-		);
-	}
 
 		// Look up authorization code
 		const authcode = db
@@ -1127,27 +1184,23 @@ export async function token(req: Request): Promise<Response> {
 			);
 		}
 
-		// Verify PKCE code_verifier (only for public clients)
-		if ((!app || app.is_preregistered === 0) && code_verifier) {
+		// Verify PKCE code_verifier (required for all clients per IndieAuth spec)
 		if (!verifyPKCE(code_verifier, authcode.code_challenge)) {
-		return Response.json(
-		{
-		 error: "invalid_grant",
-		  error_description: "Invalid code_verifier",
-		 },
-		  { status: 400 },
-		  );
+			return Response.json(
+				{
+					error: "invalid_grant",
+					error_description: "Invalid code_verifier",
+				},
+				{ status: 400 },
+			);
 		}
-	}
 
 		// Mark code as used
 		db.query("UPDATE authcodes SET used = 1 WHERE code = ?").run(code);
 
 		// Get user profile
 		const user = db
-			.query(
-				"SELECT username, name, email, photo, url FROM users WHERE id = ?",
-			)
+			.query("SELECT username, name, email, photo, url FROM users WHERE id = ?")
 			.get(authcode.user_id) as
 			| {
 					username: string;
@@ -1239,9 +1292,11 @@ export function userProfile(req: Request): Response {
 	if (!username) {
 		return new Response("Username required", { status: 400 });
 	}
-	
+
 	const user = db
-		.query("SELECT username, name, email, photo, url FROM users WHERE username = ?")
+		.query(
+			"SELECT username, name, email, photo, url FROM users WHERE username = ?",
+		)
 		.get(username) as
 		| {
 				username: string;
@@ -1264,6 +1319,7 @@ export function userProfile(req: Request): Response {
   <title>${user.name} • indiko</title>
   <meta name="description" content="${user.name}'s profile on Indiko${user.url ? ` - ${user.url}` : ""}" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="indieauth-metadata" href="${process.env.ORIGIN}/.well-known/oauth-authorization-server" />
   <link rel="authorization_endpoint" href="${process.env.ORIGIN}/auth/authorize" />
   <link rel="token_endpoint" href="${process.env.ORIGIN}/auth/token" />
   ${user.url ? `<link rel="me" href="${user.url}" />` : ""}
@@ -1436,7 +1492,8 @@ export function userProfile(req: Request): Response {
       <p>
         You can delegate IndieAuth to this server from your own website. Add these tags to your site's <code>&lt;head&gt;</code>:
       </p>
-      <div class="code-box"><span class="html-tag">&lt;link</span> <span class="html-attr">rel</span>=<span class="html-value">"authorization_endpoint"</span> <span class="html-attr">href</span>=<span class="html-value">"${process.env.ORIGIN}/auth/authorize"</span> <span class="html-tag">/&gt;</span>
+      <div class="code-box"><span class="html-tag">&lt;link</span> <span class="html-attr">rel</span>=<span class="html-value">"indieauth-metadata"</span> <span class="html-attr">href</span>=<span class="html-value">"${process.env.ORIGIN}/.well-known/oauth-authorization-server"</span> <span class="html-tag">/&gt;</span>
+<span class="html-tag">&lt;link</span> <span class="html-attr">rel</span>=<span class="html-value">"authorization_endpoint"</span> <span class="html-attr">href</span>=<span class="html-value">"${process.env.ORIGIN}/auth/authorize"</span> <span class="html-tag">/&gt;</span>
 <span class="html-tag">&lt;link</span> <span class="html-attr">rel</span>=<span class="html-value">"token_endpoint"</span> <span class="html-attr">href</span>=<span class="html-value">"${process.env.ORIGIN}/auth/token"</span> <span class="html-tag">/&gt;</span>
 <span class="html-tag">&lt;link</span> <span class="html-attr">rel</span>=<span class="html-value">"me"</span> <span class="html-attr">href</span>=<span class="html-value">"${process.env.ORIGIN}/u/${user.username}"</span> <span class="html-tag">/&gt;</span></div>
       <p>
@@ -1451,8 +1508,12 @@ export function userProfile(req: Request): Response {
 </body>
 </html>`;
 
+	const origin = process.env.ORIGIN || "http://localhost:3000";
 	return new Response(html, {
-		headers: { "Content-Type": "text/html" },
+		headers: {
+			"Content-Type": "text/html",
+			Link: `<${origin}/.well-known/oauth-authorization-server>; rel="indieauth-metadata"`,
+		},
 	});
 }
 
@@ -1467,7 +1528,7 @@ export async function createInvite(req: Request): Promise<Response> {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
-	const body = await req.json() as {
+	const body = (await req.json()) as {
 		maxUses?: number;
 		expiresAt?: number | null;
 		note?: string | null;
@@ -1481,9 +1542,11 @@ export async function createInvite(req: Request): Promise<Response> {
 	const note = body.note || null;
 	const message = body.message || null;
 
-	const result = db.query(
-		"INSERT INTO invites (code, created_by, max_uses, expires_at, note, message) VALUES (?, ?, ?, ?, ?, ?)",
-	).run(inviteCode, user.userId, maxUses, expiresAt, note, message);
+	const result = db
+		.query(
+			"INSERT INTO invites (code, created_by, max_uses, expires_at, note, message) VALUES (?, ?, ?, ?, ?, ?)",
+		)
+		.run(inviteCode, user.userId, maxUses, expiresAt, note, message);
 
 	const inviteId = Number(result.lastInsertRowid);
 
@@ -1514,13 +1577,15 @@ export function listInvites(req: Request): Response {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
-	const invites = db.query(`
+	const invites = db
+		.query(`
 		SELECT i.id, i.code, i.max_uses, i.current_uses, i.expires_at, i.note, i.message, i.created_at,
 			creator.username as created_by_username
 		FROM invites i
 		LEFT JOIN users creator ON i.created_by = creator.id
 		ORDER BY i.created_at DESC
-	`).all() as Array<{
+	`)
+		.all() as Array<{
 		id: number;
 		code: string;
 		max_uses: number;
@@ -1533,11 +1598,13 @@ export function listInvites(req: Request): Response {
 	}>;
 
 	// Get app roles for each invite
-	const inviteRoles = db.query(`
+	const inviteRoles = db
+		.query(`
 		SELECT ir.invite_id, ir.app_id, ir.role, a.client_id, a.name
 		FROM invite_roles ir
 		JOIN apps a ON ir.app_id = a.id
-	`).all() as Array<{
+	`)
+		.all() as Array<{
 		invite_id: number;
 		app_id: number;
 		role: string;
@@ -1546,12 +1613,14 @@ export function listInvites(req: Request): Response {
 	}>;
 
 	// Get users who used each invite
-	const inviteUses = db.query(`
+	const inviteUses = db
+		.query(`
 		SELECT iu.invite_id, iu.used_at, u.username
 		FROM invite_uses iu
 		JOIN users u ON iu.user_id = u.id
 		ORDER BY iu.used_at DESC
-	`).all() as Array<{
+	`)
+		.all() as Array<{
 		invite_id: number;
 		used_at: number;
 		username: string;
@@ -1610,7 +1679,7 @@ export async function updateInvite(req: Request): Promise<Response> {
 		return Response.json({ error: "Invalid invite ID" }, { status: 400 });
 	}
 
-	const body = await req.json() as {
+	const body = (await req.json()) as {
 		maxUses?: number | null;
 		expiresAt?: number | null;
 		note?: string | null;
@@ -1643,7 +1712,9 @@ export async function updateInvite(req: Request): Promise<Response> {
 
 	values.push(inviteId);
 
-	db.query(`UPDATE invites SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+	db.query(`UPDATE invites SET ${updates.join(", ")} WHERE id = ?`).run(
+		...values,
+	);
 
 	return Response.json({ success: true });
 }
@@ -1673,3 +1744,25 @@ export function deleteInvite(req: Request): Response {
 	return Response.json({ success: true });
 }
 
+// GET /.well-known/oauth-authorization-server - IndieAuth metadata endpoint
+export function indieauthMetadata(): Response {
+	const origin = process.env.ORIGIN || "http://localhost:3000";
+
+	const metadata = {
+		issuer: origin,
+		authorization_endpoint: `${origin}/auth/authorize`,
+		token_endpoint: `${origin}/auth/token`,
+		code_challenge_methods_supported: ["S256"],
+		scopes_supported: ["profile", "email"],
+		response_types_supported: ["code"],
+		grant_types_supported: ["authorization_code"],
+		service_documentation: `${origin}/docs`,
+	};
+
+	return Response.json(metadata, {
+		headers: {
+			"Content-Type": "application/json",
+			"Access-Control-Allow-Origin": "*",
+		},
+	});
+}

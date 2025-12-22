@@ -1,6 +1,8 @@
 import { db } from "../db";
 
-function getSessionUser(req: Request): { username: string; userId: number; is_admin: boolean } | Response {
+function getSessionUser(
+	req: Request,
+): { username: string; userId: number; is_admin: boolean } | Response {
 	const authHeader = req.headers.get("Authorization");
 
 	if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -18,7 +20,13 @@ function getSessionUser(req: Request): { username: string; userId: number; is_ad
 			WHERE s.token = ?`,
 		)
 		.get(token) as
-		| { expires_at: number; user_id: number; username: string; is_admin: number; status: string }
+		| {
+				expires_at: number;
+				user_id: number;
+				username: string;
+				is_admin: number;
+				status: string;
+		  }
 		| undefined;
 
 	if (!session) {
@@ -30,7 +38,7 @@ function getSessionUser(req: Request): { username: string; userId: number; is_ad
 		return Response.json({ error: "Session expired" }, { status: 401 });
 	}
 
-	if (session.status !== 'active') {
+	if (session.status !== "active") {
 		return Response.json({ error: "Account is suspended" }, { status: 403 });
 	}
 
@@ -170,7 +178,10 @@ export async function updateProfile(req: Request): Promise<Response> {
 		return Response.json({ success: true });
 	} catch (error) {
 		console.error("Update profile error:", error);
-		return Response.json({ error: "Failed to update profile" }, { status: 500 });
+		return Response.json(
+			{ error: "Failed to update profile" },
+			{ status: 500 },
+		);
 	}
 }
 
@@ -414,7 +425,10 @@ export function disableUser(req: Request, userId: string): Response {
 
 	// Prevent disabling self
 	if (targetUserId === user.id) {
-		return Response.json({ error: "Cannot disable your own account" }, { status: 400 });
+		return Response.json(
+			{ error: "Cannot disable your own account" },
+			{ status: 400 },
+		);
 	}
 
 	const targetUser = db
@@ -425,7 +439,9 @@ export function disableUser(req: Request, userId: string): Response {
 		return Response.json({ error: "User not found" }, { status: 404 });
 	}
 
-	db.query("UPDATE users SET status = 'suspended' WHERE id = ?").run(targetUserId);
+	db.query("UPDATE users SET status = 'suspended' WHERE id = ?").run(
+		targetUserId,
+	);
 
 	db.query("DELETE FROM sessions WHERE user_id = ?").run(targetUserId);
 
@@ -476,7 +492,10 @@ export function deleteUser(req: Request, userId: string): Response {
 	}
 
 	if (targetUserId === user.userId) {
-		return Response.json({ error: "Cannot delete your own account" }, { status: 400 });
+		return Response.json(
+			{ error: "Cannot delete your own account" },
+			{ status: 400 },
+		);
 	}
 
 	const targetUser = db
@@ -489,7 +508,10 @@ export function deleteUser(req: Request, userId: string): Response {
 
 	// Prevent admins from deleting other admin accounts
 	if (targetUser.is_admin === 1) {
-		return Response.json({ error: "Cannot delete admin accounts" }, { status: 403 });
+		return Response.json(
+			{ error: "Cannot delete admin accounts" },
+			{ status: 403 },
+		);
 	}
 
 	db.query("DELETE FROM sessions WHERE user_id = ?").run(targetUserId);
@@ -509,9 +531,13 @@ export function deleteSelfAccount(req: Request): Response {
 
 	// Prevent admins from deleting their own accounts
 	if (user.is_admin) {
-		return Response.json({ 
-			error: "Admin accounts cannot be self-deleted. Contact another admin for account deletion." 
-		}, { status: 403 });
+		return Response.json(
+			{
+				error:
+					"Admin accounts cannot be self-deleted. Contact another admin for account deletion.",
+			},
+			{ status: 403 },
+		);
 	}
 
 	// Delete all user data

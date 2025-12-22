@@ -32,7 +32,12 @@ body {
 h1 {
 	font-size: 2rem;
 	font-weight: 700;
-	background: linear-gradient(135deg, var(--old-rose), var(--berry-crush), var(--rosewood));
+	background: linear-gradient(
+		135deg,
+		var(--old-rose),
+		var(--berry-crush),
+		var(--rosewood)
+	);
 	-webkit-background-clip: text;
 	-webkit-text-fill-color: transparent;
 	background-clip: text;
@@ -147,7 +152,7 @@ button {
 }
 
 button::before {
-	content: '';
+	content: "";
 	position: absolute;
 	top: -4px;
 	left: -4px;
@@ -504,7 +509,7 @@ footer a:hover {
 
 .divider::before,
 .divider::after {
-	content: '';
+	content: "";
 	flex: 1;
 	border-bottom: 1px solid rgba(188, 141, 160, 0.3);
 }

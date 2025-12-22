@@ -1,6 +1,6 @@
-import { db } from "../db";
 import crypto from "crypto";
 import { nanoid } from "nanoid";
+import { db } from "../db";
 
 function hashSecret(secret: string): string {
 	return crypto.createHash("sha256").update(secret).digest("hex");
@@ -14,7 +14,9 @@ function generateClientId(): string {
 	return `ikc_${nanoid(21)}`; // indiko client
 }
 
-function getSessionUser(req: Request): { username: string; userId: number; is_admin: boolean } | Response {
+function getSessionUser(
+	req: Request,
+): { username: string; userId: number; is_admin: boolean } | Response {
 	const authHeader = req.headers.get("Authorization");
 
 	if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -31,7 +33,13 @@ function getSessionUser(req: Request): { username: string; userId: number; is_ad
 			WHERE s.token = ?`,
 		)
 		.get(token) as
-		| { expires_at: number; user_id: number; username: string; is_admin: number; status: string }
+		| {
+				expires_at: number;
+				user_id: number;
+				username: string;
+				is_admin: number;
+				status: string;
+		  }
 		| undefined;
 
 	if (!session) {
@@ -43,7 +51,7 @@ function getSessionUser(req: Request): { username: string; userId: number; is_ad
 		return Response.json({ error: "Session expired" }, { status: 401 });
 	}
 
-	if (session.status !== 'active') {
+	if (session.status !== "active") {
 		return Response.json({ error: "Account is suspended" }, { status: 403 });
 	}
 
@@ -140,17 +148,34 @@ export async function createClient(req: Request): Promise<Response> {
 
 	try {
 		const body = await req.json();
-		const { name, logoUrl, description, redirectUris, availableRoles, defaultRole } = body;
+		const {
+			name,
+			logoUrl,
+			description,
+			redirectUris,
+			availableRoles,
+			defaultRole,
+		} = body;
 
-		if (!redirectUris || !Array.isArray(redirectUris) || redirectUris.length === 0) {
-			return Response.json({ error: "At least one redirect URI is required" }, { status: 400 });
+		if (
+			!redirectUris ||
+			!Array.isArray(redirectUris) ||
+			redirectUris.length === 0
+		) {
+			return Response.json(
+				{ error: "At least one redirect URI is required" },
+				{ status: 400 },
+			);
 		}
 
 		for (const uri of redirectUris) {
 			try {
 				new URL(uri);
 			} catch {
-				return Response.json({ error: `Invalid redirect URI: ${uri}` }, { status: 400 });
+				return Response.json(
+					{ error: `Invalid redirect URI: ${uri}` },
+					{ status: 400 },
+				);
 			}
 		}
 
@@ -163,14 +188,26 @@ export async function createClient(req: Request): Promise<Response> {
 		let rolesArray: string[] = [];
 		if (availableRoles) {
 			if (!Array.isArray(availableRoles)) {
-				return Response.json({ error: "Available roles must be an array" }, { status: 400 });
+				return Response.json(
+					{ error: "Available roles must be an array" },
+					{ status: 400 },
+				);
 			}
-			rolesArray = availableRoles.filter((r: unknown) => typeof r === 'string' && r.trim());
+			rolesArray = availableRoles.filter(
+				(r: unknown) => typeof r === "string" && r.trim(),
+			);
 		}
 
 		// Validate default role is in available roles
-		if (defaultRole && rolesArray.length > 0 && !rolesArray.includes(defaultRole)) {
-			return Response.json({ error: "Default role must be one of the available roles" }, { status: 400 });
+		if (
+			defaultRole &&
+			rolesArray.length > 0 &&
+			!rolesArray.includes(defaultRole)
+		) {
+			return Response.json(
+				{ error: "Default role must be one of the available roles" },
+				{ status: 400 },
+			);
 		}
 
 		const result = db
@@ -289,7 +326,9 @@ export function getClient(req: Request, clientId: string): Response {
 			description: client.description,
 			redirectUris: JSON.parse(client.redirect_uris) as string[],
 			isPreregistered: client.is_preregistered === 1,
-			availableRoles: client.available_roles ? JSON.parse(client.available_roles) as string[] : null,
+			availableRoles: client.available_roles
+				? (JSON.parse(client.available_roles) as string[])
+				: null,
 			defaultRole: client.default_role,
 			firstSeen: client.first_seen,
 			lastUsed: client.last_used,
@@ -305,7 +344,10 @@ export function getClient(req: Request, clientId: string): Response {
 	});
 }
 
-export async function updateClient(req: Request, clientId: string): Promise<Response> {
+export async function updateClient(
+	req: Request,
+	clientId: string,
+): Promise<Response> {
 	const user = getSessionUser(req);
 	if (user instanceof Response) {
 		return user;
@@ -317,7 +359,14 @@ export async function updateClient(req: Request, clientId: string): Promise<Resp
 
 	try {
 		const body = await req.json();
-		const { name, logoUrl, description, redirectUris, availableRoles, defaultRole } = body;
+		const {
+			name,
+			logoUrl,
+			description,
+			redirectUris,
+			availableRoles,
+			defaultRole,
+		} = body;
 
 		const existing = db
 			.query("SELECT id, is_preregistered FROM apps WHERE client_id = ?")
@@ -329,14 +378,20 @@ export async function updateClient(req: Request, clientId: string): Promise<Resp
 
 		if (redirectUris) {
 			if (!Array.isArray(redirectUris) || redirectUris.length === 0) {
-				return Response.json({ error: "At least one redirect URI is required" }, { status: 400 });
+				return Response.json(
+					{ error: "At least one redirect URI is required" },
+					{ status: 400 },
+				);
 			}
 
 			for (const uri of redirectUris) {
 				try {
 					new URL(uri);
 				} catch {
-					return Response.json({ error: `Invalid redirect URI: ${uri}` }, { status: 400 });
+					return Response.json(
+						{ error: `Invalid redirect URI: ${uri}` },
+						{ status: 400 },
+					);
 				}
 			}
 		}
@@ -348,15 +403,28 @@ export async function updateClient(req: Request, clientId: string): Promise<Resp
 				// Explicitly disable roles
 				rolesArray = null;
 			} else if (Array.isArray(availableRoles)) {
-				rolesArray = availableRoles.filter((r: unknown) => typeof r === 'string' && r.trim());
+				rolesArray = availableRoles.filter(
+					(r: unknown) => typeof r === "string" && r.trim(),
+				);
 			} else {
-				return Response.json({ error: "Available roles must be an array or null" }, { status: 400 });
+				return Response.json(
+					{ error: "Available roles must be an array or null" },
+					{ status: 400 },
+				);
 			}
 		}
 
 		// Validate default role is in available roles
-		if (defaultRole && rolesArray && rolesArray.length > 0 && !rolesArray.includes(defaultRole)) {
-			return Response.json({ error: "Default role must be one of the available roles" }, { status: 400 });
+		if (
+			defaultRole &&
+			rolesArray &&
+			rolesArray.length > 0 &&
+			!rolesArray.includes(defaultRole)
+		) {
+			return Response.json(
+				{ error: "Default role must be one of the available roles" },
+				{ status: 400 },
+			);
 		}
 
 		db.query(
@@ -368,7 +436,11 @@ export async function updateClient(req: Request, clientId: string): Promise<Resp
 			logoUrl || null,
 			description || null,
 			redirectUris ? JSON.stringify(redirectUris) : null,
-			rolesArray !== null ? (rolesArray.length > 0 ? JSON.stringify(rolesArray) : null) : null,
+			rolesArray !== null
+				? rolesArray.length > 0
+					? JSON.stringify(rolesArray)
+					: null
+				: null,
 			defaultRole || null,
 			clientId,
 		);
@@ -431,7 +503,9 @@ export async function setUserRole(
 
 		const client = db
 			.query("SELECT id, available_roles FROM apps WHERE client_id = ?")
-			.get(clientId) as { id: number; available_roles: string | null } | undefined;
+			.get(clientId) as
+			| { id: number; available_roles: string | null }
+			| undefined;
 
 		if (!client) {
 			return Response.json({ error: "Client not found" }, { status: 404 });
@@ -441,9 +515,12 @@ export async function setUserRole(
 		if (role && client.available_roles) {
 			const availableRoles = JSON.parse(client.available_roles) as string[];
 			if (!availableRoles.includes(role)) {
-				return Response.json({ 
-					error: `Role must be one of: ${availableRoles.join(', ')}` 
-				}, { status: 400 });
+				return Response.json(
+					{
+						error: `Role must be one of: ${availableRoles.join(", ")}`,
+					},
+					{ status: 400 },
+				);
 			}
 		}
 
@@ -452,14 +529,15 @@ export async function setUserRole(
 			.get(targetUser.id, clientId) as { id: number } | undefined;
 
 		if (!permission) {
-			return Response.json({ error: "User has not authorized this client" }, { status: 404 });
+			return Response.json(
+				{ error: "User has not authorized this client" },
+				{ status: 404 },
+			);
 		}
 
-		db.query("UPDATE permissions SET role = ? WHERE user_id = ? AND client_id = ?").run(
-			role || null,
-			targetUser.id,
-			clientId,
-		);
+		db.query(
+			"UPDATE permissions SET role = ? WHERE user_id = ? AND client_id = ?",
+		).run(role || null, targetUser.id, clientId);
 
 		return Response.json({ success: true });
 	} catch (error) {
@@ -468,7 +546,10 @@ export async function setUserRole(
 	}
 }
 
-export function regenerateClientSecret(req: Request, clientId: string): Response {
+export function regenerateClientSecret(
+	req: Request,
+	clientId: string,
+): Response {
 	const user = getSessionUser(req);
 	if (user instanceof Response) {
 		return user;

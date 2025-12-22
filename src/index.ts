@@ -43,6 +43,7 @@ import {
 	authorizePost,
 	createInvite,
 	deleteInvite,
+	indieauthMetadata,
 	listInvites,
 	logout,
 	token,
@@ -140,6 +141,7 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 				},
 			);
 		},
+		"/.well-known/oauth-authorization-server": indieauthMetadata,
 		// API endpoints
 		"/api/hello": hello,
 		"/api/users": listUsers,
