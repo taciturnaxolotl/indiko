@@ -580,7 +580,11 @@
 				<li><a href="#getting-started">getting started</a></li>
 				<li><a href="#button">sign in button</a></li>
 				<li><a href="#endpoints">endpoints</a></li>
-				<li><a href="#authorization">authorization flow</a></li>
+				<li><a href="#authorization">authorization flow</a>
+					<ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+						<li><a href="#authorization" style="font-size: 0.9rem;">discovery</a></li>
+					</ul>
+				</li>
 				<li><a href="#scopes">scopes</a></li>
 				<li><a href="#roles">roles</a></li>
 				<li><a href="#clients">client types</a></li>
@@ -624,8 +628,31 @@
 			<div class="info-box">
 				<strong>Auto-registration:</strong>
 				Apps are automatically registered on first use. You don't need admin approval to get started.
-				For advanced features like client secrets and role assignment, contact your Indiko admin to pre-register your
-				app.
+				During registration, Indiko fetches your client metadata from your <code>client_id</code> URL to validate redirect URIs and display your app name/logo.
+				For advanced features like client secrets and role assignment, contact your Indiko admin to pre-register your app.
+			</div>
+
+			<h3>publishing client metadata (recommended)</h3>
+			<p>
+				To help Indiko verify your app and display proper branding, publish client metadata as JSON at your <code>client_id</code> URL:
+			</p>
+			<pre><code>{
+  "client_id": "https://myapp.example.com/",
+  "client_name": "My App",
+  "logo_uri": "https://myapp.example.com/logo.png",
+  "redirect_uris": [
+    "https://myapp.example.com/callback",
+    "https://myapp.example.com/auth/callback"
+  ]
+}</code></pre>
+			<p>
+				Alternatively, you can publish redirect URIs as HTML <code>&lt;link&gt;</code> tags:
+			</p>
+			<pre><code>&lt;link rel="redirect_uri" href="https://myapp.example.com/callback" /&gt;</code></pre>
+
+			<div class="info-box">
+				<strong>Security:</strong>
+				If your <code>redirect_uri</code> uses a different host than your <code>client_id</code>, you MUST publish <code>redirect_uris</code> in your client metadata. This prevents unauthorized apps from hijacking your client_id.
 			</div>
 
 			<h3>for users</h3>
@@ -675,6 +702,11 @@
 				</thead>
 				<tbody>
 					<tr>
+						<td><code>/.well-known/oauth-authorization-server</code></td>
+						<td>GET</td>
+						<td>IndieAuth server metadata (discovery endpoint)</td>
+					</tr>
+					<tr>
 						<td><code>/auth/authorize</code></td>
 						<td>GET</td>
 						<td>Start OAuth authorization flow</td>
@@ -692,7 +724,7 @@
 					<tr>
 						<td><code>/u/:username</code></td>
 						<td>GET</td>
-						<td>Public user profile (h-card)</td>
+						<td>Public user profile (h-card with discovery links)</td>
 					</tr>
 				</tbody>
 			</table>
@@ -744,6 +776,26 @@
 		<section id="authorization" class="section">
 			<h2>authorization flow</h2>
 
+			<h3>0. discovery (recommended)</h3>
+			<p>
+				Before starting authorization, clients should discover the authorization server's endpoints from the user's profile URL:
+			</p>
+			<ol>
+				<li>Fetch the user's profile URL (e.g., <code id="discoveryUrl">http://localhost:3000/u/username</code>)</li>
+				<li>Look for <code>&lt;link rel="indieauth-metadata"&gt;</code> tag or HTTP <code>Link:</code> header</li>
+				<li>Fetch the metadata endpoint to get <code>authorization_endpoint</code> and <code>token_endpoint</code></li>
+			</ol>
+			<p>
+				The metadata endpoint returns:
+			</p>
+			<pre><code>{
+  <span class="json-key">"issuer"</span>: <span class="json-string" id="metadataIssuer">"http://localhost:3000"</span>,
+  <span class="json-key">"authorization_endpoint"</span>: <span class="json-string" id="metadataAuthEndpoint">"http://localhost:3000/auth/authorize"</span>,
+  <span class="json-key">"token_endpoint"</span>: <span class="json-string" id="metadataTokenEndpoint">"http://localhost:3000/auth/token"</span>,
+  <span class="json-key">"code_challenge_methods_supported"</span>: [<span class="json-string">"S256"</span>],
+  <span class="json-key">"scopes_supported"</span>: [<span class="json-string">"profile"</span>, <span class="json-string">"email"</span>]
+}</code></pre>
+
 			<h3>1. redirect to authorization endpoint</h3>
 			<pre><code><span class="http-method">GET</span> <span class="http-url" id="authUrl">http://localhost:3000/auth/authorize</span>?<span
 						class="http-param">response_type</span>=code
@@ -773,7 +825,13 @@
 			<h3>3. redirect back with code</h3>
 			<pre><code><span class="http-url">https://myapp.example.com/callback</span>?<span
 						class="http-param">code</span>=short_lived_authorization_code
-					&<span class="http-param">state</span>=random_state_string</code></pre>
+					&<span class="http-param">state</span>=random_state_string
+					&<span class="http-param">iss</span>=<span class="http-url" id="issuerUrl">http://localhost:3000</span></code></pre>
+
+			<div class="info-box">
+				<strong>Security:</strong>
+				The <code>iss</code> (issuer) parameter allows you to verify the response came from the expected authorization server. Compare it to the <code>issuer</code> from the metadata endpoint.
+			</div>
 
 			<h3>4. exchange code for token</h3>
 			<pre><code><span class="http-method">POST</span> <span class="http-url" id="tokenUrl">http://localhost:3000/auth/token</span>
@@ -788,7 +846,7 @@
 
 			<div class="info-box">
 				<strong>Client authentication:</strong>
-				Public clients (auto-registered) use PKCE for security. Pre-registered confidential clients must include <code>client_secret</code> in the token request.
+				All clients MUST use PKCE (code_verifier) per the IndieAuth specification. Pre-registered confidential clients should also include <code>client_secret</code> in the token request for additional security.
 			</div>
 
 			<h3>5. receive user profile</h3>
@@ -901,24 +959,30 @@
 
 			<h3>auto-registered clients</h3>
 			<p>
-				Any app can use Indiko without pre-registration. On first authorization, the client is automatically registered
-				with:
+				Any app can use Indiko without pre-registration. On first authorization, Indiko will:
 			</p>
 			<ul>
-				<li>Client ID (must be a valid URL)</li>
-				<li>Redirect URIs</li>
-				<li>Last used timestamp</li>
+				<li>Validate the client ID (must be a valid URL per IndieAuth spec)</li>
+				<li>Fetch client metadata from the client_id URL (if available)</li>
+				<li>Validate redirect_uri against published redirect_uris (if different host)</li>
+				<li>Extract and store client name and logo (if provided)</li>
+				<li>Automatically register the client for future use</li>
 			</ul>
 			<p>
-				Auto-registered clients <strong>cannot</strong> use client secrets or role assignment. They must use PKCE for security.
+				Auto-registered clients <strong>must</strong> use PKCE for security and <strong>cannot</strong> use client secrets or role assignment.
 			</p>
+
+			<div class="info-box">
+				<strong>Security:</strong>
+				For redirect URIs on different hosts than your client_id, you must publish redirect_uris in your client metadata. See <a href="#getting-started">getting started</a> for details.
+			</div>
 
 			<h3>pre-registered clients</h3>
 			<p>
-				Admins can pre-register clients for advanced features. <strong>All pre-registered clients require a client secret.</strong>
+				Admins can pre-register clients for advanced features. <strong>All pre-registered clients require a client secret and must also use PKCE.</strong>
 			</p>
 			<ul>
-				<li><strong>Client secret:</strong> Required for all pre-registered clients (used in token exchange)</li>
+				<li><strong>Client secret:</strong> Required for all pre-registered clients (used in token exchange alongside PKCE)</li>
 				<li><strong>Role assignment:</strong> Admins can assign per-user roles for RBAC</li>
 				<li><strong>Available roles:</strong> Define which roles can be assigned (enforces dropdown selection)</li>
 				<li><strong>Default role:</strong> Automatically assigned to users on first authorization</li>

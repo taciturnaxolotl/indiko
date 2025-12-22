@@ -106,43 +106,329 @@ function verifyPKCE(verifier: string, challenge: string): boolean {
 	return hash === challenge;
 }
 
-// Auto-register app if it doesn't exist (only for valid URLs, not generated client_ids)
-function ensureApp(
+// Canonicalize URL per IndieAuth spec
+function canonicalizeURL(urlString: string): string {
+	const url = new URL(urlString);
+	// Lowercase hostname per spec
+	url.hostname = url.hostname.toLowerCase();
+	// Add / path if missing
+	if (!url.pathname || url.pathname === "") {
+		url.pathname = "/";
+	}
+	return url.toString();
+}
+
+// Validate profile URL per IndieAuth spec
+function validateProfileURL(urlString: string): { valid: boolean; error?: string; canonicalUrl?: string } {
+	let url: URL;
+	try {
+		url = new URL(urlString);
+	} catch {
+		return { valid: false, error: "Invalid URL format" };
+	}
+
+	// MUST use http or https scheme
+	if (url.protocol !== "http:" && url.protocol !== "https:") {
+		return { valid: false, error: "Profile URL must use http or https scheme" };
+	}
+
+	// MUST contain path component (/ is valid)
+	if (!url.pathname) {
+		url.pathname = "/";
+	}
+
+	// MUST NOT contain fragments
+	if (url.hash) {
+		return { valid: false, error: "Profile URL must not contain fragments" };
+	}
+
+	// MUST NOT contain username/password
+	if (url.username || url.password) {
+		return { valid: false, error: "Profile URL must not contain username or password" };
+	}
+
+	// MUST NOT contain ports
+	if (url.port) {
+		return { valid: false, error: "Profile URL must not contain ports" };
+	}
+
+	// MUST NOT use IP addresses
+	const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+	const ipv6Regex = /^\[?[0-9a-fA-F:]+\]?$/;
+	if (ipv4Regex.test(url.hostname) || ipv6Regex.test(url.hostname)) {
+		return { valid: false, error: "Profile URL must use domain names, not IP addresses" };
+	}
+
+	// MUST NOT contain single-dot or double-dot path segments
+	const pathSegments = url.pathname.split("/");
+	if (pathSegments.includes(".") || pathSegments.includes("..")) {
+		return { valid: false, error: "Profile URL must not contain . or .. path segments" };
+	}
+
+	return { valid: true, canonicalUrl: canonicalizeURL(urlString) };
+}
+
+// Validate client URL per IndieAuth spec
+function validateClientURL(urlString: string): { valid: boolean; error?: string; canonicalUrl?: string } {
+	let url: URL;
+	try {
+		url = new URL(urlString);
+	} catch {
+		return { valid: false, error: "Invalid URL format" };
+	}
+
+	// MUST use http or https scheme
+	if (url.protocol !== "http:" && url.protocol !== "https:") {
+		return { valid: false, error: "Client URL must use http or https scheme" };
+	}
+
+	// MUST contain path component (/ is valid)
+	if (!url.pathname) {
+		url.pathname = "/";
+	}
+
+	// MUST NOT contain fragments
+	if (url.hash) {
+		return { valid: false, error: "Client URL must not contain fragments" };
+	}
+
+	// MUST NOT contain username/password
+	if (url.username || url.password) {
+		return { valid: false, error: "Client URL must not contain username or password" };
+	}
+
+	// MUST NOT contain single-dot or double-dot path segments
+	const pathSegments = url.pathname.split("/");
+	if (pathSegments.includes(".") || pathSegments.includes("..")) {
+		return { valid: false, error: "Client URL must not contain . or .. path segments" };
+	}
+
+	// MAY use loopback interface, but not other IP addresses
+	const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+	const ipv6Regex = /^\[?([0-9a-fA-F:]+)\]?$/;
+	if (ipv4Regex.test(url.hostname)) {
+		// Allow 127.0.0.1 (loopback), reject others
+		if (!url.hostname.startsWith("127.")) {
+			return { valid: false, error: "Client URL must use domain names, not IP addresses (except loopback)" };
+		}
+	} else if (ipv6Regex.test(url.hostname)) {
+		// Allow ::1 (loopback), reject others
+		const ipv6Match = url.hostname.match(ipv6Regex);
+		if (ipv6Match && ipv6Match[1] !== "::1") {
+			return { valid: false, error: "Client URL must use domain names, not IP addresses (except loopback)" };
+		}
+	}
+
+	return { valid: true, canonicalUrl: canonicalizeURL(urlString) };
+}
+
+// Check if URL is a loopback address
+function isLoopbackURL(urlString: string): boolean {
+	try {
+		const url = new URL(urlString);
+		return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]" || url.hostname.startsWith("127.");
+	} catch {
+		return false;
+	}
+}
+
+// Fetch client metadata from client_id URL
+async function fetchClientMetadata(clientId: string): Promise<{
+	success: boolean;
+	metadata?: {
+		client_id: string;
+		client_name?: string;
+		client_uri?: string;
+		logo_uri?: string;
+		redirect_uris?: string[];
+	};
+	error?: string;
+}> {
+	// MUST NOT fetch loopback addresses (security requirement)
+	if (isLoopbackURL(clientId)) {
+		return { success: false, error: "Cannot fetch metadata from loopback addresses" };
+	}
+
+	try {
+		// Set timeout for fetch to prevent hanging
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+		const response = await fetch(clientId, {
+			method: "GET",
+			headers: {
+				Accept: "application/json, text/html",
+			},
+			signal: controller.signal,
+		});
+
+		clearTimeout(timeoutId);
+
+		if (!response.ok) {
+			return { success: false, error: `Failed to fetch client metadata: HTTP ${response.status}` };
+		}
+
+		const contentType = response.headers.get("content-type") || "";
+
+		// Try to parse as JSON first
+		if (contentType.includes("application/json")) {
+			const metadata = await response.json();
+
+			// Verify client_id matches
+			if (metadata.client_id && metadata.client_id !== clientId) {
+				return { success: false, error: "client_id in metadata does not match URL" };
+			}
+
+			return { success: true, metadata };
+		}
+
+		// If HTML, look for <link rel="redirect_uri"> tags
+		if (contentType.includes("text/html")) {
+			const html = await response.text();
+
+			// Extract redirect URIs from link tags
+			const redirectUriRegex = /<link\s+[^>]*rel=["']redirect_uri["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
+			const redirectUris: string[] = [];
+			let match: RegExpExecArray | null;
+
+			while ((match = redirectUriRegex.exec(html)) !== null) {
+				redirectUris.push(match[1]);
+			}
+
+			// Also try reverse order (href before rel)
+			const redirectUriRegex2 = /<link\s+[^>]*href=["']([^"']+)["'][^>]*rel=["']redirect_uri["'][^>]*>/gi;
+			while ((match = redirectUriRegex2.exec(html)) !== null) {
+				if (!redirectUris.includes(match[1])) {
+					redirectUris.push(match[1]);
+				}
+			}
+
+			if (redirectUris.length > 0) {
+				return {
+					success: true,
+					metadata: {
+						client_id: clientId,
+						redirect_uris: redirectUris,
+					},
+				};
+			}
+
+			return { success: false, error: "No client metadata or redirect_uri links found in HTML" };
+		}
+
+		return { success: false, error: "Unsupported content type" };
+	} catch (error) {
+		if (error instanceof Error) {
+			if (error.name === "AbortError") {
+				return { success: false, error: "Timeout fetching client metadata" };
+			}
+			return { success: false, error: `Failed to fetch client metadata: ${error.message}` };
+		}
+		return { success: false, error: "Failed to fetch client metadata" };
+	}
+}
+
+// Validate and register app with client information discovery
+async function ensureApp(
 	clientId: string,
 	redirectUri: string,
-): { error?: string; app?: { name: string | null; redirect_uris: string } } {
+): Promise<{
+	error?: string;
+	app?: { name: string | null; redirect_uris: string; logo_url?: string | null };
+}> {
 	const existing = db
-		.query("SELECT name, redirect_uris FROM apps WHERE client_id = ?")
+		.query("SELECT name, redirect_uris, logo_url FROM apps WHERE client_id = ?")
 		.get(clientId) as
-		| { name: string | null; redirect_uris: string }
+		| { name: string | null; redirect_uris: string; logo_url?: string | null }
 		| undefined;
 
 	if (!existing) {
-		// Only allow auto-registration for valid URLs (IndieAuth standard)
-		// Reject generated client_ids like "ikc_xxxxx"
-		try {
-			new URL(clientId);
-		} catch {
+		// Validate client URL per IndieAuth spec
+		const validation = validateClientURL(clientId);
+		if (!validation.valid) {
 			return {
-				error:
-					"Client ID must be a valid URL for auto-registration. Non-URL clients must be pre-registered by an admin.",
+				error: validation.error || "Invalid client URL",
 			};
 		}
 
-		// New app - auto-register (without pre-registration, no client secret or role)
+		const canonicalClientId = validation.canonicalUrl!;
+
+		// Fetch client metadata per IndieAuth spec
+		const metadataResult = await fetchClientMetadata(canonicalClientId);
+
+		let clientName: string | null = null;
+		let logoUrl: string | null = null;
+		let allowedRedirectUris: string[] = [];
+
+		if (metadataResult.success && metadataResult.metadata) {
+			// Use metadata from client
+			clientName = metadataResult.metadata.client_name || null;
+			logoUrl = metadataResult.metadata.logo_uri || null;
+			allowedRedirectUris = metadataResult.metadata.redirect_uris || [];
+
+			// Validate redirect_uri if client published redirect_uris
+			if (allowedRedirectUris.length > 0) {
+				// Check if redirect_uri host differs from client_id host
+				const clientUrl = new URL(canonicalClientId);
+				const redirectUrl = new URL(redirectUri);
+
+				const hostsDiffer =
+					clientUrl.protocol !== redirectUrl.protocol ||
+					clientUrl.hostname !== redirectUrl.hostname ||
+					clientUrl.port !== redirectUrl.port;
+
+				if (hostsDiffer) {
+					// MUST verify redirect_uri is in published list
+					if (!allowedRedirectUris.includes(redirectUri)) {
+						return {
+							error: `redirect_uri not registered in client metadata. The client published a list of allowed redirect URIs, but ${redirectUri} is not in that list.`,
+						};
+					}
+				} else {
+					// Same host - add to allowed list if not present
+					if (!allowedRedirectUris.includes(redirectUri)) {
+						allowedRedirectUris.push(redirectUri);
+					}
+				}
+			} else {
+				// No redirect_uris published - allow this one
+				allowedRedirectUris = [redirectUri];
+			}
+		} else {
+			// Could not fetch metadata - allow for now but only same-host redirects
+			const clientUrl = new URL(canonicalClientId);
+			const redirectUrl = new URL(redirectUri);
+
+			const hostsDiffer =
+				clientUrl.protocol !== redirectUrl.protocol ||
+				clientUrl.hostname !== redirectUrl.hostname ||
+				clientUrl.port !== redirectUrl.port;
+
+			if (hostsDiffer) {
+				return {
+					error: `Could not fetch client metadata to verify redirect_uri. For security, redirect_uri must have same host as client_id, or client must publish redirect_uris. Error: ${metadataResult.error}`,
+				};
+			}
+
+			allowedRedirectUris = [redirectUri];
+		}
+
+		// New app - auto-register
 		db.query(
-			"INSERT INTO apps (client_id, redirect_uris, is_preregistered, first_seen, last_used) VALUES (?, ?, 0, ?, ?)",
+			"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, first_seen, last_used) VALUES (?, ?, ?, ?, 0, ?, ?)",
 		).run(
-			clientId,
-			JSON.stringify([redirectUri]),
+			canonicalClientId,
+			JSON.stringify(allowedRedirectUris),
+			clientName,
+			logoUrl,
 			Math.floor(Date.now() / 1000),
 			Math.floor(Date.now() / 1000),
 		);
 
 		// Fetch the newly created app
 		const newApp = db
-			.query("SELECT name, redirect_uris FROM apps WHERE client_id = ?")
-			.get(clientId) as { name: string | null; redirect_uris: string };
+			.query("SELECT name, redirect_uris, logo_url FROM apps WHERE client_id = ?")
+			.get(canonicalClientId) as { name: string | null; redirect_uris: string; logo_url?: string | null };
 
 		return { app: newApp };
 	}
@@ -157,7 +443,7 @@ function ensureApp(
 }
 
 // GET /auth/authorize - Authorization request
-export function authorizeGet(req: Request): Response {
+export async function authorizeGet(req: Request): Promise<Response> {
 	const url = new URL(req.url);
 	const params = url.searchParams;
 
@@ -285,7 +571,7 @@ export function authorizeGet(req: Request): Response {
 	}
 
 	// Verify app is registered
-	const appResult = ensureApp(clientId, redirectUri);
+	const appResult = await ensureApp(clientId, redirectUri);
 
 	if (appResult.error) {
 		return new Response(
@@ -498,7 +784,7 @@ export function authorizeGet(req: Request): Response {
 	}
 
 	// Verify app is registered
-	const appCheckResult = ensureApp(clientId, redirectUri);
+	const appCheckResult = await ensureApp(clientId, redirectUri);
 
 	if (appCheckResult.error) {
 		return new Response(appCheckResult.error, { status: 400 });
