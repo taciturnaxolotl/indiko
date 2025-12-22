@@ -1610,6 +1610,7 @@ export async function token(req: Request): Promise<Response> {
 			me: meValue,
 			profile,
 			scope: scopes.join(" "),
+			iss: process.env.ORIGIN || "http://localhost:3000",
 		};
 
 		// Include role if assigned
