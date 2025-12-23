@@ -47,6 +47,8 @@ import {
 	listInvites,
 	logout,
 	token,
+	tokenIntrospect,
+	tokenRevoke,
 	updateInvite,
 	userProfile,
 } from "./routes/indieauth";
@@ -211,6 +213,14 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 			if (req.method === "POST") return await token(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
+		"/auth/token/introspect": async (req: Request) => {
+			if (req.method === "POST") return await tokenIntrospect(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/auth/token/revoke": async (req: Request) => {
+			if (req.method === "POST") return await tokenRevoke(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
 		"/auth/logout": (req: Request) => {
 			if (req.method === "POST") return logout(req);
 			return new Response("Method not allowed", { status: 405 });
@@ -272,15 +282,19 @@ const cleanupJob = setInterval(() => {
 	const authcodesDeleted = db
 		.query("DELETE FROM authcodes WHERE expires_at < ?")
 		.run(now);
+	const tokensDeleted = db
+		.query("DELETE FROM tokens WHERE expires_at < ? OR revoked = 1")
+		.run(now);
 
 	const total =
 		sessionsDeleted.changes +
 		challengesDeleted.changes +
-		authcodesDeleted.changes;
+		authcodesDeleted.changes +
+		tokensDeleted.changes;
 
 	if (total > 0) {
 		console.log(
-			`[Cleanup] Removed ${total} expired records (sessions: ${sessionsDeleted.changes}, challenges: ${challengesDeleted.changes}, authcodes: ${authcodesDeleted.changes})`,
+			`[Cleanup] Removed ${total} expired records (sessions: ${sessionsDeleted.changes}, challenges: ${challengesDeleted.changes}, authcodes: ${authcodesDeleted.changes}, tokens: ${tokensDeleted.changes})`,
 		);
 	}
 }, 3600000); // 1 hour in milliseconds

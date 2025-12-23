@@ -1694,7 +1694,20 @@ export async function token(req: Request): Promise<Response> {
 
 		const origin = process.env.ORIGIN || "http://localhost:3000";
 		
+		// Generate access token
+		const accessToken = crypto.randomBytes(32).toString("base64url");
+		const expiresIn = 3600; // 1 hour
+		const expiresAt = now + expiresIn;
+
+		// Store token in database
+		db.query(
+			"INSERT INTO tokens (token, user_id, client_id, scope, expires_at) VALUES (?, ?, ?, ?, ?)",
+		).run(accessToken, authcode.user_id, client_id, scopes.join(" "), expiresAt);
+
 		const response: Record<string, unknown> = {
+			access_token: accessToken,
+			token_type: "Bearer",
+			expires_in: expiresIn,
 			me: meValue,
 			profile,
 			scope: scopes.join(" "),
@@ -1717,6 +1730,150 @@ export async function token(req: Request): Promise<Response> {
 		});
 	} catch (error) {
 		console.error("Token exchange error:", error);
+		return Response.json(
+			{
+				error: "server_error",
+				error_description: "Internal server error",
+			},
+			{ status: 500 },
+		);
+	}
+}
+
+// POST /auth/token/introspect - Introspect access token
+export async function tokenIntrospect(req: Request): Promise<Response> {
+	try {
+		const contentType = req.headers.get("Content-Type");
+		let body: Record<string, string>;
+
+		// Support both JSON and form-encoded requests
+		if (contentType?.includes("application/json")) {
+			body = await req.json();
+		} else if (contentType?.includes("application/x-www-form-urlencoded")) {
+			const formData = await req.formData();
+			body = Object.fromEntries(formData.entries()) as Record<string, string>;
+		} else {
+			return Response.json(
+				{
+					error: "invalid_request",
+					error_description:
+						"Content-Type must be application/json or application/x-www-form-urlencoded",
+				},
+				{ status: 400 },
+			);
+		}
+
+		const { token } = body;
+
+		if (!token) {
+			return Response.json(
+				{
+					error: "invalid_request",
+					error_description: "token parameter is required",
+				},
+				{ status: 400 },
+			);
+		}
+
+		// Look up token
+		const tokenData = db
+			.query(
+				"SELECT t.user_id, t.client_id, t.scope, t.expires_at, t.revoked, t.created_at, u.username FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
+			)
+			.get(token) as
+			| {
+					user_id: number;
+					client_id: string;
+					scope: string;
+					expires_at: number;
+					revoked: number;
+					created_at: number;
+					username: string;
+			  }
+			| undefined;
+
+		// Token not found or revoked
+		if (!tokenData || tokenData.revoked === 1) {
+			return Response.json({ active: false });
+		}
+
+		// Check if expired
+		const now = Math.floor(Date.now() / 1000);
+		if (tokenData.expires_at < now) {
+			return Response.json({ active: false });
+		}
+
+		// Get user's verified domain or use indiko profile
+		const user = db
+			.query("SELECT url FROM users WHERE id = ?")
+			.get(tokenData.user_id) as { url: string | null } | undefined;
+
+		const origin = process.env.ORIGIN || "http://localhost:3000";
+		const meValue = user?.url || `${origin}/u/${tokenData.username}`;
+
+		// Token is active - return metadata
+		return Response.json({
+			active: true,
+			me: meValue,
+			client_id: tokenData.client_id,
+			scope: tokenData.scope,
+			exp: tokenData.expires_at,
+			iat: tokenData.created_at,
+		});
+	} catch (error) {
+		console.error("Token introspection error:", error);
+		return Response.json(
+			{
+				error: "server_error",
+				error_description: "Internal server error",
+			},
+			{ status: 500 },
+		);
+	}
+}
+
+// POST /auth/token/revoke - Revoke access token
+export async function tokenRevoke(req: Request): Promise<Response> {
+	try {
+		const contentType = req.headers.get("Content-Type");
+		let body: Record<string, string>;
+
+		// Support both JSON and form-encoded requests
+		if (contentType?.includes("application/json")) {
+			body = await req.json();
+		} else if (contentType?.includes("application/x-www-form-urlencoded")) {
+			const formData = await req.formData();
+			body = Object.fromEntries(formData.entries()) as Record<string, string>;
+		} else {
+			return Response.json(
+				{
+					error: "invalid_request",
+					error_description:
+						"Content-Type must be application/json or application/x-www-form-urlencoded",
+				},
+				{ status: 400 },
+			);
+		}
+
+		const { token } = body;
+
+		if (!token) {
+			return Response.json(
+				{
+					error: "invalid_request",
+					error_description: "token parameter is required",
+				},
+				{ status: 400 },
+			);
+		}
+
+		// Mark token as revoked (per spec, return 200 even if token doesn't exist)
+		db.query("UPDATE tokens SET revoked = 1 WHERE token = ?").run(token);
+
+		// Return 200 with empty body per RFC 7009
+		return new Response(null, { status: 200 });
+	} catch (error) {
+		console.error("Token revocation error:", error);
 		return Response.json(
 			{
 				error: "server_error",
@@ -2210,6 +2367,10 @@ export function indieauthMetadata(): Response {
 		issuer: origin,
 		authorization_endpoint: `${origin}/auth/authorize`,
 		token_endpoint: `${origin}/auth/token`,
+		introspection_endpoint: `${origin}/auth/token/introspect`,
+		introspection_endpoint_auth_methods_supported: ["none"],
+		revocation_endpoint: `${origin}/auth/token/revoke`,
+		revocation_endpoint_auth_methods_supported: ["none"],
 		code_challenge_methods_supported: ["S256"],
 		scopes_supported: ["profile", "email"],
 		response_types_supported: ["code"],
