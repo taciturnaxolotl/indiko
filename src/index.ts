@@ -51,6 +51,7 @@ import {
 	tokenRevoke,
 	updateInvite,
 	userProfile,
+	userinfo,
 } from "./routes/indieauth";
 
 (() => {
@@ -144,6 +145,11 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 			);
 		},
 		"/.well-known/oauth-authorization-server": indieauthMetadata,
+		// OAuth/IndieAuth endpoints
+		"/userinfo": (req: Request) => {
+			if (req.method === "GET") return userinfo(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
 		// API endpoints
 		"/api/hello": hello,
 		"/api/users": listUsers,

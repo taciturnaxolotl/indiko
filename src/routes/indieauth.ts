@@ -1461,16 +1461,129 @@ export async function token(req: Request): Promise<Response> {
 			code_verifier,
 		} = body;
 
-		if (grant_type !== "authorization_code") {
+		if (grant_type !== "authorization_code" && grant_type !== "refresh_token") {
 			return Response.json(
 				{
 					error: "unsupported_grant_type",
-					error_description: "Only authorization_code grant type is supported",
+					error_description: "Only authorization_code and refresh_token grant types are supported",
 				},
 				{ status: 400 },
 			);
 		}
 
+		// Handle refresh token grant
+		if (grant_type === "refresh_token") {
+			const { refresh_token } = body;
+
+			if (!refresh_token) {
+				return Response.json(
+					{
+						error: "invalid_request",
+						error_description: "refresh_token parameter is required",
+					},
+					{ status: 400 },
+				);
+			}
+
+			// Look up refresh token
+			const tokenData = db
+				.query(
+					"SELECT id, user_id, client_id, scope, refresh_expires_at, revoked FROM tokens WHERE refresh_token = ?",
+				)
+				.get(refresh_token) as
+				| {
+						id: number;
+						user_id: number;
+						client_id: string;
+						scope: string;
+						refresh_expires_at: number;
+						revoked: number;
+				  }
+				| undefined;
+
+			if (!tokenData || tokenData.revoked === 1) {
+				return Response.json(
+					{
+						error: "invalid_grant",
+						error_description: "Invalid refresh token",
+					},
+					{ status: 400 },
+				);
+			}
+
+			// Check if refresh token expired
+			const now = Math.floor(Date.now() / 1000);
+			if (tokenData.refresh_expires_at < now) {
+				return Response.json(
+					{
+						error: "invalid_grant",
+						error_description: "Refresh token expired",
+					},
+					{ status: 400 },
+				);
+			}
+
+			// Verify client_id matches
+			if (tokenData.client_id !== client_id) {
+				return Response.json(
+					{
+						error: "invalid_grant",
+						error_description: "client_id mismatch",
+					},
+					{ status: 400 },
+				);
+			}
+
+			// Generate new access token
+			const newAccessToken = crypto.randomBytes(32).toString("base64url");
+			const expiresIn = 3600; // 1 hour
+			const expiresAt = now + expiresIn;
+
+			// Update token (rotate access token, keep refresh token)
+			db.query(
+				"UPDATE tokens SET token = ?, expires_at = ? WHERE id = ?",
+			).run(newAccessToken, expiresAt, tokenData.id);
+
+			// Get user profile for me value
+			const user = db
+				.query("SELECT username, url FROM users WHERE id = ?")
+				.get(tokenData.user_id) as
+				| { username: string; url: string | null }
+				| undefined;
+
+			if (!user) {
+				return Response.json(
+					{
+						error: "server_error",
+						error_description: "User not found",
+					},
+					{ status: 500 },
+				);
+			}
+
+			const origin = process.env.ORIGIN || "http://localhost:3000";
+			const meValue = user.url || `${origin}/u/${user.username}`;
+
+			return Response.json(
+				{
+					access_token: newAccessToken,
+					token_type: "Bearer",
+					expires_in: expiresIn,
+					me: meValue,
+					scope: tokenData.scope,
+					iss: origin,
+				},
+				{
+					headers: {
+						"Content-Type": "application/json",
+						"Cache-Control": "no-store",
+						"Pragma": "no-cache",
+					},
+				},
+			);
+		}
+
+		// Handle authorization_code grant (existing flow)
 		// Check if client is pre-registered and requires secret
 		const app = db
 			.query(
@@ -1699,15 +1812,21 @@ export async function token(req: Request): Promise<Response> {
 		const expiresIn = 3600; // 1 hour
 		const expiresAt = now + expiresIn;
 
-		// Store token in database
+		// Generate refresh token (30 days)
+		const refreshToken = crypto.randomBytes(32).toString("base64url");
+		const refreshExpiresIn = 2592000; // 30 days in seconds
+		const refreshExpiresAt = now + refreshExpiresIn;
+
+		// Store token in database with refresh token
 		db.query(
-			"INSERT INTO tokens (token, user_id, client_id, scope, expires_at) VALUES (?, ?, ?, ?, ?)",
-		).run(accessToken, authcode.user_id, client_id, scopes.join(" "), expiresAt);
+			"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		).run(accessToken, authcode.user_id, client_id, scopes.join(" "), expiresAt, refreshToken, refreshExpiresAt);
 
 		const response: Record<string, unknown> = {
 			access_token: accessToken,
 			token_type: "Bearer",
 			expires_in: expiresIn,
+			refresh_token: refreshToken,
 			me: meValue,
 			profile,
 			scope: scopes.join(" "),
@@ -1874,6 +1993,116 @@ export async function tokenRevoke(req: Request): Promise<Response> {
 		return new Response(null, { status: 200 });
 	} catch (error) {
 		console.error("Token revocation error:", error);
+		return Response.json(
+			{
+				error: "server_error",
+				error_description: "Internal server error",
+			},
+			{ status: 500 },
+		);
+	}
+}
+
+// GET /userinfo - Get user profile from access token
+export function userinfo(req: Request): Response {
+	try {
+		// Get access token from Authorization header
+		const authHeader = req.headers.get("Authorization");
+		
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return Response.json(
+				{
+					error: "invalid_request",
+					error_description: "Missing or invalid Authorization header",
+				},
+				{ status: 401 },
+			);
+		}
+
+		const token = authHeader.substring(7);
+
+		// Look up token
+		const tokenData = db
+			.query(
+				"SELECT t.user_id, t.scope, t.expires_at, t.revoked, u.name, u.email, u.photo, u.url, u.username FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
+			)
+			.get(token) as
+			| {
+					user_id: number;
+					scope: string;
+					expires_at: number;
+					revoked: number;
+					name: string;
+					email: string | null;
+					photo: string | null;
+					url: string | null;
+					username: string;
+			  }
+			| undefined;
+
+		// Token not found or revoked
+		if (!tokenData || tokenData.revoked === 1) {
+			return Response.json(
+				{
+					error: "invalid_token",
+					error_description: "Invalid or revoked access token",
+				},
+				{ status: 401 },
+			);
+		}
+
+		// Check if expired
+		const now = Math.floor(Date.now() / 1000);
+		if (tokenData.expires_at < now) {
+			return Response.json(
+				{
+					error: "invalid_token",
+					error_description: "Access token expired",
+				},
+				{ status: 401 },
+			);
+		}
+
+		// Parse scopes
+		const scopes = tokenData.scope.split(" ");
+
+		// Build response based on scopes
+		const response: Record<string, string> = {};
+
+		if (scopes.includes("profile")) {
+			response.name = tokenData.name;
+			if (tokenData.photo) response.photo = tokenData.photo;
+			if (tokenData.url) {
+				response.url = tokenData.url;
+			} else {
+				const origin = process.env.ORIGIN || "http://localhost:3000";
+				response.url = `${origin}/u/${tokenData.username}`;
+			}
+		}
+
+		if (scopes.includes("email") && tokenData.email) {
+			response.email = tokenData.email;
+		}
+
+		// Return empty object if no profile/email scopes
+		if (Object.keys(response).length === 0) {
+			return Response.json(
+				{
+					error: "insufficient_scope",
+					error_description: "Token does not have profile or email scope",
+				},
+				{ status: 403 },
+			);
+		}
+
+		return Response.json(response, {
+			headers: {
+				"Content-Type": "application/json",
+				"Cache-Control": "no-store",
+			},
+		});
+	} catch (error) {
+		console.error("Userinfo error:", error);
 		return Response.json(
 			{
 				error: "server_error",
@@ -2371,10 +2600,11 @@ export function indieauthMetadata(): Response {
 		introspection_endpoint_auth_methods_supported: ["none"],
 		revocation_endpoint: `${origin}/auth/token/revoke`,
 		revocation_endpoint_auth_methods_supported: ["none"],
+		userinfo_endpoint: `${origin}/userinfo`,
 		code_challenge_methods_supported: ["S256"],
 		scopes_supported: ["profile", "email"],
 		response_types_supported: ["code"],
-		grant_types_supported: ["authorization_code"],
+		grant_types_supported: ["authorization_code", "refresh_token"],
 		service_documentation: `${origin}/docs`,
 	};
 

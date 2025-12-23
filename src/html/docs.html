@@ -585,6 +585,14 @@
 						<li><a href="#authorization" style="font-size: 0.9rem;">discovery</a></li>
 					</ul>
 				</li>
+				<li><a href="#tokens">token management</a>
+					<ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+						<li><a href="#tokens-refresh" style="font-size: 0.9rem;">refresh tokens</a></li>
+						<li><a href="#tokens-introspect" style="font-size: 0.9rem;">introspection</a></li>
+						<li><a href="#tokens-revoke" style="font-size: 0.9rem;">revocation</a></li>
+						<li><a href="#tokens-userinfo" style="font-size: 0.9rem;">userinfo</a></li>
+					</ul>
+				</li>
 				<li><a href="#scopes">scopes</a></li>
 				<li><a href="#roles">roles</a></li>
 				<li><a href="#clients">client types</a></li>
@@ -604,6 +612,9 @@
 			<ul>
 				<li>Passwordless authentication via WebAuthn passkeys</li>
 				<li>Full IndieAuth and OAuth 2.0 support with PKCE</li>
+				<li>Access tokens and refresh tokens for API access</li>
+				<li>Token introspection and revocation endpoints</li>
+				<li>UserInfo endpoint for profile data</li>
 				<li>Auto-registration of OAuth clients</li>
 				<li>Pre-registered clients with secrets and role management</li>
 				<li>Session-based SSO (authenticate once, authorize many apps)</li>
@@ -719,7 +730,22 @@
 					<tr>
 						<td><code>/auth/token</code></td>
 						<td>POST</td>
-						<td>Exchange code for access token</td>
+						<td>Exchange code for access token and refresh token</td>
+					</tr>
+					<tr>
+						<td><code>/auth/token/introspect</code></td>
+						<td>POST</td>
+						<td>Verify access token validity</td>
+					</tr>
+					<tr>
+						<td><code>/auth/token/revoke</code></td>
+						<td>POST</td>
+						<td>Revoke access or refresh token</td>
+					</tr>
+					<tr>
+						<td><code>/userinfo</code></td>
+						<td>GET</td>
+						<td>Get user profile data with bearer token</td>
 					</tr>
 					<tr>
 						<td><code>/u/:username</code></td>
@@ -849,23 +875,147 @@
 				All clients MUST use PKCE (code_verifier) per the IndieAuth specification. Pre-registered confidential clients should also include <code>client_secret</code> in the token request for additional security.
 			</div>
 
-			<h3>5. receive user profile</h3>
+			<h3>5. receive tokens and user profile</h3>
 			<pre><code>{
-					<span class="json-key">"me"</span>: <span class="json-string" id="profileMeUrl">"http://localhost:3000/u/username"</span>,
-					<span class="json-key">"profile"</span>: {
-					<span class="json-key">"name"</span>: <span class="json-string">"Jane Doe"</span>,
-					<span class="json-key">"email"</span>: <span class="json-string">"jane@example.com"</span>,
-					<span class="json-key">"photo"</span>: <span class="json-string">"https://example.com/photo.jpg"</span>,
-					<span class="json-key">"url"</span>: <span class="json-string">"https://jane.example.com"</span>
-					},
-					<span class="json-key">"scope"</span>: <span class="json-string">"profile email"</span>,
-					<span class="json-key">"role"</span>: <span class="json-string">"admin"</span>
-					}</code></pre>
+  <span class="json-key">"access_token"</span>: <span class="json-string">"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."</span>,
+  <span class="json-key">"token_type"</span>: <span class="json-string">"Bearer"</span>,
+  <span class="json-key">"expires_in"</span>: <span class="json-number">3600</span>,
+  <span class="json-key">"refresh_token"</span>: <span class="json-string">"RT_abc123xyz..."</span>,
+  <span class="json-key">"me"</span>: <span class="json-string" id="profileMeUrl">"http://localhost:3000/u/username"</span>,
+  <span class="json-key">"profile"</span>: {
+    <span class="json-key">"name"</span>: <span class="json-string">"Jane Doe"</span>,
+    <span class="json-key">"email"</span>: <span class="json-string">"jane@example.com"</span>,
+    <span class="json-key">"photo"</span>: <span class="json-string">"https://example.com/photo.jpg"</span>,
+    <span class="json-key">"url"</span>: <span class="json-string">"https://jane.example.com"</span>
+  },
+  <span class="json-key">"scope"</span>: <span class="json-string">"profile email"</span>,
+  <span class="json-key">"iss"</span>: <span class="json-string" id="issuerUrl2">"http://localhost:3000"</span>,
+  <span class="json-key">"role"</span>: <span class="json-string">"admin"</span>
+}</code></pre>
+
+			<div class="info-box">
+				<strong>Token types:</strong>
+				<ul style="margin-top: 0.5rem; margin-bottom: 0;">
+					<li><code>access_token</code> - Short-lived token (1 hour) for API access</li>
+					<li><code>refresh_token</code> - Long-lived token (30 days) for getting new access tokens</li>
+				</ul>
+			</div>
 
 			<div class="info-box">
 				<strong>Roles:</strong>
 				If an admin has assigned a role to this user for your app, it will be included in the response. Roles are
 				arbitrary strings that you can use for role-based access control (RBAC) in your application.
+			</div>
+		</section>
+
+		<section id="tokens" class="section">
+			<h2>token management</h2>
+			<p>
+				Indiko provides a complete OAuth 2.0 token management system with access tokens, refresh tokens, introspection, and revocation.
+			</p>
+
+			<h3 id="tokens-refresh">refresh tokens</h3>
+			<p>
+				Access tokens expire after 1 hour. Use the refresh token to get a new access token without requiring user re-authentication:
+			</p>
+
+			<pre><code><span class="http-method">POST</span> <span class="http-url" id="tokenRefreshUrl">http://localhost:3000/auth/token</span>
+<span class="http-header">Content-Type</span>: application/x-www-form-urlencoded
+
+<span class="http-param">grant_type</span>=refresh_token
+&<span class="http-param">refresh_token</span>=RT_abc123xyz...
+&<span class="http-param">client_id</span>=https://myapp.example.com</code></pre>
+
+			<p>Response:</p>
+			<pre><code>{
+  <span class="json-key">"access_token"</span>: <span class="json-string">"new_access_token..."</span>,
+  <span class="json-key">"token_type"</span>: <span class="json-string">"Bearer"</span>,
+  <span class="json-key">"expires_in"</span>: <span class="json-number">3600</span>,
+  <span class="json-key">"me"</span>: <span class="json-string">"http://localhost:3000/u/username"</span>,
+  <span class="json-key">"scope"</span>: <span class="json-string">"profile email"</span>,
+  <span class="json-key">"iss"</span>: <span class="json-string">"http://localhost:3000"</span>
+}</code></pre>
+
+			<div class="info-box">
+				<strong>Important:</strong>
+				<ul style="margin-top: 0.5rem; margin-bottom: 0;">
+					<li>Refresh tokens are valid for 30 days</li>
+					<li>Each refresh request generates a new access token</li>
+					<li>The refresh token itself remains valid (no rotation)</li>
+					<li>Store refresh tokens securely - they provide long-term access</li>
+				</ul>
+			</div>
+
+			<h3 id="tokens-introspect">token introspection</h3>
+			<p>
+				Resource servers can verify access tokens by calling the introspection endpoint:
+			</p>
+
+			<pre><code><span class="http-method">POST</span> <span class="http-url" id="tokenIntrospectUrl">http://localhost:3000/auth/token/introspect</span>
+<span class="http-header">Content-Type</span>: application/json
+
+{
+  <span class="json-key">"token"</span>: <span class="json-string">"access_token_here"</span>
+}</code></pre>
+
+			<p>Response (valid token):</p>
+			<pre><code>{
+  <span class="json-key">"active"</span>: <span class="json-boolean">true</span>,
+  <span class="json-key">"me"</span>: <span class="json-string">"http://localhost:3000/u/username"</span>,
+  <span class="json-key">"client_id"</span>: <span class="json-string">"https://myapp.example.com"</span>,
+  <span class="json-key">"scope"</span>: <span class="json-string">"profile email"</span>,
+  <span class="json-key">"exp"</span>: <span class="json-number">1640000000</span>,
+  <span class="json-key">"iat"</span>: <span class="json-number">1639996400</span>
+}</code></pre>
+
+			<p>Response (invalid token):</p>
+			<pre><code>{
+  <span class="json-key">"active"</span>: <span class="json-boolean">false</span>
+}</code></pre>
+
+			<div class="info-box">
+				<strong>Use case:</strong>
+				Introspection is useful for resource servers (like Micropub endpoints) that need to verify tokens issued by Indiko.
+			</div>
+
+			<h3 id="tokens-revoke">token revocation</h3>
+			<p>
+				Apps can revoke access or refresh tokens when users log out:
+			</p>
+
+			<pre><code><span class="http-method">POST</span> <span class="http-url" id="tokenRevokeUrl">http://localhost:3000/auth/token/revoke</span>
+<span class="http-header">Content-Type</span>: application/json
+
+{
+  <span class="json-key">"token"</span>: <span class="json-string">"access_or_refresh_token_here"</span>
+}</code></pre>
+
+			<p>Response: HTTP 200 (always returns success, even if token doesn't exist)</p>
+
+			<div class="info-box">
+				<strong>Best practice:</strong>
+				Always revoke tokens when users explicitly log out to prevent unauthorized access.
+			</div>
+
+			<h3 id="tokens-userinfo">userinfo endpoint</h3>
+			<p>
+				Fetch updated user profile information using an access token:
+			</p>
+
+			<pre><code><span class="http-method">GET</span> <span class="http-url" id="userinfoUrl">http://localhost:3000/userinfo</span>
+<span class="http-header">Authorization</span>: Bearer access_token_here</code></pre>
+
+			<p>Response (with <code>profile</code> and <code>email</code> scopes):</p>
+			<pre><code>{
+  <span class="json-key">"name"</span>: <span class="json-string">"Jane Doe"</span>,
+  <span class="json-key">"photo"</span>: <span class="json-string">"https://example.com/photo.jpg"</span>,
+  <span class="json-key">"url"</span>: <span class="json-string">"https://jane.example.com"</span>,
+  <span class="json-key">"email"</span>: <span class="json-string">"jane@example.com"</span>
+}</code></pre>
+
+			<div class="info-box">
+				<strong>Note:</strong>
+				The response only includes data for scopes granted to the token. A token with only <code>profile</code> scope will not include email.
 			</div>
 		</section>
 
