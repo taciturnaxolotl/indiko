@@ -1374,7 +1374,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 	const expiresAt = Math.floor(Date.now() / 1000) + 60; // 60 seconds
 
 	db.query(
-		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		code,
 		user.userId,
@@ -1383,6 +1383,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 		JSON.stringify(approvedScopes),
 		codeChallenge,
 		expiresAt,
+		me,
 	);
 
 	// Store or update permission grant
