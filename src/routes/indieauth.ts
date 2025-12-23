@@ -119,7 +119,7 @@ function canonicalizeURL(urlString: string): string {
 }
 
 // Validate profile URL per IndieAuth spec
-function validateProfileURL(urlString: string): { valid: boolean; error?: string; canonicalUrl?: string } {
+export function validateProfileURL(urlString: string): { valid: boolean; error?: string; canonicalUrl?: string } {
 	let url: URL;
 	try {
 		url = new URL(urlString);

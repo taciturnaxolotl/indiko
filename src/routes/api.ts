@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { verifyDomain } from "./indieauth";
+import { verifyDomain, validateProfileURL } from "./indieauth";
 
 function getSessionUser(
 	req: Request,
@@ -171,12 +171,22 @@ export async function updateProfile(req: Request): Promise<Response> {
 			return Response.json({ error: "Name is required" }, { status: 400 });
 		}
 
-		// If URL is being set, verify domain has rel="me" link back to profile
+		// If URL is being set, validate format and verify domain ownership
 		if (url && typeof url === "string") {
+			// 1. Validate URL format per IndieAuth spec
+			const validation = validateProfileURL(url);
+			if (!validation.valid) {
+				return Response.json(
+					{ error: validation.error || "Invalid URL format" },
+					{ status: 400 },
+				);
+			}
+
+			// 2. Verify domain has rel="me" link back to profile
 			const origin = process.env.ORIGIN || "http://localhost:3000";
 			const indikoProfileUrl = `${origin}/u/${user.username}`;
 
-			const verification = await verifyDomain(url, indikoProfileUrl);
+			const verification = await verifyDomain(validation.canonicalUrl!, indikoProfileUrl);
 			if (!verification.success) {
 				return Response.json(
 					{ error: verification.error || "Failed to verify domain" },
