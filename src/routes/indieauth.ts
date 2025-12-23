@@ -5,6 +5,7 @@ interface SessionUser {
 	username: string;
 	userId: number;
 	isAdmin: boolean;
+	tier: string;
 }
 
 // Helper to get authenticated user from session token
@@ -19,7 +20,7 @@ function getSessionUser(req: Request): SessionUser | Response {
 
 	const session = db
 		.query(
-			`SELECT s.expires_at, u.id, u.username, u.is_admin, u.status 
+			`SELECT s.expires_at, u.id, u.username, u.is_admin, u.tier, u.status 
 			FROM sessions s 
 			JOIN users u ON s.user_id = u.id 
 			WHERE s.token = ?`,
@@ -30,6 +31,7 @@ function getSessionUser(req: Request): SessionUser | Response {
 				id: number;
 				username: string;
 				is_admin: number;
+				tier: string;
 				status: string;
 		  }
 		| undefined;
@@ -71,7 +73,7 @@ function getUserFromCookie(req: Request): SessionUser | null {
 
 	const session = db
 		.query(
-			`SELECT s.expires_at, u.id, u.username, u.is_admin, u.status 
+			`SELECT s.expires_at, u.id, u.username, u.is_admin, u.tier, u.status 
 			FROM sessions s 
 			JOIN users u ON s.user_id = u.id 
 			WHERE s.token = ?`,
@@ -82,6 +84,7 @@ function getUserFromCookie(req: Request): SessionUser | null {
 				id: number;
 				username: string;
 				is_admin: number;
+				tier: string;
 				status: string;
 		  }
 		| undefined;
@@ -97,6 +100,7 @@ function getUserFromCookie(req: Request): SessionUser | null {
 		username: session.username,
 		userId: session.id,
 		isAdmin: session.is_admin === 1,
+		tier: session.tier,
 	};
 }
 

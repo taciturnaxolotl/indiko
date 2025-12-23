@@ -21,6 +21,7 @@ import {
 	revokeApp,
 	revokeAppForUser,
 	updateProfile,
+	updateUserTier,
 } from "./routes/api";
 import {
 	canRegister,
@@ -198,6 +199,14 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 				const url = new URL(req.url);
 				const userId = url.pathname.split("/")[4];
 				return enableUser(req, userId);
+			}
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/users/:id/tier": (req: Request) => {
+			if (req.method === "PUT") {
+				const url = new URL(req.url);
+				const userId = url.pathname.split("/")[4];
+				return updateUserTier(req, userId);
 			}
 			return new Response("Method not allowed", { status: 405 });
 		},

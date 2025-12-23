@@ -59,7 +59,9 @@ src/
 - **`me` parameter delegation**: When a client passes `me=https://example.com` in the authorization request and it matches the user's website URL, the token response returns that URL instead of the canonical `/u/{username}` URL
 
 ### Database Schema
-- **users**: username, name, email, photo, url, status, role, is_admin
+- **users**: username, name, email, photo, url, status, role, tier, is_admin
+  - **tier**: User access level - 'admin' (full access), 'developer' (can create apps), 'user' (can only authenticate with apps)
+  - **is_admin**: Legacy flag, automatically synced with tier (1 if tier='admin', 0 otherwise)
 - **credentials**: passkey credentials (credential_id, public_key, counter)
 - **sessions**: user sessions with 24-hour expiry
 - **challenges**: WebAuthn challenges (5-minute expiry)

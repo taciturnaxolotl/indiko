@@ -255,12 +255,13 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 		// Create user (bootstrap is always admin, invited users are regular users)
 		const insertUser = db.query(
-			"INSERT INTO users (username, name, is_admin, role) VALUES (?, ?, ?, ?) RETURNING id",
+			"INSERT INTO users (username, name, is_admin, tier, role) VALUES (?, ?, ?, ?, ?) RETURNING id",
 		);
 		const user = insertUser.get(
 			username,
 			username,
 			isBootstrap ? 1 : 0,
+			isBootstrap ? "admin" : "user",
 			isBootstrap ? "admin" : "user",
 		) as {
 			id: number;

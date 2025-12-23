@@ -16,7 +16,7 @@ function generateClientId(): string {
 
 function getSessionUser(
 	req: Request,
-): { username: string; userId: number; is_admin: boolean } | Response {
+): { username: string; userId: number; is_admin: boolean; tier: string } | Response {
 	const authHeader = req.headers.get("Authorization");
 
 	if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -27,7 +27,7 @@ function getSessionUser(
 
 	const session = db
 		.query(
-			`SELECT s.expires_at, s.user_id, u.username, u.is_admin, u.status 
+			`SELECT s.expires_at, s.user_id, u.username, u.is_admin, u.tier, u.status 
 			FROM sessions s 
 			JOIN users u ON s.user_id = u.id 
 			WHERE s.token = ?`,
@@ -38,6 +38,7 @@ function getSessionUser(
 				user_id: number;
 				username: string;
 				is_admin: number;
+				tier: string;
 				status: string;
 		  }
 		| undefined;
@@ -59,6 +60,7 @@ function getSessionUser(
 		username: session.username,
 		userId: session.user_id,
 		is_admin: session.is_admin === 1,
+		tier: session.tier,
 	};
 }
 
@@ -144,6 +146,14 @@ export async function createClient(req: Request): Promise<Response> {
 
 	if (!user.is_admin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	// Only admin and developer tiers can create apps
+	if (user.tier !== "admin" && user.tier !== "developer") {
+		return Response.json(
+			{ error: "Developer or admin tier required to create apps" },
+			{ status: 403 },
+		);
 	}
 
 	try {

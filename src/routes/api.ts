@@ -3,7 +3,7 @@ import { verifyDomain, validateProfileURL } from "./indieauth";
 
 function getSessionUser(
 	req: Request,
-): { username: string; userId: number; is_admin: boolean } | Response {
+): { username: string; userId: number; is_admin: boolean; tier: string } | Response {
 	const authHeader = req.headers.get("Authorization");
 
 	if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -15,7 +15,7 @@ function getSessionUser(
 	// Look up session
 	const session = db
 		.query(
-			`SELECT s.expires_at, s.user_id, u.username, u.is_admin, u.status 
+			`SELECT s.expires_at, s.user_id, u.username, u.is_admin, u.tier, u.status 
 			FROM sessions s 
 			JOIN users u ON s.user_id = u.id 
 			WHERE s.token = ?`,
@@ -26,6 +26,7 @@ function getSessionUser(
 				user_id: number;
 				username: string;
 				is_admin: number;
+				tier: string;
 				status: string;
 		  }
 		| undefined;
@@ -47,6 +48,7 @@ function getSessionUser(
 		username: session.username,
 		userId: session.user_id,
 		is_admin: session.is_admin === 1,
+		tier: session.tier,
 	};
 }
 
@@ -61,6 +63,7 @@ export function hello(req: Request): Response {
 		id: user.userId,
 		username: user.username,
 		isAdmin: user.is_admin,
+		tier: user.tier,
 	});
 }
 
@@ -76,7 +79,7 @@ export function listUsers(req: Request): Response {
 
 	const users = db
 		.query(
-			`SELECT u.id, u.username, u.name, u.email, u.photo, u.status, u.role, u.is_admin, u.created_at, 
+			`SELECT u.id, u.username, u.name, u.email, u.photo, u.status, u.role, u.tier, u.is_admin, u.created_at, 
 			COUNT(c.id) as credential_count
 			FROM users u
 			LEFT JOIN credentials c ON u.id = c.user_id
@@ -91,6 +94,7 @@ export function listUsers(req: Request): Response {
 		photo: string | null;
 		status: string;
 		role: string;
+		tier: string;
 		is_admin: number;
 		created_at: number;
 		credential_count: number;
@@ -105,6 +109,7 @@ export function listUsers(req: Request): Response {
 			photo: u.photo,
 			status: u.status,
 			role: u.role,
+			tier: u.tier,
 			isAdmin: u.is_admin === 1,
 			createdAt: u.created_at,
 			credentialCount: u.credential_count,
@@ -120,7 +125,7 @@ export async function getProfile(req: Request): Promise<Response> {
 
 	const profile = db
 		.query(
-			`SELECT id, username, name, email, photo, url, status, role, is_admin, created_at
+			`SELECT id, username, name, email, photo, url, status, role, tier, is_admin, created_at
 			FROM users
 			WHERE username = ?`,
 		)
@@ -134,6 +139,7 @@ export async function getProfile(req: Request): Promise<Response> {
 				url: string | null;
 				status: string;
 				role: string;
+				tier: string;
 				is_admin: number;
 				created_at: number;
 		  }
@@ -152,6 +158,7 @@ export async function getProfile(req: Request): Promise<Response> {
 		url: profile.url,
 		status: profile.status,
 		role: profile.role,
+		tier: profile.tier,
 		isAdmin: profile.is_admin === 1,
 		createdAt: profile.created_at,
 	});
@@ -499,6 +506,62 @@ export function enableUser(req: Request, userId: string): Response {
 	db.query("UPDATE users SET status = 'active' WHERE id = ?").run(targetUserId);
 
 	return Response.json({ success: true });
+}
+
+export async function updateUserTier(req: Request, userId: string): Promise<Response> {
+	const user = getSessionUser(req);
+	if (user instanceof Response) {
+		return user;
+	}
+
+	if (!user.is_admin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+
+	const targetUserId = Number.parseInt(userId, 10);
+	if (Number.isNaN(targetUserId)) {
+		return Response.json({ error: "Invalid user ID" }, { status: 400 });
+	}
+
+	try {
+		const body = await req.json();
+		const { tier } = body;
+
+		if (!tier || !["admin", "developer", "user"].includes(tier)) {
+			return Response.json(
+				{ error: "Invalid tier. Must be 'admin', 'developer', or 'user'" },
+				{ status: 400 },
+			);
+		}
+
+		const targetUser = db
+			.query("SELECT id, username, tier FROM users WHERE id = ?")
+			.get(targetUserId) as { id: number; username: string; tier: string } | undefined;
+
+		if (!targetUser) {
+			return Response.json({ error: "User not found" }, { status: 404 });
+		}
+
+		// Prevent changing your own tier
+		if (targetUserId === user.userId) {
+			return Response.json(
+				{ error: "Cannot change your own tier" },
+				{ status: 400 },
+			);
+		}
+
+		// Update tier and is_admin flag
+		db.query("UPDATE users SET tier = ?, is_admin = ? WHERE id = ?").run(
+			tier,
+			tier === "admin" ? 1 : 0,
+			targetUserId,
+		);
+
+		return Response.json({ success: true, tier });
+	} catch (error) {
+		console.error("Update tier error:", error);
+		return Response.json({ error: "Invalid request body" }, { status: 400 });
+	}
 }
 
 export function deleteUser(req: Request, userId: string): Response {
