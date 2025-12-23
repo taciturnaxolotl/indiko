@@ -1548,7 +1548,7 @@ export async function token(req: Request): Promise<Response> {
 		// Look up authorization code
 		const authcode = db
 			.query(
-				"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used FROM authcodes WHERE code = ?",
+				"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me FROM authcodes WHERE code = ?",
 			)
 			.get(code) as
 			| {
@@ -1559,6 +1559,7 @@ export async function token(req: Request): Promise<Response> {
 					code_challenge: string;
 					expires_at: number;
 					used: number;
+					me: string | null;
 			  }
 			| undefined;
 
@@ -1679,6 +1680,17 @@ export async function token(req: Request): Promise<Response> {
 			meValue = user.url;
 		}
 
+		// Validate that the user controls the requested me parameter
+		if (authcode.me && authcode.me !== meValue) {
+			return Response.json(
+				{
+					error: "invalid_grant",
+					error_description: "The requested identity does not match the user's verified domain",
+				},
+				{ status: 400 },
+			);
+		}
+
 		const origin = process.env.ORIGIN || "http://localhost:3000";
 		
 		const response: Record<string, unknown> = {
@@ -1773,7 +1785,7 @@ export function userProfile(req: Request): Response {
   <meta property="og:type" content="profile" />
   <meta property="og:title" content="${user.name}" />
   <meta property="og:description" content="${user.name}'s profile on Indiko" />
-  <meta property="og:url" content="${process.env.ORIGIN}/u/${user.username}" />
+  <meta property="og:url" content="${user.url || `${process.env.ORIGIN}/u/${user.username}`}" />
   ${user.photo ? `<meta property="og:image" content="${user.photo}" />` : ""}
   <meta property="profile:username" content="${user.username}" />
   
@@ -1928,7 +1940,7 @@ export function userProfile(req: Request): Response {
         ${user.email ? `<a class="u-email" rel="me" href="mailto:${user.email}">email</a>` : ""}
       </div>
       <div class="identity-info">
-        IndieAuth identity: <code>${process.env.ORIGIN}/u/${user.username}</code>
+        IndieAuth identity: <code>${user.url || `${process.env.ORIGIN}/u/${user.username}`}</code>
       </div>
     </div>
 
