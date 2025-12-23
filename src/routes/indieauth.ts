@@ -942,7 +942,8 @@ export async function authorizeGet(req: Request): Promise<Response> {
 				"UPDATE permissions SET last_used = ? WHERE user_id = ? AND client_id = ?",
 			).run(Math.floor(Date.now() / 1000), user.userId, clientId);
 
-			return Response.redirect(`${redirectUri}?code=${code}&state=${state}`);
+			const origin = process.env.ORIGIN || "http://localhost:3000";
+			return Response.redirect(`${redirectUri}?code=${code}&state=${state}&iss=${encodeURIComponent(origin)}`);
 		}
 	}
 
@@ -1303,19 +1304,52 @@ function showConsentScreen(
 
 // POST /auth/authorize - Consent form submission
 export async function authorizePost(req: Request): Promise<Response> {
+	const contentType = req.headers.get("Content-Type");
+	
+	// Parse the request body
+	let body: Record<string, string>;
+	let formData: FormData;
+
+	if (contentType?.includes("application/x-www-form-urlencoded")) {
+		formData = await req.formData();
+		body = Object.fromEntries(formData.entries()) as Record<string, string>;
+	} else {
+		body = await req.json();
+		// Create a fake FormData for JSON requests
+		formData = new FormData();
+		Object.entries(body).forEach(([key, value]) => {
+			formData.append(key, value);
+		});
+	}
+
+	const grantType = body.grant_type;
+	
+	// If grant_type is present, this is a token exchange request (IndieAuth profile scope only)
+	if (grantType === "authorization_code") {
+		// Create a mock request for token() function
+		const mockReq = new Request(req.url, {
+			method: "POST",
+			headers: req.headers,
+			body: contentType?.includes("application/x-www-form-urlencoded") 
+				? new URLSearchParams(body).toString()
+				: JSON.stringify(body),
+		});
+		return token(mockReq);
+	}
+
+	// Otherwise it's a consent form submission
 	const user = getUserFromCookie(req);
 
 	if (!user) {
 		return new Response("Unauthorized", { status: 401 });
 	}
 
-	const formData = await req.formData();
-	const action = formData.get("action") as string;
-	const clientId = formData.get("client_id") as string;
-	const redirectUri = formData.get("redirect_uri") as string;
-	const state = formData.get("state") as string;
-	const codeChallenge = formData.get("code_challenge") as string;
-	const me = formData.get("me") as string | null;
+	const action = body.action;
+	const clientId = body.client_id;
+	const redirectUri = body.redirect_uri;
+	const state = body.state;
+	const codeChallenge = body.code_challenge;
+	const me = body.me || null;
 
 	if (!clientId || !redirectUri || !state || !codeChallenge) {
 		return new Response("Missing required parameters", { status: 400 });
@@ -1340,7 +1374,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 	const expiresAt = Math.floor(Date.now() / 1000) + 60; // 60 seconds
 
 	db.query(
-		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		code,
 		user.userId,
@@ -1349,7 +1383,6 @@ export async function authorizePost(req: Request): Promise<Response> {
 		JSON.stringify(approvedScopes),
 		codeChallenge,
 		expiresAt,
-		me,
 	);
 
 	// Store or update permission grant
@@ -1515,7 +1548,7 @@ export async function token(req: Request): Promise<Response> {
 		// Look up authorization code
 		const authcode = db
 			.query(
-				"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me FROM authcodes WHERE code = ?",
+				"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used FROM authcodes WHERE code = ?",
 			)
 			.get(code) as
 			| {
@@ -1526,7 +1559,6 @@ export async function token(req: Request): Promise<Response> {
 					code_challenge: string;
 					expires_at: number;
 					used: number;
-					me: string | null;
 			  }
 			| undefined;
 
@@ -1647,11 +1679,13 @@ export async function token(req: Request): Promise<Response> {
 			meValue = user.url;
 		}
 
+		const origin = process.env.ORIGIN || "http://localhost:3000";
+		
 		const response: Record<string, unknown> = {
 			me: meValue,
 			profile,
 			scope: scopes.join(" "),
-			iss: process.env.ORIGIN || "http://localhost:3000",
+			iss: origin,
 		};
 
 		// Include role if assigned
@@ -1659,7 +1693,15 @@ export async function token(req: Request): Promise<Response> {
 			response.role = permission.role;
 		}
 
-		return Response.json(response);
+
+
+		return Response.json(response, {
+			headers: {
+				"Content-Type": "application/json",
+				"Cache-Control": "no-store",
+				"Pragma": "no-cache",
+			},
+		});
 	} catch (error) {
 		console.error("Token exchange error:", error);
 		return Response.json(
