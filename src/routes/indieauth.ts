@@ -1839,6 +1839,7 @@ export async function token(req: Request): Promise<Response> {
 
 		// Validate that the user controls the requested me parameter
 		if (authcode.me && authcode.me !== meValue) {
+			console.error("Token endpoint: me mismatch", { requested: authcode.me, actual: meValue });
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1881,7 +1882,7 @@ export async function token(req: Request): Promise<Response> {
 			response.role = permission.role;
 		}
 
-
+		console.log("Token endpoint: success", { me: meValue, scopes: scopes.join(" ") });
 
 		return Response.json(response, {
 			headers: {
