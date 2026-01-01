@@ -568,8 +568,8 @@ export async function authorizeGet(req: Request): Promise<Response> {
 
 	// Validate required OAuth 2.0 parameters
 	const responseType = params.get("response_type");
-	const clientId = params.get("client_id");
-	const redirectUri = params.get("redirect_uri");
+	const rawClientId = params.get("client_id");
+	const rawRedirectUri = params.get("redirect_uri");
 	const state = params.get("state");
 	const codeChallenge = params.get("code_challenge");
 	const codeChallengeMethod = params.get("code_challenge_method");
@@ -580,9 +580,13 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		return new Response("Unsupported response_type", { status: 400 });
 	}
 
-	if (!clientId || !redirectUri || !state || !codeChallenge) {
+	if (!rawClientId || !rawRedirectUri || !state || !codeChallenge) {
 		return new Response("Missing required parameters", { status: 400 });
 	}
+
+	// Canonicalize URLs for consistent storage and comparison
+	const clientId = canonicalizeURL(rawClientId);
+	const redirectUri = canonicalizeURL(rawRedirectUri);
 
 	// Validate redirect_uri is a valid URL
 	try {
@@ -1349,15 +1353,19 @@ export async function authorizePost(req: Request): Promise<Response> {
 	}
 
 	const action = body.action;
-	const clientId = body.client_id;
-	const redirectUri = body.redirect_uri;
+	const rawClientId = body.client_id;
+	const rawRedirectUri = body.redirect_uri;
 	const state = body.state;
 	const codeChallenge = body.code_challenge;
 	const me = body.me || null;
 
-	if (!clientId || !redirectUri || !state || !codeChallenge) {
+	if (!rawClientId || !rawRedirectUri || !state || !codeChallenge) {
 		return new Response("Missing required parameters", { status: 400 });
 	}
+
+	// Canonicalize URLs for consistent storage and comparison
+	const clientId = canonicalizeURL(rawClientId);
+	const redirectUri = canonicalizeURL(rawRedirectUri);
 
 	if (action === "deny") {
 		return Response.redirect(
@@ -1459,11 +1467,15 @@ export async function token(req: Request): Promise<Response> {
 		const {
 			grant_type,
 			code,
-			client_id,
+			client_id: raw_client_id,
 			client_secret,
-			redirect_uri,
+			redirect_uri: raw_redirect_uri,
 			code_verifier,
 		} = body;
+
+		// Canonicalize URLs for consistent comparison with stored values
+		const client_id = raw_client_id ? canonicalizeURL(raw_client_id) : undefined;
+		const redirect_uri = raw_redirect_uri ? canonicalizeURL(raw_redirect_uri) : undefined;
 
 		if (grant_type !== "authorization_code" && grant_type !== "refresh_token") {
 			return Response.json(
