@@ -110,8 +110,12 @@ function verifyPKCE(verifier: string, challenge: string): boolean {
 	return hash === challenge;
 }
 
-// Canonicalize URL per IndieAuth spec
+// Canonicalize URL per IndieAuth spec (only for actual URLs, not internal IDs)
 function canonicalizeURL(urlString: string): string {
+	// Only canonicalize if it looks like a URL
+	if (!urlString.startsWith("http://") && !urlString.startsWith("https://")) {
+		return urlString;
+	}
 	const url = new URL(urlString);
 	// Lowercase hostname per spec
 	url.hostname = url.hostname.toLowerCase();
@@ -584,13 +588,12 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		return new Response("Missing required parameters", { status: 400 });
 	}
 
-	// Canonicalize URLs for consistent storage and comparison
-	const clientId = canonicalizeURL(rawClientId);
-	const redirectUri = canonicalizeURL(rawRedirectUri);
-
-	// Validate redirect_uri is a valid URL
+	// Validate and canonicalize URLs for consistent storage and comparison
+	let clientId: string;
+	let redirectUri: string;
 	try {
-		new URL(redirectUri);
+		clientId = canonicalizeURL(rawClientId);
+		redirectUri = canonicalizeURL(rawRedirectUri);
 	} catch {
 		return new Response(
 			`<!DOCTYPE html>
@@ -672,7 +675,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		</p>
 		<div class="error-details">
 			<strong>Provided redirect_uri:</strong>
-			<code>${redirectUri}</code>
+			<code>${rawRedirectUri}</code>
 		</div>
 		<p style="margin-top: 1.5rem; font-size: 0.875rem; color: var(--old-rose);">
 			The redirect URI must be a valid, absolute URL (e.g., https://example.com/callback).
@@ -1364,8 +1367,14 @@ export async function authorizePost(req: Request): Promise<Response> {
 	}
 
 	// Canonicalize URLs for consistent storage and comparison
-	const clientId = canonicalizeURL(rawClientId);
-	const redirectUri = canonicalizeURL(rawRedirectUri);
+	let clientId: string;
+	let redirectUri: string;
+	try {
+		clientId = canonicalizeURL(rawClientId);
+		redirectUri = canonicalizeURL(rawRedirectUri);
+	} catch {
+		return new Response("Invalid client_id or redirect_uri URL format", { status: 400 });
+	}
 
 	if (action === "deny") {
 		return Response.redirect(
@@ -1474,8 +1483,20 @@ export async function token(req: Request): Promise<Response> {
 		} = body;
 
 		// Canonicalize URLs for consistent comparison with stored values
-		const client_id = raw_client_id ? canonicalizeURL(raw_client_id) : undefined;
-		const redirect_uri = raw_redirect_uri ? canonicalizeURL(raw_redirect_uri) : undefined;
+		let client_id: string | undefined;
+		let redirect_uri: string | undefined;
+		try {
+			client_id = raw_client_id ? canonicalizeURL(raw_client_id) : undefined;
+			redirect_uri = raw_redirect_uri ? canonicalizeURL(raw_redirect_uri) : undefined;
+		} catch {
+			return Response.json(
+				{
+					error: "invalid_request",
+					error_description: "Invalid client_id or redirect_uri URL format",
+				},
+				{ status: 400 },
+			);
+		}
 
 		if (grant_type !== "authorization_code" && grant_type !== "refresh_token") {
 			return Response.json(
