@@ -1694,6 +1694,7 @@ export async function token(req: Request): Promise<Response> {
 			| undefined;
 
 		if (!authcode) {
+			console.error("Token endpoint: authorization code not found", { code });
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1705,6 +1706,7 @@ export async function token(req: Request): Promise<Response> {
 
 		// Check if already used
 		if (authcode.used) {
+			console.error("Token endpoint: authorization code already used", { code });
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1717,6 +1719,7 @@ export async function token(req: Request): Promise<Response> {
 		// Check if expired
 		const now = Math.floor(Date.now() / 1000);
 		if (authcode.expires_at < now) {
+			console.error("Token endpoint: authorization code expired", { code, expires_at: authcode.expires_at, now, diff: now - authcode.expires_at });
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1728,6 +1731,7 @@ export async function token(req: Request): Promise<Response> {
 
 		// Verify client_id matches
 		if (authcode.client_id !== client_id) {
+			console.error("Token endpoint: client_id mismatch", { stored: authcode.client_id, received: client_id });
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1739,6 +1743,7 @@ export async function token(req: Request): Promise<Response> {
 
 		// Verify redirect_uri matches
 		if (authcode.redirect_uri !== redirect_uri) {
+			console.error("Token endpoint: redirect_uri mismatch", { stored: authcode.redirect_uri, received: redirect_uri });
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1750,6 +1755,7 @@ export async function token(req: Request): Promise<Response> {
 
 		// Verify PKCE code_verifier (required for all clients per IndieAuth spec)
 		if (!verifyPKCE(code_verifier, authcode.code_challenge)) {
+			console.error("Token endpoint: PKCE verification failed", { code_verifier, code_challenge: authcode.code_challenge });
 			return Response.json(
 				{
 					error: "invalid_grant",
