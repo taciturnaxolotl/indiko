@@ -31,6 +31,13 @@ import {
 	registerVerify,
 } from "./routes/auth";
 import {
+	addPasskeyOptions,
+	addPasskeyVerify,
+	deletePasskey,
+	listPasskeys,
+	renamePasskey,
+} from "./routes/passkeys";
+import {
 	createClient,
 	deleteClient,
 	getClient,
@@ -246,6 +253,24 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 		"/auth/register/verify": registerVerify,
 		"/auth/login/options": loginOptions,
 		"/auth/login/verify": loginVerify,
+		// Passkey management endpoints
+		"/api/passkeys": (req: Request) => {
+			if (req.method === "GET") return listPasskeys(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/passkeys/add/options": (req: Request) => {
+			if (req.method === "POST") return addPasskeyOptions(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/passkeys/add/verify": (req: Request) => {
+			if (req.method === "POST") return addPasskeyVerify(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/passkeys/:id": (req: Request) => {
+			if (req.method === "DELETE") return deletePasskey(req);
+			if (req.method === "PATCH") return renamePasskey(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
 		// Dynamic routes with Bun's :param syntax
 		"/u/:username": userProfile,
 		"/api/apps/:clientId": (req) => {

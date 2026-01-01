@@ -270,12 +270,13 @@ export async function registerVerify(req: Request): Promise<Response> {
 		// Store credential
 		// credential.id is a Uint8Array, convert to Buffer for storage
 		db.query(
-			"INSERT INTO credentials (user_id, credential_id, public_key, counter) VALUES (?, ?, ?, ?)",
+			"INSERT INTO credentials (user_id, credential_id, public_key, counter, name) VALUES (?, ?, ?, ?, ?)",
 		).run(
 			user.id,
 			Buffer.from(credential.id),
 			Buffer.from(credential.publicKey),
 			credential.counter,
+			"Primary Passkey",
 		);
 
 		// Mark invite as used if applicable

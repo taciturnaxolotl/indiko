@@ -196,6 +196,61 @@
     .toast.success {
       border-color: var(--berry-crush);
     }
+
+    .passkey-item {
+      padding: 0.75rem;
+      background: rgba(12, 23, 19, 0.6);
+      border: 1px solid var(--rosewood);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .passkey-info {
+      flex: 1;
+    }
+
+    .passkey-name {
+      font-weight: 500;
+      color: var(--lavender);
+      margin-bottom: 0.25rem;
+    }
+
+    .passkey-date {
+      font-size: 0.75rem;
+      color: var(--old-rose);
+    }
+
+    .passkey-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .passkey-actions button {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.75rem;
+      margin: 0;
+    }
+
+    .rename-form {
+      display: flex;
+      gap: 0.5rem;
+      width: 100%;
+    }
+
+    .rename-form input {
+      flex: 1;
+      margin: 0;
+      padding: 0.375rem 0.75rem;
+      font-size: 0.875rem;
+    }
+
+    .rename-form button {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.75rem;
+      margin: 0;
+    }
   </style>
 </head>
 
@@ -211,6 +266,19 @@
       <div id="recentApps" class="apps-preview">
         <div class="loading">loading...</div>
       </div>
+    </div>
+
+    <div class="profile-section">
+      <h2 class="section-title">passkeys</h2>
+      <p style="color: var(--old-rose); margin-bottom: 1.5rem; line-height: 1.6;">
+        Manage your passkeys for secure, password-free authentication
+      </p>
+      <div id="passkeysList" class="apps-preview">
+        <div class="loading">loading...</div>
+      </div>
+      <button type="button" id="addPasskeyBtn" style="margin-top: 1rem;">
+        add new passkey
+      </button>
     </div>
 
     <div class="profile-section">

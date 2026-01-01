@@ -1,8 +1,14 @@
+import {
+	startRegistration,
+} from "@simplewebauthn/browser";
+
 const token = localStorage.getItem("indiko_session");
 const footer = document.getElementById("footer") as HTMLElement;
 const welcome = document.getElementById("welcome") as HTMLElement;
 const subtitle = document.getElementById("subtitle") as HTMLElement;
 const recentApps = document.getElementById("recentApps") as HTMLElement;
+const passkeysList = document.getElementById("passkeysList") as HTMLElement;
+const addPasskeyBtn = document.getElementById("addPasskeyBtn") as HTMLButtonElement;
 const toast = document.getElementById("toast") as HTMLElement;
 
 // Profile form elements
@@ -40,6 +46,12 @@ interface Profile {
 	photo: string | null;
 	url: string | null;
 	isAdmin?: boolean;
+}
+
+interface Passkey {
+	id: number;
+	name: string;
+	created_at: number;
 }
 
 function showToast(message: string, type: "success" | "error" = "success") {
@@ -112,6 +124,7 @@ async function checkAuth() {
 		// Load profile and apps
 		loadProfile();
 		loadRecentApps();
+		loadPasskeys();
 	} catch (error) {
 		console.error("Auth check failed:", error);
 		footer.textContent = "error loading user info";
@@ -288,6 +301,229 @@ deleteAccountBtn.addEventListener("click", async () => {
 		showToast((error as Error).message || "Failed to delete account", "error");
 		deleteAccountBtn.disabled = false;
 		deleteAccountBtn.textContent = "delete my account";
+	}
+});
+
+async function loadPasskeys() {
+	try {
+		const response = await fetch("/api/passkeys", {
+			headers: {
+				Authorization: `Bearer ${token}`,
+			},
+		});
+
+		if (!response.ok) {
+			throw new Error("Failed to load passkeys");
+		}
+
+		const data = await response.json();
+		const passkeys = data.passkeys as Passkey[];
+
+		if (passkeys.length === 0) {
+			passkeysList.innerHTML = '<div class="empty">No passkeys registered</div>';
+			return;
+		}
+
+		passkeysList.innerHTML = passkeys
+			.map((passkey) => {
+				const createdDate = new Date(passkey.created_at * 1000).toLocaleDateString();
+
+				return `
+				<div class="passkey-item" data-passkey-id="${passkey.id}">
+					<div class="passkey-info">
+						<div class="passkey-name">${passkey.name}</div>
+						<div class="passkey-date">added ${createdDate}</div>
+					</div>
+					<div class="passkey-actions">
+						<button type="button" class="rename-passkey-btn" data-passkey-id="${passkey.id}">rename</button>
+						${passkeys.length > 1 ? `<button type="button" class="delete-passkey-btn" data-passkey-id="${passkey.id}">delete</button>` : ''}
+					</div>
+				</div>
+			`;
+			})
+			.join("");
+
+		// Add event listeners for rename buttons
+		document.querySelectorAll(".rename-passkey-btn").forEach((btn) => {
+			btn.addEventListener("click", () => {
+				const passkeyId = btn.getAttribute("data-passkey-id");
+				showRenameForm(Number(passkeyId));
+			});
+		});
+
+		// Add event listeners for delete buttons
+		document.querySelectorAll(".delete-passkey-btn").forEach((btn) => {
+			btn.addEventListener("click", async () => {
+				const passkeyId = btn.getAttribute("data-passkey-id");
+				await deletePasskeyHandler(Number(passkeyId));
+			});
+		});
+	} catch (error) {
+		console.error("Failed to load passkeys:", error);
+		passkeysList.innerHTML = '<div class="empty">Failed to load passkeys</div>';
+	}
+}
+
+function showRenameForm(passkeyId: number) {
+	const passkeyItem = document.querySelector(`[data-passkey-id="${passkeyId}"]`);
+	if (!passkeyItem) return;
+
+	const infoDiv = passkeyItem.querySelector(".passkey-info");
+	const nameDiv = infoDiv?.querySelector(".passkey-name");
+	if (!nameDiv) return;
+
+	const currentName = nameDiv.textContent || "";
+
+	// Replace the info div with a rename form
+	if (infoDiv) {
+		infoDiv.innerHTML = `
+			<div class="rename-form">
+				<input type="text" value="${currentName}" class="rename-input" data-passkey-id="${passkeyId}" />
+				<button type="button" class="save-rename-btn" data-passkey-id="${passkeyId}">save</button>
+				<button type="button" class="cancel-rename-btn" data-passkey-id="${passkeyId}">cancel</button>
+			</div>
+		`;
+
+		const input = infoDiv.querySelector(".rename-input") as HTMLInputElement;
+		input.focus();
+		input.select();
+
+		// Save button
+		infoDiv.querySelector(".save-rename-btn")?.addEventListener("click", async () => {
+			await renamePasskeyHandler(passkeyId, input.value);
+		});
+
+		// Cancel button
+		infoDiv.querySelector(".cancel-rename-btn")?.addEventListener("click", () => {
+			loadPasskeys();
+		});
+
+		// Enter to save
+		input.addEventListener("keypress", async (e) => {
+			if (e.key === "Enter") {
+				await renamePasskeyHandler(passkeyId, input.value);
+			}
+		});
+
+		// Escape to cancel
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Escape") {
+				loadPasskeys();
+			}
+		});
+	}
+}
+
+async function renamePasskeyHandler(passkeyId: number, newName: string) {
+	if (!newName.trim()) {
+		showToast("Passkey name cannot be empty", "error");
+		return;
+	}
+
+	try {
+		const response = await fetch(`/api/passkeys/${passkeyId}`, {
+			method: "PATCH",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ name: newName }),
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.error || "Failed to rename passkey");
+		}
+
+		showToast("Passkey renamed successfully!", "success");
+		loadPasskeys();
+	} catch (error) {
+		showToast((error as Error).message || "Failed to rename passkey", "error");
+	}
+}
+
+async function deletePasskeyHandler(passkeyId: number) {
+	if (!confirm("Are you sure you want to delete this passkey? You will no longer be able to use it to sign in.")) {
+		return;
+	}
+
+	try {
+		const response = await fetch(`/api/passkeys/${passkeyId}`, {
+			method: "DELETE",
+			headers: {
+				Authorization: `Bearer ${token}`,
+			},
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.error || "Failed to delete passkey");
+		}
+
+		showToast("Passkey deleted successfully!", "success");
+		loadPasskeys();
+	} catch (error) {
+		showToast((error as Error).message || "Failed to delete passkey", "error");
+	}
+}
+
+// Add passkey button handler
+addPasskeyBtn.addEventListener("click", async () => {
+	addPasskeyBtn.disabled = true;
+	addPasskeyBtn.textContent = "preparing...";
+
+	try {
+		// Get registration options
+		const optionsRes = await fetch("/api/passkeys/add/options", {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${token}`,
+			},
+		});
+
+		if (!optionsRes.ok) {
+			const error = await optionsRes.json();
+			throw new Error(error.error || "Failed to get passkey options");
+		}
+
+		const options = await optionsRes.json();
+
+		addPasskeyBtn.textContent = "create your passkey...";
+
+		// Start registration
+		const regResponse = await startRegistration(options);
+
+		addPasskeyBtn.textContent = "verifying...";
+
+		// Ask for a name
+		const name = prompt("Give this passkey a name (e.g., 'iPhone', 'Work Laptop'):");
+
+		// Verify registration
+		const verifyRes = await fetch("/api/passkeys/add/verify", {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				response: regResponse,
+				challenge: options.challenge,
+				name: name || undefined,
+			}),
+		});
+
+		if (!verifyRes.ok) {
+			const error = await verifyRes.json();
+			throw new Error(error.error || "Failed to add passkey");
+		}
+
+		showToast("Passkey added successfully!", "success");
+		loadPasskeys();
+	} catch (error) {
+		showToast((error as Error).message || "Failed to add passkey", "error");
+	} finally {
+		addPasskeyBtn.disabled = false;
+		addPasskeyBtn.textContent = "add new passkey";
 	}
 });
 
