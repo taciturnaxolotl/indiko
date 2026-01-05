@@ -31,13 +31,6 @@ import {
 	registerVerify,
 } from "./routes/auth";
 import {
-	addPasskeyOptions,
-	addPasskeyVerify,
-	deletePasskey,
-	listPasskeys,
-	renamePasskey,
-} from "./routes/passkeys";
-import {
 	createClient,
 	deleteClient,
 	getClient,
@@ -58,9 +51,16 @@ import {
 	tokenIntrospect,
 	tokenRevoke,
 	updateInvite,
-	userProfile,
 	userinfo,
+	userProfile,
 } from "./routes/indieauth";
+import {
+	addPasskeyOptions,
+	addPasskeyVerify,
+	deletePasskey,
+	listPasskeys,
+	renamePasskey,
+} from "./routes/passkeys";
 
 (() => {
 	const required = ["ORIGIN", "RP_ID"];
