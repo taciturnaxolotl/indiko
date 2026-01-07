@@ -33,11 +33,55 @@ src/
 │   ├── login.html
 │   ├── index.html
 │   └── profile.html
-└── migrations/        # SQL migrations
-    ├── 001_init.sql
-    ├── 002_add_user_status_role.sql
-    └── 003_add_indieauth_tables.sql
+├── migrations/        # SQL migrations
+│   ├── 001_init.sql
+│   ├── 002_add_user_status_role.sql
+│   ├── 003_add_indieauth_tables.sql
+│   └── 007_add_ldap_support.sql
 ```
+
+### Database Migrations
+
+**Migration Versioning:**
+- SQLite uses `PRAGMA user_version` to track migration state
+- Version starts at 0, increments by 1 for each migration
+- The `bun-sqlite-migrations` package handles version tracking
+- Migrations are stored in `src/migrations/` directory
+
+**Creating a New Migration:**
+
+1. **Name the file**: Use 3-digit prefix (e.g., `008_add_feature.sql`)
+   - Next available number = highest existing number + 1
+   - Use descriptive name (e.g., `008_add_auth_tokens.sql`)
+
+2. **Write SQL statements**: Add schema changes in the file
+   ```sql
+   -- Add new column to users table
+   ALTER TABLE users ADD COLUMN new_field TEXT DEFAULT '';
+
+   -- Create new table
+   CREATE TABLE IF NOT EXISTS new_table (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     name TEXT NOT NULL
+   );
+   ```
+
+3. **Migration execution**:
+   - Migrations run automatically when server starts (`src/db.ts`)
+   - Only new migrations (version > current) are executed
+   - Each migration increments `user_version` by 1
+
+**Version Tracking:**
+- Check current version: `sqlite3 data/indiko.db "PRAGMA user_version;"`
+- The migration system compares `user_version` against migration files
+- No manual version updates needed - handled by `bun-sqlite-migrations`
+
+**Best Practices:**
+- Use `ALTER TABLE` for adding columns to existing tables
+- Use `CREATE TABLE IF NOT EXISTS` for new tables
+- Use `DEFAULT` values when adding non-null columns
+- Add comments with `--` to explain changes
+- Test migrations locally before committing
 
 ### Client-Side Code
 - Extract JavaScript from HTML into separate TypeScript modules in `src/client/`
@@ -59,16 +103,18 @@ src/
 - **`me` parameter delegation**: When a client passes `me=https://example.com` in the authorization request and it matches the user's website URL, the token response returns that URL instead of the canonical `/u/{username}` URL
 
 ### Database Schema
-- **users**: username, name, email, photo, url, status, role, tier, is_admin
+- **users**: username, name, email, photo, url, status, role, tier, is_admin, provisioned_via_ldap, last_ldap_verified_at
   - **tier**: User access level - 'admin' (full access), 'developer' (can create apps), 'user' (can only authenticate with apps)
   - **is_admin**: Legacy flag, automatically synced with tier (1 if tier='admin', 0 otherwise)
+  - **provisioned_via_ldap**: Flag tracking if user was created via LDAP authentication (0 = local, 1 = LDAP)
+  - **last_ldap_verified_at**: Timestamp of last successful LDAP existence check (NULL if never checked)
 - **credentials**: passkey credentials (credential_id, public_key, counter)
 - **sessions**: user sessions with 24-hour expiry
 - **challenges**: WebAuthn challenges (5-minute expiry)
 - **apps**: auto-registered OAuth clients
 - **permissions**: per-user, per-app granted scopes
-- **authcodes**: short-lived authorization codes (60-second expiry, single-use), includes `me` parameter for delegation
-- **invites**: admin-created invite codes
+- **authcodes**: short-lived authorization codes (60-second expiry, single-use), includes username and `me` parameter for delegation
+- **invites**: admin-created invite codes, includes `ldap_username` for LDAP-provisioned accounts
 
 ### WebAuthn/Passkey Settings
 - **Registration**: residentKey="required", userVerification="required"

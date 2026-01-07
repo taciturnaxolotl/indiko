@@ -17,7 +17,7 @@ interface AuditResult {
 		username: string;
 		id: number;
 		status: string;
-		createdDate: string | undefined;
+		createdAt: number;
 	}>;
 }
 
@@ -114,9 +114,7 @@ export async function getLdapAccounts(): Promise<AuditResult> {
 					username: user.username,
 					id: user.id,
 					status: user.status,
-					createdDate: new Date(user.created_at * 1000)
-						.toISOString()
-						.split("T")[0],
+					createdAt: user.created_at,
 				});
 			}
 		} catch (error) {

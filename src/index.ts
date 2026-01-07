@@ -351,18 +351,37 @@ const ldapCleanupJob =
 		? setInterval(async () => {
 				const result = await getLdapAccounts();
 				const action = process.env.LDAP_ORPHAN_ACTION || "deactivate";
-				if (action === "suspend") {
-					await updateOrphanedAccounts(result, "suspend");
-				} else if (action === "deactivate") {
-					await updateOrphanedAccounts(result, "deactivate");
-				} else if (action === "remove") {
-					await updateOrphanedAccounts(result, "remove");
+				const gracePeriod = Number.parseInt(
+					process.env.LDAP_ORPHAN_GRACE_PERIOD || "604800",
+					10,
+				); // 7 days default
+				const now = Math.floor(Date.now() / 1000);
+
+				// Only take action on accounts orphaned longer than grace period
+				if (result.orphaned > 0) {
+					const expiredOrphans = result.orphanedUsers.filter(
+						(user) => now - user.createdAt > gracePeriod,
+					);
+
+					if (expiredOrphans.length > 0) {
+						if (action === "suspend") {
+							await updateOrphanedAccounts({ ...result, orphanedUsers: expiredOrphans }, "suspend");
+						} else if (action === "deactivate") {
+							await updateOrphanedAccounts({ ...result, orphanedUsers: expiredOrphans }, "deactivate");
+						} else if (action === "remove") {
+							await updateOrphanedAccounts({ ...result, orphanedUsers: expiredOrphans }, "remove");
+						}
+						console.log(
+							`[LDAP Cleanup] ${action === "remove" ? "Removed" : action === "suspend" ? "Suspended" : "Deactivated"} ${expiredOrphans.length} LDAP orphan accounts (grace period: ${gracePeriod}s)`,
+						);
+					}
 				}
+
 				console.log(
-					`[LDAP Cleanup] ${action === "remove" ? "Removed" : action === "suspend" ? "Suspended" : "Deactivated"} LDAP orphan accounts: ${result.total} total, ${result.active} active, ${result.orphaned} orphaned, ${result.errors} errors.`,
+					`[LDAP Cleanup] Check completed: ${result.total} total, ${result.active} active, ${result.orphaned} orphaned, ${result.errors} errors.`,
 				);
-			}, 43200000)
-		: null; // 12 hours in milliseconds
+			}, 3600000)
+		: null; // 1 hour in milliseconds
 
 let is_shutting_down = false;
 function shutdown(sig: string) {

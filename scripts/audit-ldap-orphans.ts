@@ -44,7 +44,7 @@ interface AuditResult {
 		username: string;
 		id: number;
 		status: string;
-		createdDate: string | undefined;
+		createdAt: number;
 	}>;
 }
 
@@ -105,9 +105,7 @@ async function auditLdapAccounts(): Promise<AuditResult> {
 					username: user.username,
 					id: user.id,
 					status: user.status,
-					createdDate: new Date(user.created_at * 1000)
-						.toISOString()
-						.split("T")[0],
+					createdAt: user.created_at,
 				});
 			}
 		} catch (error) {
@@ -144,7 +142,7 @@ function printReport(result: AuditResult): void {
 	result.orphanedUsers.forEach((user, idx) => {
 		console.log(`${idx + 1}. ${user.username}`);
 		console.log(
-			`   ID: ${user.id} | Status: ${user.status} | Created: ${user.createdDate}`,
+			`   ID: ${user.id} | Status: ${user.status} | Created: ${new Date(user.createdAt * 1000).toISOString().split("T")[0]}`,
 		);
 	});
 }

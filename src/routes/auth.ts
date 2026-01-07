@@ -381,8 +381,8 @@ export async function loginOptions(req: Request): Promise<Response> {
 
 		// Check if user exists and is active
 		const user = db
-			.query("SELECT id, status FROM users WHERE username = ?")
-			.get(username) as { id: number; status: string } | undefined;
+			.query("SELECT id, status, provisioned_via_ldap, last_ldap_verified_at FROM users WHERE username = ?")
+			.get(username) as { id: number; status: string; provisioned_via_ldap: number; last_ldap_verified_at: number | null } | undefined;
 
 		if (!user) {
 			return Response.json({ error: "Invalid credentials" }, { status: 401 });
@@ -390,6 +390,34 @@ export async function loginOptions(req: Request): Promise<Response> {
 
 		if (user.status !== "active") {
 			return Response.json({ error: "Invalid credentials" }, { status: 401 });
+		}
+
+		// Check if LDAP-provisioned user still exists in LDAP (with caching)
+		if (user.provisioned_via_ldap === 1) {
+			const checkInterval =
+				Number.parseInt(process.env.LDAP_CHECK_INTERVAL || "86400", 10) * 1000;
+			const now = Date.now();
+			const shouldCheck =
+				!user.last_ldap_verified_at ||
+				now - user.last_ldap_verified_at > checkInterval;
+
+			if (shouldCheck) {
+				const existsInLdap = await checkLdapUser(username);
+				if (!existsInLdap) {
+					// User no longer exists in LDAP - suspend the account
+					db.query("UPDATE users SET status = 'suspended' WHERE id = ?").run(user.id);
+					return Response.json(
+						{ error: "Invalid credentials" },
+						{ status: 401 },
+					);
+				}
+
+				// Update last verification timestamp
+				db.query("UPDATE users SET last_ldap_verified_at = ? WHERE id = ?").run(
+					Math.floor(now / 1000),
+					user.id,
+				);
+			}
 		}
 
 		// Get user's credentials (just to verify they exist)
