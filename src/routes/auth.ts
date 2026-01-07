@@ -1,20 +1,22 @@
 import {
 	type AuthenticationResponseJSON,
-	generateAuthenticationOptions,
-	generateRegistrationOptions,
 	type PublicKeyCredentialCreationOptionsJSON,
 	type PublicKeyCredentialRequestOptionsJSON,
 	type RegistrationResponseJSON,
 	type VerifiedAuthenticationResponse,
 	type VerifiedRegistrationResponse,
+	generateAuthenticationOptions,
+	generateRegistrationOptions,
 	verifyAuthenticationResponse,
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
+import { authenticate } from "ldap-authentication";
 import { db } from "../db";
+import { checkLdapGroupMembership } from "../ldap-cleanup";
 
 const RP_NAME = "Indiko";
 
-export function canRegister(req: Request): Response {
+export function canRegister(_req: Request): Response {
 	const userCount = db.query("SELECT COUNT(*) as count FROM users").get() as {
 		count: number;
 	};
@@ -66,7 +68,7 @@ export async function registerOptions(req: Request): Promise<Response> {
 			// Validate invite code
 			const invite = db
 				.query(
-					"SELECT id, max_uses, current_uses, expires_at, message FROM invites WHERE code = ?",
+					"SELECT id, max_uses, current_uses, expires_at, message, ldap_username FROM invites WHERE code = ?",
 				)
 				.get(inviteCode) as
 				| {
@@ -75,6 +77,7 @@ export async function registerOptions(req: Request): Promise<Response> {
 						current_uses: number;
 						expires_at: number | null;
 						message: string | null;
+						ldap_username: string | null;
 				  }
 				| undefined;
 
@@ -87,10 +90,13 @@ export async function registerOptions(req: Request): Promise<Response> {
 				return Response.json({ error: "Invite code expired" }, { status: 403 });
 			}
 
-			if (invite.current_uses >= invite.max_uses) {
+			// Will check usage limit atomically during update
+
+			// If invite is locked to an LDAP username, enforce it
+			if (invite.ldap_username && invite.ldap_username !== username) {
 				return Response.json(
-					{ error: "Invite code fully used" },
-					{ status: 403 },
+					{ error: "Username must match LDAP account" },
+					{ status: 400 },
 				);
 			}
 
@@ -102,7 +108,7 @@ export async function registerOptions(req: Request): Promise<Response> {
 		const options: PublicKeyCredentialCreationOptionsJSON =
 			await generateRegistrationOptions({
 				rpName: RP_NAME,
-				rpID: process.env.RP_ID!,
+				rpID: process.env.RP_ID || "",
 				userName: username,
 				userDisplayName: username,
 				attestationType: "none",
@@ -160,6 +166,10 @@ export async function registerVerify(req: Request): Promise<Response> {
 			);
 		}
 
+		if (!expectedChallenge) {
+			return Response.json({ error: "Invalid challenge" }, { status: 400 });
+		}
+
 		// Verify challenge exists and is valid
 		const challenge = db
 			.query(
@@ -198,7 +208,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 			const invite = db
 				.query(
-					"SELECT id, max_uses, current_uses, expires_at FROM invites WHERE code = ?",
+					"SELECT id, max_uses, current_uses, expires_at, ldap_username FROM invites WHERE code = ?",
 				)
 				.get(inviteCode) as
 				| {
@@ -206,6 +216,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 						max_uses: number;
 						current_uses: number;
 						expires_at: number | null;
+						ldap_username: string | null;
 				  }
 				| undefined;
 
@@ -218,10 +229,11 @@ export async function registerVerify(req: Request): Promise<Response> {
 				return Response.json({ error: "Invite code expired" }, { status: 403 });
 			}
 
-			if (invite.current_uses >= invite.max_uses) {
+			// If invite is locked to an LDAP username, enforce it
+			if (invite.ldap_username && invite.ldap_username !== username) {
 				return Response.json(
-					{ error: "Invite code fully used" },
-					{ status: 403 },
+					{ error: "Username must match LDAP account" },
+					{ status: 400 },
 				);
 			}
 
@@ -239,8 +251,8 @@ export async function registerVerify(req: Request): Promise<Response> {
 			verification = await verifyRegistrationResponse({
 				response,
 				expectedChallenge: challenge.challenge,
-				expectedOrigin: process.env.ORIGIN!,
-				expectedRPID: process.env.RP_ID!,
+				expectedOrigin: process.env.ORIGIN || "",
+				expectedRPID: process.env.RP_ID || "",
 			});
 		} catch (error) {
 			console.error("WebAuthn verification failed:", error);
@@ -253,9 +265,19 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 		const { credential } = verification.registrationInfo;
 
+		// Check if this user is being provisioned via LDAP
+		let isLdapProvisioned = false;
+		if (inviteId) {
+			const invite = db
+				.query("SELECT ldap_username FROM invites WHERE id = ?")
+				.get(inviteId) as { ldap_username: string | null } | undefined;
+			isLdapProvisioned =
+				invite?.ldap_username !== null && invite?.ldap_username !== undefined;
+		}
+
 		// Create user (bootstrap is always admin, invited users are regular users)
 		const insertUser = db.query(
-			"INSERT INTO users (username, name, is_admin, tier, role) VALUES (?, ?, ?, ?, ?) RETURNING id",
+			"INSERT INTO users (username, name, is_admin, tier, role, provisioned_via_ldap) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
 		);
 		const user = insertUser.get(
 			username,
@@ -263,6 +285,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 			isBootstrap ? 1 : 0,
 			isBootstrap ? "admin" : "user",
 			isBootstrap ? "admin" : "user",
+			isLdapProvisioned ? 1 : 0,
 		) as {
 			id: number;
 		};
@@ -283,10 +306,20 @@ export async function registerVerify(req: Request): Promise<Response> {
 		if (inviteId) {
 			const usedAt = Math.floor(Date.now() / 1000);
 
-			// Increment invite usage counter
-			db.query(
-				"UPDATE invites SET current_uses = current_uses + 1 WHERE id = ?",
-			).run(inviteId);
+			// Atomically increment invite usage counter while checking max_uses limit
+			const result = db
+				.query(
+					"UPDATE invites SET current_uses = current_uses + 1 WHERE id = ? AND current_uses < max_uses",
+				)
+				.run(inviteId);
+
+			// Check if update was successful (0 rows affected means invite was already fully used)
+			if (result.changes === 0) {
+				return Response.json(
+					{ error: "Invite code fully used" },
+					{ status: 403 },
+				);
+			}
 
 			// Record this invite use
 			db.query(
@@ -352,11 +385,11 @@ export async function loginOptions(req: Request): Promise<Response> {
 			.get(username) as { id: number; status: string } | undefined;
 
 		if (!user) {
-			return Response.json({ error: "User not found" }, { status: 404 });
+			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
 		if (user.status !== "active") {
-			return Response.json({ error: "Account is suspended" }, { status: 403 });
+			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
 		// Get user's credentials (just to verify they exist)
@@ -365,14 +398,14 @@ export async function loginOptions(req: Request): Promise<Response> {
 			.all(user.id) as { credential_id: Buffer }[];
 
 		if (credentials.length === 0) {
-			return Response.json({ error: "No credentials found" }, { status: 404 });
+			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
 		// Generate authentication options
 		// Use discoverable credentials (no allowCredentials) for better UX
 		const options: PublicKeyCredentialRequestOptionsJSON =
 			await generateAuthenticationOptions({
-				rpID: process.env.RP_ID!,
+				rpID: process.env.RP_ID || "",
 				userVerification: "required",
 			});
 
@@ -382,7 +415,11 @@ export async function loginOptions(req: Request): Promise<Response> {
 			"INSERT INTO challenges (challenge, username, type, expires_at) VALUES (?, ?, 'authentication', ?)",
 		).run(options.challenge, username, expiresAt);
 
-		return Response.json(options);
+		// Local user always uses passkey login, no LDAP verification needed
+		return Response.json({
+			...options,
+			ldapVerificationRequired: false,
+		});
 	} catch (error) {
 		console.error("Login options error:", error);
 		return Response.json({ error: "Internal server error" }, { status: 500 });
@@ -423,20 +460,17 @@ export async function loginVerify(req: Request): Promise<Response> {
 			| undefined;
 
 		if (!credentialWithUser) {
-			return Response.json({ error: "Credential not found" }, { status: 404 });
+			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
 		// Check if user account is active
 		if (credentialWithUser.status !== "active") {
-			return Response.json({ error: "Account is suspended" }, { status: 403 });
+			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
 		// Verify the username matches
 		if (credentialWithUser.username !== username) {
-			return Response.json(
-				{ error: "Credential does not belong to this user" },
-				{ status: 403 },
-			);
+			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
 		const credential = {
@@ -468,11 +502,11 @@ export async function loginVerify(req: Request): Promise<Response> {
 			verification = await verifyAuthenticationResponse({
 				response,
 				expectedChallenge: challenge.challenge,
-				expectedOrigin: process.env.ORIGIN!,
-				expectedRPID: process.env.RP_ID!,
+				expectedOrigin: process.env.ORIGIN || "",
+				expectedRPID: process.env.RP_ID || "",
 				credential: {
-					id: credential.credential_id,
-					publicKey: credential.public_key,
+					id: credential.credential_id.toString(),
+					publicKey: new Uint8Array(credential.public_key),
 					counter: credential.counter,
 				},
 			});
@@ -522,6 +556,149 @@ export async function loginVerify(req: Request): Promise<Response> {
 		);
 	} catch (error) {
 		console.error("Login verify error:", error);
+		return Response.json({ error: "Internal server error" }, { status: 500 });
+	}
+}
+
+export async function ldapVerify(req: Request): Promise<Response> {
+	try {
+		const body = await req.json();
+		const { username, password, returnUrl } = body as {
+			username: string;
+			password: string;
+			returnUrl?: string;
+		};
+
+		// Check if LDAP is configured
+		if (!process.env.LDAP_ADMIN_DN || !process.env.LDAP_ADMIN_PASSWORD) {
+			return Response.json(
+				{ error: "LDAP is not configured" },
+				{ status: 400 },
+			);
+		}
+
+		if (
+			!username ||
+			username.length > 128 ||
+			!/^[A-Za-z0-9._@-]+$/.test(username)
+		) {
+			return Response.json(
+				{ error: "Invalid username format" },
+				{ status: 400 },
+			);
+		}
+
+		// Verify user doesn't already exist locally (race condition check)
+		const existingUser = db
+			.query("SELECT id FROM users WHERE username = ?")
+			.get(username);
+
+		if (existingUser) {
+			return Response.json(
+				{ error: "Account already exists. Please use passkey login." },
+				{ status: 400 },
+			);
+		}
+
+		// Attempt LDAP bind WITH password verification
+		let ldapUser: unknown;
+		let userDn: string | null = null;
+		try {
+			ldapUser = await authenticate({
+				ldapOpts: {
+					url: process.env.LDAP_URL || "ldap://localhost:389",
+				},
+				adminDn: process.env.LDAP_ADMIN_DN || "",
+				adminPassword: process.env.LDAP_ADMIN_PASSWORD || "",
+				userSearchBase:
+					process.env.LDAP_USER_SEARCH_BASE || "dc=example,dc=com",
+				usernameAttribute: process.env.LDAP_USERNAME_ATTRIBUTE || "uid",
+				username: username,
+				userPassword: password,
+			});
+
+			// Extract userDn from the returned user object
+			if (ldapUser && typeof ldapUser === "object" && "dn" in ldapUser) {
+				userDn = (ldapUser as { dn: string }).dn;
+			}
+		} catch (_ldapError) {
+			return Response.json({ error: "Invalid credentials" }, { status: 401 });
+		}
+
+		if (!ldapUser) {
+			return Response.json({ error: "Invalid credentials" }, { status: 401 });
+		}
+
+		// Check group membership if configured
+		if (userDn) {
+			const isInGroup = await checkLdapGroupMembership(username, userDn);
+			if (!isInGroup) {
+				return Response.json(
+					{ error: "User is not a member of the required group" },
+					{ status: 403 },
+				);
+			}
+		}
+
+		// LDAP auth succeeded - create single-use invite locked to this username
+		const inviteCode = crypto.randomUUID();
+		const expiresAt = Math.floor(Date.now() / 1000) + 600; // 10 minutes
+
+		// Get an admin user to be the creator (required by NOT NULL constraint)
+		const adminUser = db
+			.query("SELECT id FROM users WHERE is_admin = 1 LIMIT 1")
+			.get() as { id: number } | undefined;
+
+		if (!adminUser) {
+			return Response.json(
+				{ error: "System not configured for LDAP provisioning" },
+				{ status: 500 },
+			);
+		}
+
+		// Create the LDAP invite (max_uses=1, tied to username)
+		db.query(
+			"INSERT INTO invites (code, max_uses, current_uses, expires_at, created_by, message, ldap_username) VALUES (?, 1, 0, ?, ?, ?, ?)",
+		).run(
+			inviteCode,
+			expiresAt,
+			adminUser.id,
+			"LDAP-verified account",
+			username,
+		);
+
+		const newInviteId = db
+			.query("SELECT id FROM invites WHERE code = ?")
+			.get(inviteCode) as { id: number };
+
+		// Copy roles from most recent admin-created invite if exists
+		const defaultInvite = db
+			.query(
+				"SELECT id FROM invites WHERE created_by IN (SELECT id FROM users WHERE is_admin = 1) ORDER BY created_at DESC LIMIT 1",
+			)
+			.get() as { id: number } | undefined;
+
+		if (defaultInvite) {
+			const inviteRoles = db
+				.query("SELECT app_id, role FROM invite_roles WHERE invite_id = ?")
+				.all(defaultInvite.id) as Array<{ app_id: number; role: string }>;
+
+			const insertRole = db.query(
+				"INSERT INTO invite_roles (invite_id, app_id, role) VALUES (?, ?, ?)",
+			);
+			for (const { app_id, role } of inviteRoles) {
+				insertRole.run(newInviteId.id, app_id, role);
+			}
+		}
+
+		return Response.json({
+			success: true,
+			inviteCode: inviteCode,
+			username: username,
+			returnUrl: returnUrl || null,
+		});
+	} catch (error) {
+		console.error("LDAP verify error:", error);
 		return Response.json({ error: "Internal server error" }, { status: 500 });
 	}
 }

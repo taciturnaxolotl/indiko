@@ -7,6 +7,7 @@ import appsHTML from "./html/apps.html";
 import docsHTML from "./html/docs.html";
 import indexHTML from "./html/index.html";
 import loginHTML from "./html/login.html";
+import { getLdapAccounts, updateOrphanedAccounts } from "./ldap-cleanup";
 import {
 	deleteSelfAccount,
 	deleteUser,
@@ -25,6 +26,7 @@ import {
 } from "./routes/api";
 import {
 	canRegister,
+	ldapVerify,
 	loginOptions,
 	loginVerify,
 	registerOptions,
@@ -253,6 +255,11 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 		"/auth/register/verify": registerVerify,
 		"/auth/login/options": loginOptions,
 		"/auth/login/verify": loginVerify,
+		// LDAP verification endpoint
+		"/api/ldap-verify": (req: Request) => {
+			if (req.method === "POST") return ldapVerify(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
 		// Passkey management endpoints
 		"/api/passkeys": (req: Request) => {
 			if (req.method === "GET") return listPasskeys(req);
@@ -339,6 +346,24 @@ const cleanupJob = setInterval(() => {
 	}
 }, 3600000); // 1 hour in milliseconds
 
+const ldapCleanupJob =
+	process.env.LDAP_ADMIN_DN && process.env.LDAP_ADMIN_PASSWORD
+		? setInterval(async () => {
+				const result = await getLdapAccounts();
+				const action = process.env.LDAP_ORPHAN_ACTION || "deactivate";
+				if (action === "suspend") {
+					await updateOrphanedAccounts(result, "suspend");
+				} else if (action === "deactivate") {
+					await updateOrphanedAccounts(result, "deactivate");
+				} else if (action === "remove") {
+					await updateOrphanedAccounts(result, "remove");
+				}
+				console.log(
+					`[LDAP Cleanup] ${action === "remove" ? "Removed" : action === "suspend" ? "Suspended" : "Deactivated"} LDAP orphan accounts: ${result.total} total, ${result.active} active, ${result.orphaned} orphaned, ${result.errors} errors.`,
+				);
+			}, 43200000)
+		: null; // 12 hours in milliseconds
+
 let is_shutting_down = false;
 function shutdown(sig: string) {
 	if (is_shutting_down) return;
@@ -347,6 +372,7 @@ function shutdown(sig: string) {
 	console.log(`[Shutdown] triggering shutdown due to ${sig}`);
 
 	clearInterval(cleanupJob);
+	if (ldapCleanupJob) clearInterval(ldapCleanupJob);
 	console.log("[Shutdown] stopped cleanup job");
 
 	server.stop();

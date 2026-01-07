@@ -51,6 +51,28 @@ Indiko uses **WebAuthn/Passkeys** for passwordless authentication:
 
 ## Known Security Considerations
 
+### LDAP Account Provisioning ⚠️
+
+When using LDAP authentication, accounts are provisioned on first successful LDAP login. **Important:** If a user is subsequently deleted from LDAP, their Indiko account **remains active**. This is by design—account lifecycle is managed independently from LDAP.
+
+**Admin responsibilities:**
+
+- **Audit provisioned accounts:** Query the `provisioned_via_ldap` column to identify LDAP-provisioned users
+- **Manual deprovisioning:** Suspended or delete accounts in Indiko when users are removed from LDAP
+- **Document policy:** Establish clear procedures for account deletion when LDAP users are removed
+
+**Example audit query:**
+
+```sql
+SELECT username, created_at, status FROM users WHERE provisioned_via_ldap = 1;
+```
+
+To suspend an LDAP account:
+
+```sql
+UPDATE users SET status = 'suspended' WHERE username = 'username_here';
+```
+
 ### Rate Limiting ⚠️
 
 Indiko does **not** currently implement rate limiting. This is acceptable for:
@@ -177,8 +199,8 @@ No tracking or analytics cookies are set by Indiko.
 
 ## Contact
 
-- **Security Issues:** security@dunkirk.sh
-- **General Support:** https://tangled.org/@dunkirk.sh/indiko
+- **Security Issues:** <security@dunkirk.sh>
+- **General Support:** <https://tangled.org/@dunkirk.sh/indiko>
 - **Maintainer:** Kieran Klukas (@taciturnaxolotl)
 
 ---

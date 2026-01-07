@@ -49,8 +49,30 @@
       margin-bottom: 1rem;
     }
 
-    input[type="text"] {
+    input[type="text"],
+    input[type="password"] {
       margin-bottom: 1rem;
+    }
+
+    .ldap-user-display {
+      background: rgba(188, 141, 160, 0.1);
+      border-left: 3px solid var(--berry-crush);
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      text-align: left;
+      font-size: 0.875rem;
+    }
+
+    .ldap-user-display .label {
+      color: var(--old-rose);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05rem;
+    }
+
+    .ldap-user-display .username {
+      color: var(--lavender);
+      font-weight: 600;
     }
 
     button {
@@ -94,6 +116,15 @@
         <input type="text" id="registerUsername" placeholder="create username" required
           autocomplete="username webauthn" />
         <button type="submit" class="secondary-btn" id="registerBtn">create passkey</button>
+      </form>
+
+      <form id="ldapForm" style="display: none;">
+        <div class="ldap-user-display">
+          <div class="label">username</div>
+          <div class="username" id="ldapUsername"></div>
+        </div>
+        <input type="password" id="ldapPassword" placeholder="LDAP password" required autocomplete="current-password" />
+        <button type="submit" id="ldapBtn">verify & continue</button>
       </form>
     </div>
 

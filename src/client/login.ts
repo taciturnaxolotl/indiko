@@ -5,7 +5,10 @@ import {
 
 const loginForm = document.getElementById("loginForm") as HTMLFormElement;
 const registerForm = document.getElementById("registerForm") as HTMLFormElement;
+const ldapForm = document.getElementById("ldapForm") as HTMLFormElement;
 const message = document.getElementById("message") as HTMLDivElement;
+
+let pendingLdapUsername: string | null = null;
 
 // Check if registration is allowed on page load
 async function checkRegistrationAllowed() {
@@ -15,12 +18,19 @@ async function checkRegistrationAllowed() {
 		const inviteCode = urlParams.get("invite");
 
 		if (inviteCode) {
+			// Check if username is locked (from LDAP flow)
+			const lockedUsername = urlParams.get("username");
+			const registerUsernameInput = document.getElementById(
+				"registerUsername",
+			) as HTMLInputElement;
+
 			// Fetch invite details to show message
 			try {
+				const testUsername = lockedUsername || "temp";
 				const response = await fetch("/auth/register/options", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ username: "temp", inviteCode }),
+					body: JSON.stringify({ username: testUsername, inviteCode }),
 				});
 
 				if (response.ok) {
@@ -38,9 +48,17 @@ async function checkRegistrationAllowed() {
 			if (subtitleElement) {
 				subtitleElement.textContent = "create your account";
 			}
-			(
-				document.getElementById("registerUsername") as HTMLInputElement
-			).placeholder = "choose username";
+
+			// If username is locked from LDAP, pre-fill and disable
+			if (lockedUsername) {
+				registerUsernameInput.value = lockedUsername;
+				registerUsernameInput.readOnly = true;
+				registerUsernameInput.style.opacity = "0.7";
+				registerUsernameInput.style.cursor = "not-allowed";
+			} else {
+				registerUsernameInput.placeholder = "choose username";
+			}
+
 			(
 				document.getElementById("registerBtn") as HTMLButtonElement
 			).textContent = "create account";
@@ -111,6 +129,14 @@ loginForm.addEventListener("submit", async (e) => {
 		}
 
 		const options = await optionsRes.json();
+
+		// Check if LDAP verification is required (user exists in LDAP but not locally)
+		if (options.ldapVerificationRequired) {
+			showLdapPasswordPrompt(options.username);
+			loginBtn.disabled = false;
+			loginBtn.textContent = "sign in";
+			return;
+		}
 
 		loginBtn.textContent = "use your passkey...";
 
@@ -212,8 +238,14 @@ registerForm.addEventListener("submit", async (e) => {
 
 		showMessage("Registration successful!", "success");
 
-		// Check for return URL parameter
-		const returnUrl = urlParams.get("return") || "/";
+		// Check for return URL: first sessionStorage (from LDAP flow), then URL param, fallback to /
+		const storedRedirect = sessionStorage.getItem("postRegistrationRedirect");
+		const returnUrl = storedRedirect || urlParams.get("return") || "/";
+
+		// Clear the stored redirect after use
+		if (storedRedirect) {
+			sessionStorage.removeItem("postRegistrationRedirect");
+		}
 
 		const redirectTimer = setTimeout(() => {
 			window.location.href = returnUrl;
@@ -223,5 +255,96 @@ registerForm.addEventListener("submit", async (e) => {
 		showMessage((error as Error).message || "Registration failed");
 		registerBtn.disabled = false;
 		registerBtn.textContent = "register passkey";
+	}
+});
+
+// LDAP verification flow
+function showLdapPasswordPrompt(username: string) {
+	pendingLdapUsername = username;
+
+	// Update UI to show LDAP form
+	const subtitleElement = document.querySelector(".subtitle");
+	if (subtitleElement) {
+		subtitleElement.textContent = "verify your LDAP password";
+	}
+
+	// Update LDAP form username display
+	const ldapUsernameSpan = document.getElementById("ldapUsername");
+	if (ldapUsernameSpan) {
+		ldapUsernameSpan.textContent = username;
+	}
+
+	// Show LDAP form, hide others
+	loginForm.style.display = "none";
+	registerForm.style.display = "none";
+	ldapForm.style.display = "block";
+
+	showMessage(
+		"This username exists in the linked LDAP directory. Enter your LDAP password to create your account.",
+		"success",
+		true,
+	);
+}
+
+ldapForm.addEventListener("submit", async (e) => {
+	e.preventDefault();
+
+	if (!pendingLdapUsername) {
+		showMessage("No username pending for LDAP verification");
+		return;
+	}
+
+	const password = (document.getElementById("ldapPassword") as HTMLInputElement)
+		.value;
+	const ldapBtn = document.getElementById("ldapBtn") as HTMLButtonElement;
+
+	try {
+		ldapBtn.disabled = true;
+		ldapBtn.textContent = "verifying...";
+
+		// Get return URL for after registration
+		const urlParams = new URLSearchParams(window.location.search);
+		const returnUrl = urlParams.get("return") || "/";
+
+		// Verify LDAP credentials
+		const verifyRes = await fetch("/api/ldap-verify", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				username: pendingLdapUsername,
+				password: password,
+				returnUrl: returnUrl,
+			}),
+		});
+
+		if (!verifyRes.ok) {
+			const error = await verifyRes.json();
+			throw new Error(error.error || "LDAP verification failed");
+		}
+
+		const result = await verifyRes.json();
+
+		if (result.success) {
+			showMessage(
+				"LDAP verification successful! Redirecting to setup...",
+				"success",
+			);
+
+			// Store return URL for after registration completes
+			if (result.returnUrl) {
+				sessionStorage.setItem("postRegistrationRedirect", result.returnUrl);
+			}
+
+			// Redirect to registration with the invite code and locked username
+			const registerUrl = `/login?invite=${encodeURIComponent(result.inviteCode)}&username=${encodeURIComponent(result.username)}`;
+
+			setTimeout(() => {
+				window.location.href = registerUrl;
+			}, 1000);
+		}
+	} catch (error) {
+		showMessage((error as Error).message || "LDAP verification failed");
+		ldapBtn.disabled = false;
+		ldapBtn.textContent = "verify & continue";
 	}
 });
