@@ -39,13 +39,23 @@ export async function registerOptions(req: Request): Promise<Response> {
 		// Check if username already exists
 		const existingUser = db
 			.query("SELECT id FROM users WHERE username = ?")
-			.get(username);
+			.get(username) as { id: number } | undefined;
 
+		// Allow re-registration if user exists but has no credentials (passkey reset case)
+		let isPasskeyReset = false;
 		if (existingUser) {
-			return Response.json(
-				{ error: "Username already taken" },
-				{ status: 400 },
-			);
+			const credCount = db
+				.query("SELECT COUNT(*) as count FROM credentials WHERE user_id = ?")
+				.get(existingUser.id) as { count: number };
+
+			if (credCount.count > 0) {
+				return Response.json(
+					{ error: "Username already taken" },
+					{ status: 400 },
+				);
+			}
+			// User exists but has no credentials - this is a passkey reset
+			isPasskeyReset = true;
 		}
 
 		// Check if this is bootstrap (first user)
@@ -156,14 +166,24 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 		// Check if username already exists
 		const existingUser = db
-			.query("SELECT id FROM users WHERE username = ?")
-			.get(username);
+			.query("SELECT id, is_admin FROM users WHERE username = ?")
+			.get(username) as { id: number; is_admin: number } | undefined;
 
+		// Allow re-registration if user exists but has no credentials (passkey reset case)
+		let isPasskeyReset = false;
 		if (existingUser) {
-			return Response.json(
-				{ error: "Username already taken" },
-				{ status: 400 },
-			);
+			const credCount = db
+				.query("SELECT COUNT(*) as count FROM credentials WHERE user_id = ?")
+				.get(existingUser.id) as { count: number };
+
+			if (credCount.count > 0) {
+				return Response.json(
+					{ error: "Username already taken" },
+					{ status: 400 },
+				);
+			}
+			// User exists but has no credentials - this is a passkey reset
+			isPasskeyReset = true;
 		}
 
 		if (!expectedChallenge) {
@@ -275,31 +295,40 @@ export async function registerVerify(req: Request): Promise<Response> {
 				invite?.ldap_username !== null && invite?.ldap_username !== undefined;
 		}
 
-		// Create user (bootstrap is always admin, invited users are regular users)
-		const insertUser = db.query(
-			"INSERT INTO users (username, name, is_admin, tier, role, provisioned_via_ldap) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-		);
-		const user = insertUser.get(
-			username,
-			username,
-			isBootstrap ? 1 : 0,
-			isBootstrap ? "admin" : "user",
-			isBootstrap ? "admin" : "user",
-			isLdapProvisioned ? 1 : 0,
-		) as {
-			id: number;
-		};
+		let userId: number;
+		let userIsAdmin: boolean;
+
+		if (isPasskeyReset && existingUser) {
+			// Passkey reset: use existing user, just add credential
+			userId = existingUser.id;
+			userIsAdmin = existingUser.is_admin === 1;
+		} else {
+			// Create new user (bootstrap is always admin, invited users are regular users)
+			const insertUser = db.query(
+				"INSERT INTO users (username, name, is_admin, tier, role, provisioned_via_ldap) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+			);
+			const user = insertUser.get(
+				username,
+				username,
+				isBootstrap ? 1 : 0,
+				isBootstrap ? "admin" : "user",
+				isBootstrap ? "admin" : "user",
+				isLdapProvisioned ? 1 : 0,
+			) as { id: number };
+			userId = user.id;
+			userIsAdmin = isBootstrap;
+		}
 
 		// Store credential
 		// credential.id is a Uint8Array, convert to Buffer for storage
 		db.query(
 			"INSERT INTO credentials (user_id, credential_id, public_key, counter, name) VALUES (?, ?, ?, ?, ?)",
 		).run(
-			user.id,
+			userId,
 			Buffer.from(credential.id),
 			Buffer.from(credential.publicKey),
 			credential.counter,
-			"Primary Passkey",
+			isPasskeyReset ? "Reset Passkey" : "Primary Passkey",
 		);
 
 		// Mark invite as used if applicable
@@ -324,15 +353,15 @@ export async function registerVerify(req: Request): Promise<Response> {
 			// Record this invite use
 			db.query(
 				"INSERT INTO invite_uses (invite_id, user_id, used_at) VALUES (?, ?, ?)",
-			).run(inviteId, user.id, usedAt);
+			).run(inviteId, userId, usedAt);
 
-			// Assign app roles to the new user
-			if (inviteRoles.length > 0) {
+			// Assign app roles to the new user (skip for passkey reset - they already have roles)
+			if (inviteRoles.length > 0 && !isPasskeyReset) {
 				const insertPermission = db.query(
 					"INSERT INTO permissions (user_id, app_id, role) VALUES (?, ?, ?)",
 				);
 				for (const { app_id, role } of inviteRoles) {
-					insertPermission.run(user.id, app_id, role);
+					insertPermission.run(userId, app_id, role);
 				}
 			}
 		}
@@ -347,7 +376,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 		const expiresAt = Math.floor(Date.now() / 1000) + 86400; // 24 hours
 		db.query(
 			"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
-		).run(token, user.id, expiresAt);
+		).run(token, userId, expiresAt);
 
 		const isProduction = process.env.NODE_ENV === "production";
 		const secureCookie = isProduction ? "; Secure" : "";
@@ -356,7 +385,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 			{
 				token,
 				username,
-				isAdmin: isBootstrap,
+				isAdmin: userIsAdmin,
 			},
 			{
 				headers: {
