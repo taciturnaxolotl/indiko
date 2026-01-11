@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { db } from "../db";
+import { signIDToken } from "../oidc";
 import { safeFetch, validateExternalURL } from "../lib/ssrf-safe-fetch";
 
 interface SessionUser {
@@ -414,10 +415,7 @@ export async function verifyDomain(
 	// Validate URL is safe to fetch (prevents SSRF attacks)
 	const urlValidation = validateExternalURL(domainUrl);
 	if (!urlValidation.safe) {
-		return {
-			success: false,
-			error: urlValidation.error || "Invalid domain URL",
-		};
+		return { success: false, error: urlValidation.error || "Invalid domain URL" };
 	}
 
 	// Use SSRF-safe fetch
@@ -430,13 +428,8 @@ export async function verifyDomain(
 	});
 
 	if (!fetchResult.success) {
-		console.error(
-			`[verifyDomain] Failed to fetch ${domainUrl}: ${fetchResult.error}`,
-		);
-		return {
-			success: false,
-			error: `Failed to fetch domain: ${fetchResult.error}`,
-		};
+		console.error(`[verifyDomain] Failed to fetch ${domainUrl}: ${fetchResult.error}`);
+		return { success: false, error: `Failed to fetch domain: ${fetchResult.error}` };
 	}
 
 	const response = fetchResult.data;
@@ -459,67 +452,67 @@ export async function verifyDomain(
 
 	const html = await response.text();
 
-	// Extract rel="me" links using regex
-	// Matches both <link> and <a> tags with rel attribute containing "me"
-	const relMeLinks: string[] = [];
+		// Extract rel="me" links using regex
+		// Matches both <link> and <a> tags with rel attribute containing "me"
+		const relMeLinks: string[] = [];
 
-	// Simpler approach: find all link and a tags, then check if they have rel="me" and href
-	const linkRegex = /<link\s+[^>]*>/gi;
-	const aRegex = /<a\s+[^>]*>/gi;
+		// Simpler approach: find all link and a tags, then check if they have rel="me" and href
+		const linkRegex = /<link\s+[^>]*>/gi;
+		const aRegex = /<a\s+[^>]*>/gi;
 
-	const processTag = (tagHtml: string) => {
-		// Check if has rel containing "me" (handle quoted and unquoted attributes)
-		const relMatch = tagHtml.match(/rel=["']?([^"'\s>]+)["']?/i);
-		if (!relMatch) return null;
+		const processTag = (tagHtml: string) => {
+			// Check if has rel containing "me" (handle quoted and unquoted attributes)
+			const relMatch = tagHtml.match(/rel=["']?([^"'\s>]+)["']?/i);
+			if (!relMatch) return null;
 
-		const relValue = relMatch[1];
-		// Check if "me" is a separate word in the rel attribute
-		if (!relValue.split(/\s+/).includes("me")) return null;
+			const relValue = relMatch[1];
+			// Check if "me" is a separate word in the rel attribute
+			if (!relValue.split(/\s+/).includes("me")) return null;
 
-		// Extract href (handle quoted and unquoted attributes)
-		const hrefMatch = tagHtml.match(/href=["']?([^"'\s>]+)["']?/i);
-		if (!hrefMatch) return null;
+			// Extract href (handle quoted and unquoted attributes)
+			const hrefMatch = tagHtml.match(/href=["']?([^"'\s>]+)["']?/i);
+			if (!hrefMatch) return null;
 
-		return hrefMatch[1];
-	};
+			return hrefMatch[1];
+		};
 
-	// Process all link tags
-	let linkMatch;
-	while ((linkMatch = linkRegex.exec(html)) !== null) {
-		const href = processTag(linkMatch[0]);
-		if (href && !relMeLinks.includes(href)) {
-			relMeLinks.push(href);
+		// Process all link tags
+		let linkMatch;
+		while ((linkMatch = linkRegex.exec(html)) !== null) {
+			const href = processTag(linkMatch[0]);
+			if (href && !relMeLinks.includes(href)) {
+				relMeLinks.push(href);
+			}
 		}
-	}
 
-	// Process all a tags
-	let aMatch;
-	while ((aMatch = aRegex.exec(html)) !== null) {
-		const href = processTag(aMatch[0]);
-		if (href && !relMeLinks.includes(href)) {
-			relMeLinks.push(href);
+		// Process all a tags
+		let aMatch;
+		while ((aMatch = aRegex.exec(html)) !== null) {
+			const href = processTag(aMatch[0]);
+			if (href && !relMeLinks.includes(href)) {
+				relMeLinks.push(href);
+			}
 		}
-	}
 
-	// Check if any rel="me" link matches the indiko profile URL
-	const normalizedIndikoUrl = canonicalizeURL(indikoProfileUrl);
-	const hasRelMe = relMeLinks.some((link) => {
-		try {
-			const normalizedLink = canonicalizeURL(link);
-			return normalizedLink === normalizedIndikoUrl;
-		} catch {
-			return false;
-		}
-	});
+		// Check if any rel="me" link matches the indiko profile URL
+		const normalizedIndikoUrl = canonicalizeURL(indikoProfileUrl);
+		const hasRelMe = relMeLinks.some((link) => {
+			try {
+				const normalizedLink = canonicalizeURL(link);
+				return normalizedLink === normalizedIndikoUrl;
+			} catch {
+				return false;
+			}
+		});
 
-	if (!hasRelMe) {
-		console.error(
-			`[verifyDomain] No rel="me" link found on ${domainUrl} pointing to ${indikoProfileUrl}`,
-			{
-				foundLinks: relMeLinks,
-				normalizedTarget: normalizedIndikoUrl,
-			},
-		);
+		if (!hasRelMe) {
+			console.error(
+				`[verifyDomain] No rel="me" link found on ${domainUrl} pointing to ${indikoProfileUrl}`,
+				{
+					foundLinks: relMeLinks,
+					normalizedTarget: normalizedIndikoUrl,
+				},
+			);
 		return {
 			success: false,
 			error: `Domain must have <link rel="me" href="${indikoProfileUrl}" /> or <a rel="me" href="${indikoProfileUrl}">...</a> to verify ownership`,
@@ -667,6 +660,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 	const codeChallengeMethod = params.get("code_challenge_method");
 	const scope = params.get("scope") || "profile";
 	const me = params.get("me");
+	const nonce = params.get("nonce"); // OIDC nonce parameter
 
 	if (responseType !== "code") {
 		return new Response("Unsupported response_type", { status: 400 });
@@ -1021,10 +1015,11 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		if (hasAllScopes) {
 			// Auto-approve - create auth code and redirect
 			const code = crypto.randomBytes(32).toString("base64url");
-			const expiresAt = Math.floor(Date.now() / 1000) + 60; // 60 seconds
+			const now = Math.floor(Date.now() / 1000);
+			const expiresAt = now + 60; // 60 seconds
 
 			db.query(
-				"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+				"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me, nonce, auth_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			).run(
 				code,
 				user.userId,
@@ -1034,6 +1029,8 @@ export async function authorizeGet(req: Request): Promise<Response> {
 				codeChallenge,
 				expiresAt,
 				me,
+				nonce,
+				now, // auth_time - user already authenticated
 			);
 
 			// Update permission last_used
@@ -1057,6 +1054,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		codeChallenge,
 		requestedScopes,
 		me,
+		nonce,
 	);
 }
 
@@ -1068,6 +1066,7 @@ function showConsentScreen(
 	codeChallenge: string,
 	scopes: string[],
 	me: string | null,
+	nonce: string | null,
 ): Response {
 	// Load app metadata if pre-registered
 	const appData = db
@@ -1386,6 +1385,7 @@ function showConsentScreen(
       <input type="hidden" name="state" value="${state}" />
       <input type="hidden" name="code_challenge" value="${codeChallenge}" />
       ${me ? `<input type="hidden" name="me" value="${me}" />` : ""}
+      ${nonce ? `<input type="hidden" name="nonce" value="${nonce}" />` : ""}
       <!-- Always include profile scope as it's required -->
       <input type="hidden" name="scope" value="profile" />
       
@@ -1451,6 +1451,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 	const state = body.state;
 	const codeChallenge = body.code_challenge;
 	const me = body.me || null;
+	const nonce = body.nonce || null; // OIDC nonce
 
 	if (!rawClientId || !rawRedirectUri || !state || !codeChallenge) {
 		return new Response("Missing required parameters", { status: 400 });
@@ -1484,10 +1485,11 @@ export async function authorizePost(req: Request): Promise<Response> {
 
 	// Create authorization code
 	const code = crypto.randomBytes(32).toString("base64url");
-	const expiresAt = Math.floor(Date.now() / 1000) + 60; // 60 seconds
+	const now = Math.floor(Date.now() / 1000);
+	const expiresAt = now + 60; // 60 seconds
 
 	db.query(
-		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me, nonce, auth_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		code,
 		user.userId,
@@ -1497,6 +1499,8 @@ export async function authorizePost(req: Request): Promise<Response> {
 		codeChallenge,
 		expiresAt,
 		me,
+		nonce,
+		now, // auth_time
 	);
 
 	// Store or update permission grant
@@ -1796,7 +1800,7 @@ export async function token(req: Request): Promise<Response> {
 		// Look up authorization code
 		const authcode = db
 			.query(
-				"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me FROM authcodes WHERE code = ?",
+				"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me, nonce, auth_time FROM authcodes WHERE code = ?",
 			)
 			.get(code) as
 			| {
@@ -1808,6 +1812,8 @@ export async function token(req: Request): Promise<Response> {
 					expires_at: number;
 					used: number;
 					me: string | null;
+					nonce: string | null;
+					auth_time: number | null;
 			  }
 			| undefined;
 
@@ -2005,6 +2011,51 @@ export async function token(req: Request): Promise<Response> {
 		// Include role if assigned
 		if (permission?.role) {
 			response.role = permission.role;
+		}
+
+		// Generate OIDC id_token if openid scope is requested
+		if (scopes.includes("openid")) {
+			const idTokenClaims: Record<string, unknown> = {
+				sub: meValue,
+				aud: client_id,
+			};
+
+			// Add nonce if provided (OIDC replay protection)
+			if (authcode.nonce) {
+				idTokenClaims.nonce = authcode.nonce;
+			}
+
+			// Add auth_time if available
+			if (authcode.auth_time) {
+				idTokenClaims.auth_time = authcode.auth_time;
+			}
+
+			// Add profile claims if profile scope included
+			if (scopes.includes("profile")) {
+				idTokenClaims.name = user.name;
+				if (user.photo) idTokenClaims.picture = user.photo;
+				if (user.url) idTokenClaims.website = user.url;
+			}
+
+			// Add email claim if email scope included
+			if (scopes.includes("email") && user.email) {
+				idTokenClaims.email = user.email;
+			}
+
+			const idToken = await signIDToken(
+				origin,
+				idTokenClaims as {
+					sub: string;
+					aud: string;
+					nonce?: string;
+					auth_time?: number;
+					name?: string;
+					email?: string;
+					picture?: string;
+					website?: string;
+				},
+			);
+			response.id_token = idToken;
 		}
 
 		console.log("Token endpoint: success", {
@@ -2238,17 +2289,22 @@ export function userinfo(req: Request): Response {
 		// Parse scopes
 		const scopes = tokenData.scope.split(" ");
 
-		// Build response based on scopes
+		// Build response based on scopes (OIDC-compliant claim names)
+		const origin = process.env.ORIGIN || "http://localhost:3000";
 		const response: Record<string, string> = {};
+
+		// sub claim is always required for OIDC userinfo
+		if (tokenData.url) {
+			response.sub = tokenData.url;
+		} else {
+			response.sub = `${origin}/u/${tokenData.username}`;
+		}
 
 		if (scopes.includes("profile")) {
 			response.name = tokenData.name;
-			if (tokenData.photo) response.photo = tokenData.photo;
+			if (tokenData.photo) response.picture = tokenData.photo; // OIDC uses 'picture'
 			if (tokenData.url) {
-				response.url = tokenData.url;
-			} else {
-				const origin = process.env.ORIGIN || "http://localhost:3000";
-				response.url = `${origin}/u/${tokenData.username}`;
+				response.website = tokenData.url; // OIDC uses 'website'
 			}
 		}
 
@@ -2256,8 +2312,10 @@ export function userinfo(req: Request): Response {
 			response.email = tokenData.email;
 		}
 
-		// Return empty object if no profile/email scopes
-		if (Object.keys(response).length === 0) {
+		// For OIDC, we always return at least sub
+		// But for IndieAuth compatibility, check if we have meaningful claims
+		if (Object.keys(response).length === 1 && !scopes.includes("openid")) {
+			// Only sub, no openid scope - this is a pure IndieAuth request without claims
 			return Response.json(
 				{
 					error: "insufficient_scope",

@@ -497,6 +497,143 @@ const { me, profile } = await response.json();
 // Create session for user
 ```
 
+## OpenID Connect (OIDC) Support
+
+Indiko implements OpenID Connect Core 1.0 as an identity layer on top of OAuth 2.0, enabling "Sign in with Indiko" for any OIDC-compatible application.
+
+### Overview
+
+OIDC extends the existing OAuth 2.0 authorization flow by:
+- Adding the `openid` scope to request identity information
+- Returning an **ID Token** (signed JWT) alongside the authorization code exchange
+- Providing a standardized `/userinfo` endpoint
+- Publishing discovery metadata at `/.well-known/openid-configuration`
+
+### Supported Scopes
+
+| Scope | Claims Returned |
+|-------|-----------------|
+| `openid` | `sub`, `iss`, `aud`, `exp`, `iat`, `auth_time` |
+| `profile` | `name`, `picture`, `website` |
+| `email` | `email` |
+
+### OIDC Endpoints
+
+#### `GET /.well-known/openid-configuration`
+Discovery document for OIDC clients.
+
+**Response:**
+```json
+{
+  "issuer": "https://indiko.yourdomain.com",
+  "authorization_endpoint": "https://indiko.yourdomain.com/auth/authorize",
+  "token_endpoint": "https://indiko.yourdomain.com/auth/token",
+  "userinfo_endpoint": "https://indiko.yourdomain.com/auth/userinfo",
+  "jwks_uri": "https://indiko.yourdomain.com/jwks",
+  "scopes_supported": ["openid", "profile", "email"],
+  "response_types_supported": ["code"],
+  "grant_types_supported": ["authorization_code"],
+  "subject_types_supported": ["public"],
+  "id_token_signing_alg_values_supported": ["RS256"],
+  "token_endpoint_auth_methods_supported": ["none", "client_secret_post"],
+  "claims_supported": ["sub", "iss", "aud", "exp", "iat", "auth_time", "name", "email", "picture", "website"],
+  "code_challenge_methods_supported": ["S256"]
+}
+```
+
+#### `GET /jwks`
+JSON Web Key Set containing the public key for ID Token verification.
+
+**Response:**
+```json
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "alg": "RS256",
+      "kid": "indiko-oidc-key-1",
+      "n": "...",
+      "e": "AQAB"
+    }
+  ]
+}
+```
+
+### ID Token
+
+When the `openid` scope is requested, the token endpoint returns an `id_token` JWT:
+
+**Token Endpoint Response (with openid scope):**
+```json
+{
+  "me": "https://indiko.yourdomain.com/u/kieran",
+  "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImluZGlrby1vaWRjLWtleS0xIn0...",
+  "profile": {
+    "name": "Kieran Klukas",
+    "email": "kieran@example.com",
+    "photo": "https://...",
+    "url": "https://kierank.dev"
+  }
+}
+```
+
+**ID Token Claims:**
+```json
+{
+  "iss": "https://indiko.yourdomain.com",
+  "sub": "https://indiko.yourdomain.com/u/kieran",
+  "aud": "https://blog.kierank.dev",
+  "exp": 1234567890,
+  "iat": 1234567800,
+  "auth_time": 1234567700,
+  "nonce": "abc123",
+  "name": "Kieran Klukas",
+  "email": "kieran@example.com",
+  "picture": "https://...",
+  "website": "https://kierank.dev"
+}
+```
+
+### OIDC Authorization Flow
+
+1. Client initiates authorization with `scope=openid profile email`
+2. User authenticates and consents (same as IndieAuth)
+3. Client receives authorization code
+4. Client exchanges code at `/auth/token` with `code_verifier`
+5. Token endpoint returns `id_token` JWT + profile data
+6. Client verifies `id_token` signature using keys from `/jwks`
+
+### Key Management
+
+- RSA 2048-bit key pair generated on first OIDC request
+- Private key stored in database (`oidc_keys` table)
+- Key rotation: manual via admin interface (future)
+- Key ID format: `indiko-oidc-key-{version}`
+
+### Data Structures
+
+#### OIDC Keys
+```
+oidc_keys -> {
+  id: number,
+  kid: string,              // e.g. "indiko-oidc-key-1"
+  private_key: string,      // PEM-encoded RSA private key
+  public_key: string,       // PEM-encoded RSA public key
+  created_at: timestamp,
+  is_active: boolean
+}
+```
+
+#### Authorization Code (Extended)
+```
+authcode:{code} -> {
+  ...existing fields...,
+  nonce?: string,           // OIDC nonce for replay protection
+  auth_time: timestamp      // when user authenticated
+}
+```
+
 ## Future Enhancements
 
 - Token endpoint for longer-lived access tokens
@@ -509,6 +646,7 @@ const { me, profile } = await response.json();
 - Audit log for admin
 - Rate limiting
 - Account recovery flow
+- OIDC key rotation via admin interface
 
 ## Standards Compliance
 
@@ -516,3 +654,5 @@ const { me, profile } = await response.json();
 - [WebAuthn/FIDO2](https://www.w3.org/TR/webauthn-2/)
 - [OAuth 2.0 PKCE](https://tools.ietf.org/html/rfc7636)
 - [Microformats h-card](http://microformats.org/wiki/h-card)
+- [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html)
+- [OpenID Connect Discovery 1.0](https://openid.net/specs/openid-connect-discovery-1_0.html)

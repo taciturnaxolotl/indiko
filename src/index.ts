@@ -8,6 +8,7 @@ import docsHTML from "./html/docs.html";
 import indexHTML from "./html/index.html";
 import loginHTML from "./html/login.html";
 import { getLdapAccounts, updateOrphanedAccounts } from "./ldap-cleanup";
+import { getDiscoveryDocument, getJWKS } from "./oidc";
 import {
 	deleteSelfAccount,
 	deleteUser,
@@ -155,6 +156,14 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 			);
 		},
 		"/.well-known/oauth-authorization-server": indieauthMetadata,
+		"/.well-known/openid-configuration": () => {
+			const origin = process.env.ORIGIN as string;
+			return Response.json(getDiscoveryDocument(origin));
+		},
+		"/jwks": async () => {
+			const jwks = await getJWKS();
+			return Response.json(jwks);
+		},
 		// OAuth/IndieAuth endpoints
 		"/userinfo": (req: Request) => {
 			if (req.method === "GET") return userinfo(req);
