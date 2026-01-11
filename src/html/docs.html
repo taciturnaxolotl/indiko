@@ -577,6 +577,7 @@
 			<h3>table of contents</h3>
 			<ul>
 				<li><a href="#overview">overview</a></li>
+				<li><a href="#oidc">openid connect (oidc)</a></li>
 				<li><a href="#getting-started">getting started</a></li>
 				<li><a href="#button">sign in button</a></li>
 				<li><a href="#endpoints">endpoints</a></li>
@@ -612,6 +613,7 @@
 			<ul>
 				<li>Passwordless authentication via WebAuthn passkeys</li>
 				<li>Full IndieAuth and OAuth 2.0 support with PKCE</li>
+				<li>OpenID Connect (OIDC) support with ID tokens</li>
 				<li>Access tokens and refresh tokens for API access</li>
 				<li>Token introspection and revocation endpoints</li>
 				<li>UserInfo endpoint for profile data</li>
@@ -621,6 +623,74 @@
 				<li>User profile endpoints with h-card microformats</li>
 				<li>Invite-based user registration</li>
 			</ul>
+		</section>
+
+		<section id="oidc" class="section">
+			<h2>openid connect (oidc)</h2>
+			<p>
+				Indiko supports OpenID Connect (OIDC) for modern authentication flows, enabling "Sign in with Indiko" for any OIDC-compatible application.
+			</p>
+
+			<h3>oidc endpoints</h3>
+			<table>
+				<thead>
+					<tr>
+						<th>Endpoint</th>
+						<th>Description</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td><code>/.well-known/openid-configuration</code></td>
+						<td>OIDC discovery document</td>
+					</tr>
+					<tr>
+						<td><code>/jwks</code></td>
+						<td>JSON Web Key Set for ID token verification</td>
+					</tr>
+					<tr>
+						<td><code>/auth/authorize</code></td>
+						<td>Authorization endpoint (same as OAuth 2.0)</td>
+					</tr>
+					<tr>
+						<td><code>/auth/token</code></td>
+						<td>Token endpoint (returns ID token when <code>openid</code> scope requested)</td>
+					</tr>
+					<tr>
+						<td><code>/userinfo</code></td>
+						<td>OIDC userinfo endpoint</td>
+					</tr>
+				</tbody>
+			</table>
+
+			<h3>key features</h3>
+			<ul>
+				<li>Authorization Code Flow with PKCE</li>
+				<li>ID Token with RS256 signing</li>
+				<li>Support for <code>openid</code>, <code>profile</code>, and <code>email</code> scopes</li>
+				<li>Automatic key generation and management</li>
+				<li>Standards-compliant discovery document</li>
+			</ul>
+
+			<h3>id token claims</h3>
+			<p>
+				When the <code>openid</code> scope is requested, the token endpoint returns an ID token (JWT) containing:
+			</p>
+			<ul>
+				<li><code>iss</code> - Issuer (Indiko server URL)</li>
+				<li><code>sub</code> - Subject (user identifier)</li>
+				<li><code>aud</code> - Audience (client ID)</li>
+				<li><code>exp</code> - Expiration time</li>
+				<li><code>iat</code> - Issued at time</li>
+				<li><code>auth_time</code> - Authentication time</li>
+				<li><code>nonce</code> - Nonce (if provided in authorization request)</li>
+				<li><code>name</code>, <code>email</code>, <code>picture</code>, <code>website</code> - User claims (based on granted scopes)</li>
+			</ul>
+
+			<div class="info-box">
+				<strong>Testing:</strong>
+				You can test your OIDC setup using the <a href="https://oidcdebugger.com/" target="_blank" rel="noopener noreferrer">OIDC Debugger</a>. Set the discovery endpoint and use PKCE with SHA-256.
+			</div>
 		</section>
 
 		<section id="getting-started" class="section">
@@ -1032,6 +1102,11 @@
 				</thead>
 				<tbody>
 					<tr>
+						<td><code>openid</code></td>
+						<td>OpenID Connect authentication</td>
+						<td>Triggers ID token issuance (OIDC only)</td>
+					</tr>
+					<tr>
 						<td><code>profile</code></td>
 						<td>Basic profile information</td>
 						<td>name, photo, URL</td>
@@ -1046,7 +1121,7 @@
 
 			<div class="info-box">
 				<strong>Note:</strong>
-				Users can selectively approve scopes during authorization. Your app may receive fewer scopes than requested.
+				Users can selectively approve scopes during authorization. Your app may receive fewer scopes than requested. The <code>openid</code> scope is only relevant for OIDC flows and enables ID token issuance.
 			</div>
 		</section>
 

@@ -130,12 +130,33 @@ Add these tags to your website's `<head>`:
 
 Now you can sign in to IndieAuth-compatible sites using `https://your-domain.com/` as your identity.
 
+### Using as an OpenID Connect (OIDC) Provider
+
+Indiko also supports OpenID Connect (OIDC) for modern authentication flows:
+
+**Discovery endpoint:**
+```
+https://your-indiko-domain.com/.well-known/openid-configuration
+```
+
+**Key features:**
+- Authorization Code Flow with PKCE
+- ID Token with RS256 signing
+- JWKS endpoint for token verification
+- Support for `openid`, `profile`, and `email` scopes
+- Userinfo endpoint for retrieving user claims
+
+Test your OIDC setup using the [OIDC Debugger](https://oidcdebugger.com/).
+
 ## API Reference
 
-### OAuth 2.0 Endpoints
+### OAuth 2.0 / OpenID Connect Endpoints
 
-- `GET /auth/authorize` - Authorization endpoint
-- `POST /auth/token` - Token exchange endpoint
+- `GET /auth/authorize` - Authorization endpoint (OAuth 2.0 / OIDC)
+- `POST /auth/token` - Token exchange endpoint (returns access token and ID token for OIDC)
+- `GET /userinfo` - OIDC userinfo endpoint (returns user claims)
+- `GET /.well-known/openid-configuration` - OIDC discovery document
+- `GET /jwks` - JSON Web Key Set for ID token verification
 - `POST /auth/logout` - Session logout
 
 ### User Profile
