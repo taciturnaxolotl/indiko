@@ -62,21 +62,61 @@ session:{token} -> {
 // TTL: 24 hours
 ```
 
-### Apps (Auto-registered)
+### Apps
+
+There are two types of OAuth clients in indiko:
+
+#### Auto-registered Apps (IndieAuth)
 ```
 app:{client_id} -> {
-  client_id: string,           // e.g. "https://blog.kierank.dev"
+  client_id: string,           // e.g. "https://blog.kierank.dev" (any valid URL)
   redirect_uris: string[],
+  is_preregistered: 0,         // indicates auto-registered
   first_seen: timestamp,
   last_used: timestamp,
-  name?: string                // optional, from client metadata
+  name?: string,               // optional, from client metadata
+  logo_url?: string            // optional, from client metadata
 }
 ```
 
+**Features:**
+- Client ID is any valid URL per IndieAuth spec
+- No client secret (public client)
+- MUST use PKCE (code_verifier)
+- Automatically registered on first authorization
+- Metadata fetched from client_id URL
+- Cannot use role-based access control
+
+#### Pre-registered Apps (OAuth 2.0 with secrets)
+```
+app:{client_id} -> {
+  client_id: string,           // e.g. "ikc_xxxxxxxxxxxxxxxxxxxxx" (generated ID)
+  redirect_uris: string[],
+  is_preregistered: 1,         // indicates pre-registered
+  client_secret_hash: string,  // SHA-256 hash of client secret
+  available_roles?: string[],  // optional list of allowed roles
+  default_role?: string,       // optional role auto-assigned on first auth
+  first_seen: timestamp,
+  last_used: timestamp,
+  name?: string,
+  logo_url?: string,
+  description?: string
+}
+```
+
+**Features:**
+- Client ID format: `ikc_` + 21 character nanoid
+- Client secret format: `iks_` + 43 character nanoid (shown once on creation)
+- MUST use PKCE (code_verifier) AND client_secret
+- Supports role-based access control
+- Admin-managed metadata
+- Created via admin interface
+
 ### User Permissions (Per-App)
 ```
-permission:{username}:{client_id} -> {
+permission:{user_id}:{client_id} -> {
   scopes: string[],            // e.g. ["profile", "email"]
+  role?: string,               // optional, only for pre-registered clients
   granted_at: timestamp,
   last_used: timestamp
 }

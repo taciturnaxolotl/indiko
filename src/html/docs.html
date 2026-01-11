@@ -1119,8 +1119,13 @@
 				<li>Automatically register the client for future use</li>
 			</ul>
 			<p>
-				Auto-registered clients <strong>must</strong> use PKCE for security and <strong>cannot</strong> use client secrets or role assignment.
+				Auto-registered clients:
 			</p>
+			<ul>
+				<li><strong>Client ID format:</strong> Any valid URL (e.g., <code>https://myapp.example.com</code>)</li>
+				<li><strong>Authentication:</strong> MUST use PKCE only (no client secret)</li>
+				<li><strong>Limitations:</strong> Cannot use client secrets or role assignment</li>
+			</ul>
 
 			<div class="info-box">
 				<strong>Security:</strong>
@@ -1131,8 +1136,13 @@
 			<p>
 				Admins can pre-register clients for advanced features. <strong>All pre-registered clients require a client secret and must also use PKCE.</strong>
 			</p>
+			<p>
+				Pre-registered clients:
+			</p>
 			<ul>
-				<li><strong>Client secret:</strong> Required for all pre-registered clients (used in token exchange alongside PKCE)</li>
+				<li><strong>Client ID format:</strong> Generated with <code>ikc_</code> prefix (e.g., <code>ikc_xxxxxxxxxxxxxxxxxxxxx</code>)</li>
+				<li><strong>Client secret format:</strong> Generated with <code>iks_</code> prefix (shown once on creation)</li>
+				<li><strong>Authentication:</strong> MUST use both PKCE AND client_secret in token requests</li>
 				<li><strong>Role assignment:</strong> Admins can assign per-user roles for RBAC</li>
 				<li><strong>Available roles:</strong> Define which roles can be assigned (enforces dropdown selection)</li>
 				<li><strong>Default role:</strong> Automatically assigned to users on first authorization</li>

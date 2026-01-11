@@ -72,12 +72,29 @@ After the first user is created, the bootstrap invite is disabled. Subsequent us
 
 ## Usage
 
-### Creating OAuth Apps
+### Client Types
+
+Indiko supports two types of OAuth clients:
+
+#### Auto-registered Clients (IndieAuth)
+
+Any app can use Indiko without admin approval. On first authorization:
+- Use any valid URL as your `client_id` (e.g., `https://myapp.example.com`)
+- Indiko fetches metadata from your `client_id` URL
+- App is automatically registered
+- **MUST use PKCE** (code_verifier) for security
+- **No client secret** (public client)
+- Cannot use role-based access control
+
+This is perfect for IndieAuth-compatible apps and personal projects.
+
+#### Pre-registered Clients (OAuth 2.0 with Secrets)
+
+For apps requiring client secrets or role-based access control, admins can pre-register clients:
 
 1. Go to `/admin/clients`
 2. Click "Create OAuth Client"
 3. Fill in:
-
    - **Name** - Display name for your app
    - **Logo URL** - (Optional) URL to app logo
    - **Description** - (Optional) Brief description
@@ -86,12 +103,17 @@ After the first user is created, the bootstrap invite is disabled. Subsequent us
    - **Default Role** - (Optional) Auto-assign this role on first auth
 
 4. Save and copy the generated credentials:
-
    - **Client ID** - Format: `ikc_xxxxxxxxxxxxxxxxxxxxx`
    - **Client Secret** - Format: `iks_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
 
    > [!IMPORTANT]
    > The client secret is only shown once! Save it securely.
+
+**Pre-registered clients:**
+- **MUST use both PKCE and client_secret** in token requests
+- Support role assignment for RBAC (Role-Based Access Control)
+- Admin-managed metadata and permissions
+- Generated client ID format: `ikc_` prefix
 
 ### Using as an IndieAuth Provider
 
