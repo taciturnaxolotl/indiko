@@ -1771,16 +1771,15 @@ export async function token(req: Request): Promise<Response> {
 			}
 		}
 
-		if (!code || !client_id || !redirect_uri) {
-			console.error("Token endpoint: missing parameters", {
+		if (!code || !client_id) {
+			console.error("Token endpoint: missing required parameters", {
 				code: !!code,
 				client_id: !!client_id,
-				redirect_uri: !!redirect_uri,
 			});
 			return Response.json(
 				{
 					error: "invalid_request",
-					error_description: "Missing required parameters",
+					error_description: "Missing required parameters (code, client_id)",
 				},
 				{ status: 400 },
 			);
@@ -1875,8 +1874,9 @@ export async function token(req: Request): Promise<Response> {
 			);
 		}
 
-		// Verify redirect_uri matches
-		if (authcode.redirect_uri !== redirect_uri) {
+		// Verify redirect_uri matches if provided (per OAuth 2.0 RFC 6749 section 4.1.3)
+		// redirect_uri is REQUIRED if it was included in the authorization request
+		if (redirect_uri && authcode.redirect_uri !== redirect_uri) {
 			console.error("Token endpoint: redirect_uri mismatch", {
 				stored: authcode.redirect_uri,
 				received: redirect_uri,
