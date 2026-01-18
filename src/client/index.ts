@@ -1,6 +1,4 @@
-import {
-	startRegistration,
-} from "@simplewebauthn/browser";
+import { startRegistration } from "@simplewebauthn/browser";
 
 const token = localStorage.getItem("indiko_session");
 const footer = document.getElementById("footer") as HTMLElement;
@@ -8,7 +6,9 @@ const welcome = document.getElementById("welcome") as HTMLElement;
 const subtitle = document.getElementById("subtitle") as HTMLElement;
 const recentApps = document.getElementById("recentApps") as HTMLElement;
 const passkeysList = document.getElementById("passkeysList") as HTMLElement;
-const addPasskeyBtn = document.getElementById("addPasskeyBtn") as HTMLButtonElement;
+const addPasskeyBtn = document.getElementById(
+	"addPasskeyBtn",
+) as HTMLButtonElement;
 const toast = document.getElementById("toast") as HTMLElement;
 
 // Profile form elements
@@ -320,13 +320,16 @@ async function loadPasskeys() {
 		const passkeys = data.passkeys as Passkey[];
 
 		if (passkeys.length === 0) {
-			passkeysList.innerHTML = '<div class="empty">No passkeys registered</div>';
+			passkeysList.innerHTML =
+				'<div class="empty">No passkeys registered</div>';
 			return;
 		}
 
 		passkeysList.innerHTML = passkeys
 			.map((passkey) => {
-				const createdDate = new Date(passkey.created_at * 1000).toLocaleDateString();
+				const createdDate = new Date(
+					passkey.created_at * 1000,
+				).toLocaleDateString();
 
 				return `
 				<div class="passkey-item" data-passkey-id="${passkey.id}">
@@ -336,7 +339,7 @@ async function loadPasskeys() {
 					</div>
 					<div class="passkey-actions">
 						<button type="button" class="rename-passkey-btn" data-passkey-id="${passkey.id}">rename</button>
-						${passkeys.length > 1 ? `<button type="button" class="delete-passkey-btn" data-passkey-id="${passkey.id}">delete</button>` : ''}
+						${passkeys.length > 1 ? `<button type="button" class="delete-passkey-btn" data-passkey-id="${passkey.id}">delete</button>` : ""}
 					</div>
 				</div>
 			`;
@@ -365,7 +368,9 @@ async function loadPasskeys() {
 }
 
 function showRenameForm(passkeyId: number) {
-	const passkeyItem = document.querySelector(`[data-passkey-id="${passkeyId}"]`);
+	const passkeyItem = document.querySelector(
+		`[data-passkey-id="${passkeyId}"]`,
+	);
 	if (!passkeyItem) return;
 
 	const infoDiv = passkeyItem.querySelector(".passkey-info");
@@ -389,14 +394,18 @@ function showRenameForm(passkeyId: number) {
 		input.select();
 
 		// Save button
-		infoDiv.querySelector(".save-rename-btn")?.addEventListener("click", async () => {
-			await renamePasskeyHandler(passkeyId, input.value);
-		});
+		infoDiv
+			.querySelector(".save-rename-btn")
+			?.addEventListener("click", async () => {
+				await renamePasskeyHandler(passkeyId, input.value);
+			});
 
 		// Cancel button
-		infoDiv.querySelector(".cancel-rename-btn")?.addEventListener("click", () => {
-			loadPasskeys();
-		});
+		infoDiv
+			.querySelector(".cancel-rename-btn")
+			?.addEventListener("click", () => {
+				loadPasskeys();
+			});
 
 		// Enter to save
 		input.addEventListener("keypress", async (e) => {
@@ -443,7 +452,11 @@ async function renamePasskeyHandler(passkeyId: number, newName: string) {
 }
 
 async function deletePasskeyHandler(passkeyId: number) {
-	if (!confirm("Are you sure you want to delete this passkey? You will no longer be able to use it to sign in.")) {
+	if (
+		!confirm(
+			"Are you sure you want to delete this passkey? You will no longer be able to use it to sign in.",
+		)
+	) {
 		return;
 	}
 
@@ -496,7 +509,9 @@ addPasskeyBtn.addEventListener("click", async () => {
 		addPasskeyBtn.textContent = "verifying...";
 
 		// Ask for a name
-		const name = prompt("Give this passkey a name (e.g., 'iPhone', 'Work Laptop'):");
+		const name = prompt(
+			"Give this passkey a name (e.g., 'iPhone', 'Work Laptop'):",
+		);
 
 		// Verify registration
 		const verifyRes = await fetch("/api/passkeys/add/verify", {

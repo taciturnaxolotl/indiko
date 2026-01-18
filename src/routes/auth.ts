@@ -1,12 +1,12 @@
 import {
 	type AuthenticationResponseJSON,
+	generateAuthenticationOptions,
+	generateRegistrationOptions,
 	type PublicKeyCredentialCreationOptionsJSON,
 	type PublicKeyCredentialRequestOptionsJSON,
 	type RegistrationResponseJSON,
 	type VerifiedAuthenticationResponse,
 	type VerifiedRegistrationResponse,
-	generateAuthenticationOptions,
-	generateRegistrationOptions,
 	verifyAuthenticationResponse,
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
@@ -381,8 +381,17 @@ export async function loginOptions(req: Request): Promise<Response> {
 
 		// Check if user exists and is active
 		const user = db
-			.query("SELECT id, status, provisioned_via_ldap, last_ldap_verified_at FROM users WHERE username = ?")
-			.get(username) as { id: number; status: string; provisioned_via_ldap: number; last_ldap_verified_at: number | null } | undefined;
+			.query(
+				"SELECT id, status, provisioned_via_ldap, last_ldap_verified_at FROM users WHERE username = ?",
+			)
+			.get(username) as
+			| {
+					id: number;
+					status: string;
+					provisioned_via_ldap: number;
+					last_ldap_verified_at: number | null;
+			  }
+			| undefined;
 
 		if (!user) {
 			return Response.json({ error: "Invalid credentials" }, { status: 401 });
@@ -405,7 +414,9 @@ export async function loginOptions(req: Request): Promise<Response> {
 				const existsInLdap = await checkLdapUser(username);
 				if (!existsInLdap) {
 					// User no longer exists in LDAP - suspend the account
-					db.query("UPDATE users SET status = 'suspended' WHERE id = ?").run(user.id);
+					db.query("UPDATE users SET status = 'suspended' WHERE id = ?").run(
+						user.id,
+					);
 					return Response.json(
 						{ error: "Invalid credentials" },
 						{ status: 401 },

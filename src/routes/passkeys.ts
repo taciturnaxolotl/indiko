@@ -1,6 +1,6 @@
 import {
-	type RegistrationResponseJSON,
 	generateRegistrationOptions,
+	type RegistrationResponseJSON,
 	type VerifiedRegistrationResponse,
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
@@ -133,7 +133,11 @@ export async function addPasskeyVerify(req: Request): Promise<Response> {
 		}
 
 		const body = await req.json();
-		const { response, challenge: expectedChallenge, name } = body as {
+		const {
+			response,
+			challenge: expectedChallenge,
+			name,
+		} = body as {
 			response: RegistrationResponseJSON;
 			challenge: string;
 			name?: string;

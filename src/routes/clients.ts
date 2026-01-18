@@ -16,7 +16,9 @@ function generateClientId(): string {
 
 function getSessionUser(
 	req: Request,
-): { username: string; userId: number; is_admin: boolean; tier: string } | Response {
+):
+	| { username: string; userId: number; is_admin: boolean; tier: string }
+	| Response {
 	const authHeader = req.headers.get("Authorization");
 
 	if (!authHeader || !authHeader.startsWith("Bearer ")) {

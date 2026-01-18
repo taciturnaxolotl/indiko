@@ -1,9 +1,11 @@
 import { db } from "../db";
-import { verifyDomain, validateProfileURL } from "./indieauth";
+import { validateProfileURL, verifyDomain } from "./indieauth";
 
 function getSessionUser(
 	req: Request,
-): { username: string; userId: number; is_admin: boolean; tier: string } | Response {
+):
+	| { username: string; userId: number; is_admin: boolean; tier: string }
+	| Response {
 	const authHeader = req.headers.get("Authorization");
 
 	if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -193,7 +195,10 @@ export async function updateProfile(req: Request): Promise<Response> {
 			const origin = process.env.ORIGIN || "http://localhost:3000";
 			const indikoProfileUrl = `${origin}/u/${user.username}`;
 
-			const verification = await verifyDomain(validation.canonicalUrl!, indikoProfileUrl);
+			const verification = await verifyDomain(
+				validation.canonicalUrl!,
+				indikoProfileUrl,
+			);
 			if (!verification.success) {
 				return Response.json(
 					{ error: verification.error || "Failed to verify domain" },
@@ -508,7 +513,10 @@ export function enableUser(req: Request, userId: string): Response {
 	return Response.json({ success: true });
 }
 
-export async function updateUserTier(req: Request, userId: string): Promise<Response> {
+export async function updateUserTier(
+	req: Request,
+	userId: string,
+): Promise<Response> {
 	const user = getSessionUser(req);
 	if (user instanceof Response) {
 		return user;
@@ -536,7 +544,9 @@ export async function updateUserTier(req: Request, userId: string): Promise<Resp
 
 		const targetUser = db
 			.query("SELECT id, username, tier FROM users WHERE id = ?")
-			.get(targetUserId) as { id: number; username: string; tier: string } | undefined;
+			.get(targetUserId) as
+			| { id: number; username: string; tier: string }
+			| undefined;
 
 		if (!targetUser) {
 			return Response.json({ error: "User not found" }, { status: 404 });

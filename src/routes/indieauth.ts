@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { db } from "../db";
+import { safeFetch, validateExternalURL } from "../lib/ssrf-safe-fetch";
 
 interface SessionUser {
 	username: string;
@@ -127,7 +128,11 @@ function canonicalizeURL(urlString: string): string {
 }
 
 // Validate profile URL per IndieAuth spec
-export function validateProfileURL(urlString: string): { valid: boolean; error?: string; canonicalUrl?: string } {
+export function validateProfileURL(urlString: string): {
+	valid: boolean;
+	error?: string;
+	canonicalUrl?: string;
+} {
 	let url: URL;
 	try {
 		url = new URL(urlString);
@@ -152,7 +157,10 @@ export function validateProfileURL(urlString: string): { valid: boolean; error?:
 
 	// MUST NOT contain username/password
 	if (url.username || url.password) {
-		return { valid: false, error: "Profile URL must not contain username or password" };
+		return {
+			valid: false,
+			error: "Profile URL must not contain username or password",
+		};
 	}
 
 	// MUST NOT contain ports
@@ -164,20 +172,30 @@ export function validateProfileURL(urlString: string): { valid: boolean; error?:
 	const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
 	const ipv6Regex = /^\[?[0-9a-fA-F:]+\]?$/;
 	if (ipv4Regex.test(url.hostname) || ipv6Regex.test(url.hostname)) {
-		return { valid: false, error: "Profile URL must use domain names, not IP addresses" };
+		return {
+			valid: false,
+			error: "Profile URL must use domain names, not IP addresses",
+		};
 	}
 
 	// MUST NOT contain single-dot or double-dot path segments
 	const pathSegments = url.pathname.split("/");
 	if (pathSegments.includes(".") || pathSegments.includes("..")) {
-		return { valid: false, error: "Profile URL must not contain . or .. path segments" };
+		return {
+			valid: false,
+			error: "Profile URL must not contain . or .. path segments",
+		};
 	}
 
 	return { valid: true, canonicalUrl: canonicalizeURL(urlString) };
 }
 
 // Validate client URL per IndieAuth spec
-function validateClientURL(urlString: string): { valid: boolean; error?: string; canonicalUrl?: string } {
+function validateClientURL(urlString: string): {
+	valid: boolean;
+	error?: string;
+	canonicalUrl?: string;
+} {
 	let url: URL;
 	try {
 		url = new URL(urlString);
@@ -202,13 +220,19 @@ function validateClientURL(urlString: string): { valid: boolean; error?: string;
 
 	// MUST NOT contain username/password
 	if (url.username || url.password) {
-		return { valid: false, error: "Client URL must not contain username or password" };
+		return {
+			valid: false,
+			error: "Client URL must not contain username or password",
+		};
 	}
 
 	// MUST NOT contain single-dot or double-dot path segments
 	const pathSegments = url.pathname.split("/");
 	if (pathSegments.includes(".") || pathSegments.includes("..")) {
-		return { valid: false, error: "Client URL must not contain . or .. path segments" };
+		return {
+			valid: false,
+			error: "Client URL must not contain . or .. path segments",
+		};
 	}
 
 	// MAY use loopback interface, but not other IP addresses
@@ -217,13 +241,21 @@ function validateClientURL(urlString: string): { valid: boolean; error?: string;
 	if (ipv4Regex.test(url.hostname)) {
 		// Allow 127.0.0.1 (loopback), reject others
 		if (!url.hostname.startsWith("127.")) {
-			return { valid: false, error: "Client URL must use domain names, not IP addresses (except loopback)" };
+			return {
+				valid: false,
+				error:
+					"Client URL must use domain names, not IP addresses (except loopback)",
+			};
 		}
 	} else if (ipv6Regex.test(url.hostname)) {
 		// Allow ::1 (loopback), reject others
 		const ipv6Match = url.hostname.match(ipv6Regex);
 		if (ipv6Match && ipv6Match[1] !== "::1") {
-			return { valid: false, error: "Client URL must use domain names, not IP addresses (except loopback)" };
+			return {
+				valid: false,
+				error:
+					"Client URL must use domain names, not IP addresses (except loopback)",
+			};
 		}
 	}
 
@@ -234,13 +266,18 @@ function validateClientURL(urlString: string): { valid: boolean; error?: string;
 function isLoopbackURL(urlString: string): boolean {
 	try {
 		const url = new URL(urlString);
-		return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]" || url.hostname.startsWith("127.");
+		return (
+			url.hostname === "localhost" ||
+			url.hostname === "127.0.0.1" ||
+			url.hostname === "[::1]" ||
+			url.hostname.startsWith("127.")
+		);
 	} catch {
 		return false;
 	}
 }
 
-// Fetch client metadata from client_id URL
+// Fetch client metadata from client_id URL (with SSRF protection)
 async function fetchClientMetadata(clientId: string): Promise<{
 	success: boolean;
 	metadata?: {
@@ -252,203 +289,244 @@ async function fetchClientMetadata(clientId: string): Promise<{
 	};
 	error?: string;
 }> {
-	// MUST NOT fetch loopback addresses (security requirement)
-	if (isLoopbackURL(clientId)) {
-		return { success: false, error: "Cannot fetch metadata from loopback addresses" };
+	// Validate URL is safe to fetch (prevents SSRF attacks)
+	const urlValidation = validateExternalURL(clientId);
+	if (!urlValidation.safe) {
+		return {
+			success: false,
+			error: urlValidation.error || "Invalid client_id URL",
+		};
 	}
 
-	try {
-		// Set timeout for fetch to prevent hanging
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+	// Additional check: MUST NOT fetch loopback addresses (IndieAuth spec requirement)
+	if (isLoopbackURL(clientId)) {
+		return {
+			success: false,
+			error: "Cannot fetch metadata from loopback addresses",
+		};
+	}
 
-		const response = await fetch(clientId, {
-			method: "GET",
-			headers: {
-				Accept: "application/json, text/html",
-			},
-			signal: controller.signal,
-		});
+	// Use SSRF-safe fetch with timeout and redirect validation
+	const fetchResult = await safeFetch(clientId, { timeout: 5000 });
 
-		clearTimeout(timeoutId);
+	if (!fetchResult.success) {
+		return {
+			success: false,
+			error: `Failed to fetch client metadata: ${fetchResult.error}`,
+		};
+	}
 
-		if (!response.ok) {
-			return { success: false, error: `Failed to fetch client metadata: HTTP ${response.status}` };
-		}
+	const response = fetchResult.data;
 
-		const contentType = response.headers.get("content-type") || "";
+	if (!response.ok) {
+		return {
+			success: false,
+			error: `Failed to fetch client metadata: HTTP ${response.status}`,
+		};
+	}
 
-		// Try to parse as JSON first
-		if (contentType.includes("application/json")) {
+	const contentType = response.headers.get("content-type") || "";
+
+	// Try to parse as JSON first
+	if (contentType.includes("application/json")) {
+		try {
 			const metadata = await response.json();
 
 			// Verify client_id matches
 			if (metadata.client_id && metadata.client_id !== clientId) {
-				return { success: false, error: "client_id in metadata does not match URL" };
-			}
-
-			return { success: true, metadata };
-		}
-
-		// If HTML, look for <link rel="redirect_uri"> tags
-		if (contentType.includes("text/html")) {
-			const html = await response.text();
-
-			// Extract redirect URIs from link tags
-			const redirectUriRegex = /<link\s+[^>]*rel=["']redirect_uri["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
-			const redirectUris: string[] = [];
-			let match: RegExpExecArray | null;
-
-			while ((match = redirectUriRegex.exec(html)) !== null) {
-				redirectUris.push(match[1]);
-			}
-
-			// Also try reverse order (href before rel)
-			const redirectUriRegex2 = /<link\s+[^>]*href=["']([^"']+)["'][^>]*rel=["']redirect_uri["'][^>]*>/gi;
-			while ((match = redirectUriRegex2.exec(html)) !== null) {
-				if (!redirectUris.includes(match[1])) {
-					redirectUris.push(match[1]);
-				}
-			}
-
-			if (redirectUris.length > 0) {
 				return {
-					success: true,
-					metadata: {
-						client_id: clientId,
-						redirect_uris: redirectUris,
-					},
+					success: false,
+					error: "client_id in metadata does not match URL",
 				};
 			}
 
-			return { success: false, error: "No client metadata or redirect_uri links found in HTML" };
-		}
-
-		return { success: false, error: "Unsupported content type" };
-	} catch (error) {
-		if (error instanceof Error) {
-			if (error.name === "AbortError") {
-				return { success: false, error: "Timeout fetching client metadata" };
+			// Validate any logo_uri or client_uri in metadata (prevent SSRF via metadata fields)
+			if (metadata.logo_uri) {
+				const logoValidation = validateExternalURL(metadata.logo_uri);
+				if (!logoValidation.safe) {
+					delete metadata.logo_uri;
+				}
 			}
-			return { success: false, error: `Failed to fetch client metadata: ${error.message}` };
+
+			if (metadata.client_uri) {
+				const clientUriValidation = validateExternalURL(metadata.client_uri);
+				if (!clientUriValidation.safe) {
+					delete metadata.client_uri;
+				}
+			}
+
+			return { success: true, metadata };
+		} catch {
+			return { success: false, error: "Invalid JSON in client metadata" };
 		}
-		return { success: false, error: "Failed to fetch client metadata" };
 	}
-}
 
-// Verify domain has rel="me" link back to user profile
-export async function verifyDomain(domainUrl: string, indikoProfileUrl: string): Promise<{
-	success: boolean;
-	error?: string;
-}> {
-	try {
-		// Set timeout for fetch
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-		const response = await fetch(domainUrl, {
-			method: "GET",
-			headers: {
-				Accept: "text/html",
-				"User-Agent": "indiko/1.0 (+https://indiko.dunkirk.sh/)",
-			},
-			signal: controller.signal,
-		});
-
-		clearTimeout(timeoutId);
-
-		if (!response.ok) {
-			const errorBody = await response.text();
-			console.error(`[verifyDomain] Failed to fetch ${domainUrl}: HTTP ${response.status}`, {
-				status: response.status,
-				contentType: response.headers.get("content-type"),
-				bodyPreview: errorBody.substring(0, 200),
-			});
-			return { success: false, error: `Failed to fetch domain: HTTP ${response.status}` };
-		}
-
+	// If HTML, look for <link rel="redirect_uri"> tags
+	if (contentType.includes("text/html")) {
 		const html = await response.text();
 
-		// Extract rel="me" links using regex
-		// Matches both <link> and <a> tags with rel attribute containing "me"
-		const relMeLinks: string[] = [];
+		// Extract redirect URIs from link tags
+		const redirectUriRegex =
+			/<link\s+[^>]*rel=["']redirect_uri["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
+		const redirectUris: string[] = [];
+		let match: RegExpExecArray | null;
 
-		// Simpler approach: find all link and a tags, then check if they have rel="me" and href
-		const linkRegex = /<link\s+[^>]*>/gi;
-		const aRegex = /<a\s+[^>]*>/gi;
+		while ((match = redirectUriRegex.exec(html)) !== null) {
+			redirectUris.push(match[1]);
+		}
 
-		const processTag = (tagHtml: string) => {
-			// Check if has rel containing "me" (handle quoted and unquoted attributes)
-			const relMatch = tagHtml.match(/rel=["']?([^"'\s>]+)["']?/i);
-			if (!relMatch) return null;
-
-			const relValue = relMatch[1];
-			// Check if "me" is a separate word in the rel attribute
-			if (!relValue.split(/\s+/).includes("me")) return null;
-
-			// Extract href (handle quoted and unquoted attributes)
-			const hrefMatch = tagHtml.match(/href=["']?([^"'\s>]+)["']?/i);
-			if (!hrefMatch) return null;
-
-			return hrefMatch[1];
-		};
-
-		// Process all link tags
-		let linkMatch;
-		while ((linkMatch = linkRegex.exec(html)) !== null) {
-			const href = processTag(linkMatch[0]);
-			if (href && !relMeLinks.includes(href)) {
-				relMeLinks.push(href);
+		// Also try reverse order (href before rel)
+		const redirectUriRegex2 =
+			/<link\s+[^>]*href=["']([^"']+)["'][^>]*rel=["']redirect_uri["'][^>]*>/gi;
+		while ((match = redirectUriRegex2.exec(html)) !== null) {
+			if (!redirectUris.includes(match[1])) {
+				redirectUris.push(match[1]);
 			}
 		}
 
-		// Process all a tags
-		let aMatch;
-		while ((aMatch = aRegex.exec(html)) !== null) {
-			const href = processTag(aMatch[0]);
-			if (href && !relMeLinks.includes(href)) {
-				relMeLinks.push(href);
-			}
-		}
-
-		// Check if any rel="me" link matches the indiko profile URL
-		const normalizedIndikoUrl = canonicalizeURL(indikoProfileUrl);
-		const hasRelMe = relMeLinks.some(link => {
-			try {
-				const normalizedLink = canonicalizeURL(link);
-				return normalizedLink === normalizedIndikoUrl;
-			} catch {
-				return false;
-			}
-		});
-
-		if (!hasRelMe) {
-			console.error(`[verifyDomain] No rel="me" link found on ${domainUrl} pointing to ${indikoProfileUrl}`, {
-				foundLinks: relMeLinks,
-				normalizedTarget: normalizedIndikoUrl,
-			});
+		if (redirectUris.length > 0) {
 			return {
-				success: false,
-				error: `Domain must have <link rel="me" href="${indikoProfileUrl}" /> or <a rel="me" href="${indikoProfileUrl}">...</a> to verify ownership`,
+				success: true,
+				metadata: {
+					client_id: clientId,
+					redirect_uris: redirectUris,
+				},
 			};
 		}
 
-		return { success: true };
-	} catch (error) {
-		if (error instanceof Error) {
-			if (error.name === "AbortError") {
-				console.error(`[verifyDomain] Timeout verifying ${domainUrl}`);
-				return { success: false, error: "Timeout verifying domain" };
-			}
-			console.error(`[verifyDomain] Error verifying ${domainUrl}: ${error.message}`, {
-				name: error.name,
-				stack: error.stack,
-			});
-			return { success: false, error: `Failed to verify domain: ${error.message}` };
-		}
-		console.error(`[verifyDomain] Unknown error verifying ${domainUrl}:`, error);
-		return { success: false, error: "Failed to verify domain" };
+		return {
+			success: false,
+			error: "No client metadata or redirect_uri links found in HTML",
+		};
 	}
+
+	return { success: false, error: "Unsupported content type" };
+}
+
+// Verify domain has rel="me" link back to user profile (with SSRF protection)
+export async function verifyDomain(
+	domainUrl: string,
+	indikoProfileUrl: string,
+): Promise<{
+	success: boolean;
+	error?: string;
+}> {
+	// Validate URL is safe to fetch (prevents SSRF attacks)
+	const urlValidation = validateExternalURL(domainUrl);
+	if (!urlValidation.safe) {
+		return {
+			success: false,
+			error: urlValidation.error || "Invalid domain URL",
+		};
+	}
+
+	// Use SSRF-safe fetch
+	const fetchResult = await safeFetch(domainUrl, {
+		timeout: 5000,
+		headers: {
+			Accept: "text/html",
+			"User-Agent": "indiko/1.0 (+https://indiko.dunkirk.sh/)",
+		},
+	});
+
+	if (!fetchResult.success) {
+		console.error(
+			`[verifyDomain] Failed to fetch ${domainUrl}: ${fetchResult.error}`,
+		);
+		return {
+			success: false,
+			error: `Failed to fetch domain: ${fetchResult.error}`,
+		};
+	}
+
+	const response = fetchResult.data;
+
+	if (!response.ok) {
+		const errorBody = await response.text();
+		console.error(
+			`[verifyDomain] Failed to fetch ${domainUrl}: HTTP ${response.status}`,
+			{
+				status: response.status,
+				contentType: response.headers.get("content-type"),
+				bodyPreview: errorBody.substring(0, 200),
+			},
+		);
+		return {
+			success: false,
+			error: `Failed to fetch domain: HTTP ${response.status}`,
+		};
+	}
+
+	const html = await response.text();
+
+	// Extract rel="me" links using regex
+	// Matches both <link> and <a> tags with rel attribute containing "me"
+	const relMeLinks: string[] = [];
+
+	// Simpler approach: find all link and a tags, then check if they have rel="me" and href
+	const linkRegex = /<link\s+[^>]*>/gi;
+	const aRegex = /<a\s+[^>]*>/gi;
+
+	const processTag = (tagHtml: string) => {
+		// Check if has rel containing "me" (handle quoted and unquoted attributes)
+		const relMatch = tagHtml.match(/rel=["']?([^"'\s>]+)["']?/i);
+		if (!relMatch) return null;
+
+		const relValue = relMatch[1];
+		// Check if "me" is a separate word in the rel attribute
+		if (!relValue.split(/\s+/).includes("me")) return null;
+
+		// Extract href (handle quoted and unquoted attributes)
+		const hrefMatch = tagHtml.match(/href=["']?([^"'\s>]+)["']?/i);
+		if (!hrefMatch) return null;
+
+		return hrefMatch[1];
+	};
+
+	// Process all link tags
+	let linkMatch;
+	while ((linkMatch = linkRegex.exec(html)) !== null) {
+		const href = processTag(linkMatch[0]);
+		if (href && !relMeLinks.includes(href)) {
+			relMeLinks.push(href);
+		}
+	}
+
+	// Process all a tags
+	let aMatch;
+	while ((aMatch = aRegex.exec(html)) !== null) {
+		const href = processTag(aMatch[0]);
+		if (href && !relMeLinks.includes(href)) {
+			relMeLinks.push(href);
+		}
+	}
+
+	// Check if any rel="me" link matches the indiko profile URL
+	const normalizedIndikoUrl = canonicalizeURL(indikoProfileUrl);
+	const hasRelMe = relMeLinks.some((link) => {
+		try {
+			const normalizedLink = canonicalizeURL(link);
+			return normalizedLink === normalizedIndikoUrl;
+		} catch {
+			return false;
+		}
+	});
+
+	if (!hasRelMe) {
+		console.error(
+			`[verifyDomain] No rel="me" link found on ${domainUrl} pointing to ${indikoProfileUrl}`,
+			{
+				foundLinks: relMeLinks,
+				normalizedTarget: normalizedIndikoUrl,
+			},
+		);
+		return {
+			success: false,
+			error: `Domain must have <link rel="me" href="${indikoProfileUrl}" /> or <a rel="me" href="${indikoProfileUrl}">...</a> to verify ownership`,
+		};
+	}
+
+	return { success: true };
 }
 
 // Validate and register app with client information discovery
@@ -457,7 +535,11 @@ async function ensureApp(
 	redirectUri: string,
 ): Promise<{
 	error?: string;
-	app?: { name: string | null; redirect_uris: string; logo_url?: string | null };
+	app?: {
+		name: string | null;
+		redirect_uris: string;
+		logo_url?: string | null;
+	};
 }> {
 	const existing = db
 		.query("SELECT name, redirect_uris, logo_url FROM apps WHERE client_id = ?")
@@ -550,8 +632,14 @@ async function ensureApp(
 
 		// Fetch the newly created app
 		const newApp = db
-			.query("SELECT name, redirect_uris, logo_url FROM apps WHERE client_id = ?")
-			.get(canonicalClientId) as { name: string | null; redirect_uris: string; logo_url?: string | null };
+			.query(
+				"SELECT name, redirect_uris, logo_url FROM apps WHERE client_id = ?",
+			)
+			.get(canonicalClientId) as {
+			name: string | null;
+			redirect_uris: string;
+			logo_url?: string | null;
+		};
 
 		return { app: newApp };
 	}
@@ -954,7 +1042,9 @@ export async function authorizeGet(req: Request): Promise<Response> {
 			).run(Math.floor(Date.now() / 1000), user.userId, clientId);
 
 			const origin = process.env.ORIGIN || "http://localhost:3000";
-			return Response.redirect(`${redirectUri}?code=${code}&state=${state}&iss=${encodeURIComponent(origin)}`);
+			return Response.redirect(
+				`${redirectUri}?code=${code}&state=${state}&iss=${encodeURIComponent(origin)}`,
+			);
 		}
 	}
 
@@ -1316,7 +1406,7 @@ function showConsentScreen(
 // POST /auth/authorize - Consent form submission
 export async function authorizePost(req: Request): Promise<Response> {
 	const contentType = req.headers.get("Content-Type");
-	
+
 	// Parse the request body
 	let body: Record<string, string>;
 	let formData: FormData;
@@ -1334,14 +1424,14 @@ export async function authorizePost(req: Request): Promise<Response> {
 	}
 
 	const grantType = body.grant_type;
-	
+
 	// If grant_type is present, this is a token exchange request (IndieAuth profile scope only)
 	if (grantType === "authorization_code") {
 		// Create a mock request for token() function
 		const mockReq = new Request(req.url, {
 			method: "POST",
 			headers: req.headers,
-			body: contentType?.includes("application/x-www-form-urlencoded") 
+			body: contentType?.includes("application/x-www-form-urlencoded")
 				? new URLSearchParams(body).toString()
 				: JSON.stringify(body),
 		});
@@ -1373,7 +1463,9 @@ export async function authorizePost(req: Request): Promise<Response> {
 		clientId = canonicalizeURL(rawClientId);
 		redirectUri = canonicalizeURL(rawRedirectUri);
 	} catch {
-		return new Response("Invalid client_id or redirect_uri URL format", { status: 400 });
+		return new Response("Invalid client_id or redirect_uri URL format", {
+			status: 400,
+		});
 	}
 
 	if (action === "deny") {
@@ -1487,7 +1579,9 @@ export async function token(req: Request): Promise<Response> {
 		let redirect_uri: string | undefined;
 		try {
 			client_id = raw_client_id ? canonicalizeURL(raw_client_id) : undefined;
-			redirect_uri = raw_redirect_uri ? canonicalizeURL(raw_redirect_uri) : undefined;
+			redirect_uri = raw_redirect_uri
+				? canonicalizeURL(raw_redirect_uri)
+				: undefined;
 		} catch {
 			return Response.json(
 				{
@@ -1502,7 +1596,8 @@ export async function token(req: Request): Promise<Response> {
 			return Response.json(
 				{
 					error: "unsupported_grant_type",
-					error_description: "Only authorization_code and refresh_token grant types are supported",
+					error_description:
+						"Only authorization_code and refresh_token grant types are supported",
 				},
 				{ status: 400 },
 			);
@@ -1577,9 +1672,11 @@ export async function token(req: Request): Promise<Response> {
 			const expiresAt = now + expiresIn;
 
 			// Update token (rotate access token, keep refresh token)
-			db.query(
-				"UPDATE tokens SET token = ?, expires_at = ? WHERE id = ?",
-			).run(newAccessToken, expiresAt, tokenData.id);
+			db.query("UPDATE tokens SET token = ?, expires_at = ? WHERE id = ?").run(
+				newAccessToken,
+				expiresAt,
+				tokenData.id,
+			);
 
 			// Get user profile for me value
 			const user = db
@@ -1614,7 +1711,7 @@ export async function token(req: Request): Promise<Response> {
 					headers: {
 						"Content-Type": "application/json",
 						"Cache-Control": "no-store",
-						"Pragma": "no-cache",
+						Pragma: "no-cache",
 					},
 				},
 			);
@@ -1727,7 +1824,9 @@ export async function token(req: Request): Promise<Response> {
 
 		// Check if already used
 		if (authcode.used) {
-			console.error("Token endpoint: authorization code already used", { code });
+			console.error("Token endpoint: authorization code already used", {
+				code,
+			});
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1740,7 +1839,12 @@ export async function token(req: Request): Promise<Response> {
 		// Check if expired
 		const now = Math.floor(Date.now() / 1000);
 		if (authcode.expires_at < now) {
-			console.error("Token endpoint: authorization code expired", { code, expires_at: authcode.expires_at, now, diff: now - authcode.expires_at });
+			console.error("Token endpoint: authorization code expired", {
+				code,
+				expires_at: authcode.expires_at,
+				now,
+				diff: now - authcode.expires_at,
+			});
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1752,7 +1856,10 @@ export async function token(req: Request): Promise<Response> {
 
 		// Verify client_id matches
 		if (authcode.client_id !== client_id) {
-			console.error("Token endpoint: client_id mismatch", { stored: authcode.client_id, received: client_id });
+			console.error("Token endpoint: client_id mismatch", {
+				stored: authcode.client_id,
+				received: client_id,
+			});
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1764,7 +1871,10 @@ export async function token(req: Request): Promise<Response> {
 
 		// Verify redirect_uri matches
 		if (authcode.redirect_uri !== redirect_uri) {
-			console.error("Token endpoint: redirect_uri mismatch", { stored: authcode.redirect_uri, received: redirect_uri });
+			console.error("Token endpoint: redirect_uri mismatch", {
+				stored: authcode.redirect_uri,
+				received: redirect_uri,
+			});
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1776,7 +1886,10 @@ export async function token(req: Request): Promise<Response> {
 
 		// Verify PKCE code_verifier (required for all clients per IndieAuth spec)
 		if (!verifyPKCE(code_verifier, authcode.code_challenge)) {
-			console.error("Token endpoint: PKCE verification failed", { code_verifier, code_challenge: authcode.code_challenge });
+			console.error("Token endpoint: PKCE verification failed", {
+				code_verifier,
+				code_challenge: authcode.code_challenge,
+			});
 			return Response.json(
 				{
 					error: "invalid_grant",
@@ -1839,18 +1952,22 @@ export async function token(req: Request): Promise<Response> {
 
 		// Validate that the user controls the requested me parameter
 		if (authcode.me && authcode.me !== meValue) {
-			console.error("Token endpoint: me mismatch", { requested: authcode.me, actual: meValue });
+			console.error("Token endpoint: me mismatch", {
+				requested: authcode.me,
+				actual: meValue,
+			});
 			return Response.json(
 				{
 					error: "invalid_grant",
-					error_description: "The requested identity does not match the user's verified domain",
+					error_description:
+						"The requested identity does not match the user's verified domain",
 				},
 				{ status: 400 },
 			);
 		}
 
 		const origin = process.env.ORIGIN || "http://localhost:3000";
-		
+
 		// Generate access token
 		const accessToken = crypto.randomBytes(32).toString("base64url");
 		const expiresIn = 3600; // 1 hour
@@ -1864,7 +1981,15 @@ export async function token(req: Request): Promise<Response> {
 		// Store token in database with refresh token
 		db.query(
 			"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		).run(accessToken, authcode.user_id, client_id, scopes.join(" "), expiresAt, refreshToken, refreshExpiresAt);
+		).run(
+			accessToken,
+			authcode.user_id,
+			client_id,
+			scopes.join(" "),
+			expiresAt,
+			refreshToken,
+			refreshExpiresAt,
+		);
 
 		const response: Record<string, unknown> = {
 			access_token: accessToken,
@@ -1882,13 +2007,16 @@ export async function token(req: Request): Promise<Response> {
 			response.role = permission.role;
 		}
 
-		console.log("Token endpoint: success", { me: meValue, scopes: scopes.join(" ") });
+		console.log("Token endpoint: success", {
+			me: meValue,
+			scopes: scopes.join(" "),
+		});
 
 		return Response.json(response, {
 			headers: {
 				"Content-Type": "application/json",
 				"Cache-Control": "no-store",
-				"Pragma": "no-cache",
+				Pragma: "no-cache",
 			},
 		});
 	} catch (error) {
@@ -2052,7 +2180,7 @@ export function userinfo(req: Request): Response {
 	try {
 		// Get access token from Authorization header
 		const authHeader = req.headers.get("Authorization");
-		
+
 		if (!authHeader || !authHeader.startsWith("Bearer ")) {
 			return Response.json(
 				{

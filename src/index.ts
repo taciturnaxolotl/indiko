@@ -365,11 +365,20 @@ const ldapCleanupJob =
 
 					if (expiredOrphans.length > 0) {
 						if (action === "suspend") {
-							await updateOrphanedAccounts({ ...result, orphanedUsers: expiredOrphans }, "suspend");
+							await updateOrphanedAccounts(
+								{ ...result, orphanedUsers: expiredOrphans },
+								"suspend",
+							);
 						} else if (action === "deactivate") {
-							await updateOrphanedAccounts({ ...result, orphanedUsers: expiredOrphans }, "deactivate");
+							await updateOrphanedAccounts(
+								{ ...result, orphanedUsers: expiredOrphans },
+								"deactivate",
+							);
 						} else if (action === "remove") {
-							await updateOrphanedAccounts({ ...result, orphanedUsers: expiredOrphans }, "remove");
+							await updateOrphanedAccounts(
+								{ ...result, orphanedUsers: expiredOrphans },
+								"remove",
+							);
 						}
 						console.log(
 							`[LDAP Cleanup] ${action === "remove" ? "Removed" : action === "suspend" ? "Suspended" : "Deactivated"} ${expiredOrphans.length} LDAP orphan accounts (grace period: ${gracePeriod}s)`,
