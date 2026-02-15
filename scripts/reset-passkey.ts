@@ -52,7 +52,9 @@ interface Credential {
 
 function getUser(username: string): User | null {
 	return db
-		.query("SELECT id, username, name, email, status, is_admin FROM users WHERE username = ?")
+		.query(
+			"SELECT id, username, name, email, status, is_admin FROM users WHERE username = ?",
+		)
 		.get(username) as User | null;
 }
 
@@ -70,26 +72,35 @@ function deleteCredentials(userId: number): number {
 }
 
 function deleteSessions(userId: number): number {
-	const result = db
-		.query("DELETE FROM sessions WHERE user_id = ?")
-		.run(userId);
+	const result = db.query("DELETE FROM sessions WHERE user_id = ?").run(userId);
 	return result.changes;
 }
 
-function createResetInvite(adminUserId: number, targetUsername: string): string {
+function createResetInvite(
+	adminUserId: number,
+	targetUsername: string,
+): string {
 	const code = crypto.randomBytes(16).toString("base64url");
 	const now = Math.floor(Date.now() / 1000);
 	const expiresAt = now + 86400; // 24 hours
 
 	// Check if there's a reset_username column, if not we'll use the note field
 	const hasResetColumn = db
-		.query("SELECT name FROM pragma_table_info('invites') WHERE name = 'reset_username'")
+		.query(
+			"SELECT name FROM pragma_table_info('invites') WHERE name = 'reset_username'",
+		)
 		.get();
 
 	if (hasResetColumn) {
 		db.query(
 			"INSERT INTO invites (code, created_by, max_uses, current_uses, expires_at, note, reset_username) VALUES (?, ?, 1, 0, ?, ?, ?)",
-		).run(code, adminUserId, expiresAt, `Passkey reset for ${targetUsername}`, targetUsername);
+		).run(
+			code,
+			adminUserId,
+			expiresAt,
+			`Passkey reset for ${targetUsername}`,
+			targetUsername,
+		);
 	} else {
 		// Use a special note format to indicate this is a reset invite
 		// Format: PASSKEY_RESET:username
@@ -109,7 +120,9 @@ function createResetInvite(adminUserId: number, targetUsername: string): string 
 
 function getAdminUser(): User | null {
 	return db
-		.query("SELECT id, username, name, email, status, is_admin FROM users WHERE is_admin = 1 LIMIT 1")
+		.query(
+			"SELECT id, username, name, email, status, is_admin FROM users WHERE is_admin = 1 LIMIT 1",
+		)
 		.get() as User | null;
 }
 
@@ -169,7 +182,9 @@ Example:
 	});
 
 	if (credentials.length === 0) {
-		console.log("\n⚠️  User has no passkeys registered. Creating reset link anyway...");
+		console.log(
+			"\n⚠️  User has no passkeys registered. Creating reset link anyway...",
+		);
 	}
 
 	if (dryRun) {
@@ -184,7 +199,9 @@ Example:
 	// Confirmation prompt (unless --force)
 	if (!force) {
 		console.log("\n⚠️  This will:");
-		console.log(`   • Delete ALL ${credentials.length} passkey(s) for this user`);
+		console.log(
+			`   • Delete ALL ${credentials.length} passkey(s) for this user`,
+		);
 		console.log("   • Log them out of all sessions");
 		console.log("   • Generate a 24-hour reset link\n");
 

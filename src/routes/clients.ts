@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { nanoid } from "nanoid";
 import { db } from "../db";
 
@@ -121,7 +121,7 @@ export function listClients(req: Request): Response {
 		if (!rolesByApp.has(app_id)) {
 			rolesByApp.set(app_id, []);
 		}
-		rolesByApp.get(app_id)!.push(role);
+		rolesByApp.get(app_id)?.push(role);
 	}
 
 	return Response.json({

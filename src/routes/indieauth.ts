@@ -1,13 +1,25 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { db } from "../db";
-import { signIDToken } from "../oidc";
 import { safeFetch, validateExternalURL } from "../lib/ssrf-safe-fetch";
+import { signIDToken } from "../oidc";
 
 interface SessionUser {
 	username: string;
 	userId: number;
 	isAdmin: boolean;
 	tier: string;
+}
+
+function unauthorizedResponse(error: string, description: string): Response {
+	return Response.json(
+		{ error, error_description: description },
+		{
+			status: 401,
+			headers: {
+				"WWW-Authenticate": `Bearer realm="indiko", error="${error}", error_description="${description}"`,
+			},
+		},
+	);
 }
 
 // Helper to get authenticated user from session token
@@ -415,7 +427,10 @@ export async function verifyDomain(
 	// Validate URL is safe to fetch (prevents SSRF attacks)
 	const urlValidation = validateExternalURL(domainUrl);
 	if (!urlValidation.safe) {
-		return { success: false, error: urlValidation.error || "Invalid domain URL" };
+		return {
+			success: false,
+			error: urlValidation.error || "Invalid domain URL",
+		};
 	}
 
 	// Use SSRF-safe fetch
@@ -428,8 +443,13 @@ export async function verifyDomain(
 	});
 
 	if (!fetchResult.success) {
-		console.error(`[verifyDomain] Failed to fetch ${domainUrl}: ${fetchResult.error}`);
-		return { success: false, error: `Failed to fetch domain: ${fetchResult.error}` };
+		console.error(
+			`[verifyDomain] Failed to fetch ${domainUrl}: ${fetchResult.error}`,
+		);
+		return {
+			success: false,
+			error: `Failed to fetch domain: ${fetchResult.error}`,
+		};
 	}
 
 	const response = fetchResult.data;
@@ -452,67 +472,67 @@ export async function verifyDomain(
 
 	const html = await response.text();
 
-		// Extract rel="me" links using regex
-		// Matches both <link> and <a> tags with rel attribute containing "me"
-		const relMeLinks: string[] = [];
+	// Extract rel="me" links using regex
+	// Matches both <link> and <a> tags with rel attribute containing "me"
+	const relMeLinks: string[] = [];
 
-		// Simpler approach: find all link and a tags, then check if they have rel="me" and href
-		const linkRegex = /<link\s+[^>]*>/gi;
-		const aRegex = /<a\s+[^>]*>/gi;
+	// Simpler approach: find all link and a tags, then check if they have rel="me" and href
+	const linkRegex = /<link\s+[^>]*>/gi;
+	const aRegex = /<a\s+[^>]*>/gi;
 
-		const processTag = (tagHtml: string) => {
-			// Check if has rel containing "me" (handle quoted and unquoted attributes)
-			const relMatch = tagHtml.match(/rel=["']?([^"'\s>]+)["']?/i);
-			if (!relMatch) return null;
+	const processTag = (tagHtml: string) => {
+		// Check if has rel containing "me" (handle quoted and unquoted attributes)
+		const relMatch = tagHtml.match(/rel=["']?([^"'\s>]+)["']?/i);
+		if (!relMatch) return null;
 
-			const relValue = relMatch[1];
-			// Check if "me" is a separate word in the rel attribute
-			if (!relValue.split(/\s+/).includes("me")) return null;
+		const relValue = relMatch[1];
+		// Check if "me" is a separate word in the rel attribute
+		if (!relValue.split(/\s+/).includes("me")) return null;
 
-			// Extract href (handle quoted and unquoted attributes)
-			const hrefMatch = tagHtml.match(/href=["']?([^"'\s>]+)["']?/i);
-			if (!hrefMatch) return null;
+		// Extract href (handle quoted and unquoted attributes)
+		const hrefMatch = tagHtml.match(/href=["']?([^"'\s>]+)["']?/i);
+		if (!hrefMatch) return null;
 
-			return hrefMatch[1];
-		};
+		return hrefMatch[1];
+	};
 
-		// Process all link tags
-		let linkMatch;
-		while ((linkMatch = linkRegex.exec(html)) !== null) {
-			const href = processTag(linkMatch[0]);
-			if (href && !relMeLinks.includes(href)) {
-				relMeLinks.push(href);
-			}
+	// Process all link tags
+	let linkMatch;
+	while ((linkMatch = linkRegex.exec(html)) !== null) {
+		const href = processTag(linkMatch[0]);
+		if (href && !relMeLinks.includes(href)) {
+			relMeLinks.push(href);
 		}
+	}
 
-		// Process all a tags
-		let aMatch;
-		while ((aMatch = aRegex.exec(html)) !== null) {
-			const href = processTag(aMatch[0]);
-			if (href && !relMeLinks.includes(href)) {
-				relMeLinks.push(href);
-			}
+	// Process all a tags
+	let aMatch;
+	while ((aMatch = aRegex.exec(html)) !== null) {
+		const href = processTag(aMatch[0]);
+		if (href && !relMeLinks.includes(href)) {
+			relMeLinks.push(href);
 		}
+	}
 
-		// Check if any rel="me" link matches the indiko profile URL
-		const normalizedIndikoUrl = canonicalizeURL(indikoProfileUrl);
-		const hasRelMe = relMeLinks.some((link) => {
-			try {
-				const normalizedLink = canonicalizeURL(link);
-				return normalizedLink === normalizedIndikoUrl;
-			} catch {
-				return false;
-			}
-		});
+	// Check if any rel="me" link matches the indiko profile URL
+	const normalizedIndikoUrl = canonicalizeURL(indikoProfileUrl);
+	const hasRelMe = relMeLinks.some((link) => {
+		try {
+			const normalizedLink = canonicalizeURL(link);
+			return normalizedLink === normalizedIndikoUrl;
+		} catch {
+			return false;
+		}
+	});
 
-		if (!hasRelMe) {
-			console.error(
-				`[verifyDomain] No rel="me" link found on ${domainUrl} pointing to ${indikoProfileUrl}`,
-				{
-					foundLinks: relMeLinks,
-					normalizedTarget: normalizedIndikoUrl,
-				},
-			);
+	if (!hasRelMe) {
+		console.error(
+			`[verifyDomain] No rel="me" link found on ${domainUrl} pointing to ${indikoProfileUrl}`,
+			{
+				foundLinks: relMeLinks,
+				normalizedTarget: normalizedIndikoUrl,
+			},
+		);
 		return {
 			success: false,
 			error: `Domain must have <link rel="me" href="${indikoProfileUrl}" /> or <a rel="me" href="${indikoProfileUrl}">...</a> to verify ownership`,
@@ -662,15 +682,15 @@ export async function authorizeGet(req: Request): Promise<Response> {
 	const me = params.get("me");
 	const nonce = params.get("nonce"); // OIDC nonce parameter
 
-	if (responseType !== "code") {
-		return new Response("Unsupported response_type", { status: 400 });
+	// Step 1: Validate client_id and redirect_uri exist (can't redirect without them)
+	if (!rawClientId || !rawRedirectUri) {
+		return new Response(
+			"Missing required parameters: client_id and redirect_uri",
+			{ status: 400 },
+		);
 	}
 
-	if (!rawClientId || !rawRedirectUri || !state || !codeChallenge) {
-		return new Response("Missing required parameters", { status: 400 });
-	}
-
-	// Validate and canonicalize URLs for consistent storage and comparison
+	// Step 2: Canonicalize URLs (if they're malformed, can't trust redirect_uri)
 	let clientId: string;
 	let redirectUri: string;
 	try {
@@ -772,13 +792,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		);
 	}
 
-	if (codeChallengeMethod && codeChallengeMethod !== "S256") {
-		return new Response("Only S256 code_challenge_method supported", {
-			status: 400,
-		});
-	}
-
-	// Verify app is registered
+	// Step 3: Verify app is registered (can't trust redirect_uri if client is invalid)
 	const appResult = await ensureApp(clientId, redirectUri);
 
 	if (appResult.error) {
@@ -980,6 +994,50 @@ export async function authorizeGet(req: Request): Promise<Response> {
 				headers: { "Content-Type": "text/html" },
 			},
 		);
+	}
+
+	// Step 5: redirect_uri is now trusted — validate remaining params via redirect (RFC 6749 §4.1.2.1)
+	if (responseType !== "code") {
+		const errorUrl = new URL(redirectUri);
+		errorUrl.searchParams.set("error", "unsupported_response_type");
+		errorUrl.searchParams.set(
+			"error_description",
+			"Only response_type=code is supported",
+		);
+		if (state) errorUrl.searchParams.set("state", state);
+		return Response.redirect(errorUrl.toString(), 302);
+	}
+
+	if (!codeChallenge) {
+		const errorUrl = new URL(redirectUri);
+		errorUrl.searchParams.set("error", "invalid_request");
+		errorUrl.searchParams.set(
+			"error_description",
+			"Missing required parameter: code_challenge",
+		);
+		if (state) errorUrl.searchParams.set("state", state);
+		return Response.redirect(errorUrl.toString(), 302);
+	}
+
+	if (codeChallengeMethod && codeChallengeMethod !== "S256") {
+		const errorUrl = new URL(redirectUri);
+		errorUrl.searchParams.set("error", "invalid_request");
+		errorUrl.searchParams.set(
+			"error_description",
+			"Only S256 code_challenge_method is supported",
+		);
+		if (state) errorUrl.searchParams.set("state", state);
+		return Response.redirect(errorUrl.toString(), 302);
+	}
+
+	if (!state) {
+		const errorUrl = new URL(redirectUri);
+		errorUrl.searchParams.set("error", "invalid_request");
+		errorUrl.searchParams.set(
+			"error_description",
+			"Missing required parameter: state",
+		);
+		return Response.redirect(errorUrl.toString(), 302);
 	}
 
 	// Check if user is logged in
@@ -1675,10 +1733,18 @@ export async function token(req: Request): Promise<Response> {
 			const expiresIn = 3600; // 1 hour
 			const expiresAt = now + expiresIn;
 
-			// Update token (rotate access token, keep refresh token)
-			db.query("UPDATE tokens SET token = ?, expires_at = ? WHERE id = ?").run(
+			// Rotate refresh token to prevent replay attacks
+			const newRefreshToken = crypto.randomBytes(32).toString("base64url");
+			const refreshExpiresAt = now + 2592000; // 30 days
+
+			// Update token (rotate both access and refresh tokens)
+			db.query(
+				"UPDATE tokens SET token = ?, expires_at = ?, refresh_token = ?, refresh_expires_at = ? WHERE id = ?",
+			).run(
 				newAccessToken,
 				expiresAt,
+				newRefreshToken,
+				refreshExpiresAt,
 				tokenData.id,
 			);
 
@@ -1707,6 +1773,7 @@ export async function token(req: Request): Promise<Response> {
 					access_token: newAccessToken,
 					token_type: "Bearer",
 					expires_in: expiresIn,
+					refresh_token: newRefreshToken,
 					me: meValue,
 					scope: tokenData.scope,
 					iss: origin,
@@ -1731,16 +1798,20 @@ export async function token(req: Request): Promise<Response> {
 			| { is_preregistered: number; client_secret_hash: string | null }
 			| undefined;
 
+		// If client_secret provided but client not found - unknown client (400, not 401)
+		if (client_secret && !app) {
+			return Response.json(
+				{ error: "invalid_client", error_description: "Unknown client" },
+				{ status: 400 },
+			);
+		}
+
 		// If client is pre-registered, verify client secret
 		if (app && app.is_preregistered === 1) {
 			if (!client_secret) {
-				return Response.json(
-					{
-						error: "invalid_client",
-						error_description:
-							"client_secret is required for pre-registered clients",
-					},
-					{ status: 401 },
+				return unauthorizedResponse(
+					"invalid_client",
+					"client_secret is required for pre-registered clients",
 				);
 			}
 
@@ -1761,13 +1832,7 @@ export async function token(req: Request): Promise<Response> {
 				.digest("hex");
 
 			if (providedSecretHash !== app.client_secret_hash) {
-				return Response.json(
-					{
-						error: "invalid_client",
-						error_description: "Invalid client_secret",
-					},
-					{ status: 401 },
-				);
+				return unauthorizedResponse("invalid_client", "Invalid client_secret");
 			}
 		}
 
@@ -1874,9 +1939,19 @@ export async function token(req: Request): Promise<Response> {
 			);
 		}
 
-		// Verify redirect_uri matches if provided (per OAuth 2.0 RFC 6749 section 4.1.3)
-		// redirect_uri is REQUIRED if it was included in the authorization request
-		if (redirect_uri && authcode.redirect_uri !== redirect_uri) {
+		// redirect_uri is REQUIRED since it's always included in the authorization request
+		// (per OAuth 2.0 RFC 6749 §4.1.3)
+		if (!redirect_uri) {
+			return Response.json(
+				{
+					error: "invalid_request",
+					error_description: "redirect_uri is required",
+				},
+				{ status: 400 },
+			);
+		}
+
+		if (authcode.redirect_uri !== redirect_uri) {
 			console.error("Token endpoint: redirect_uri mismatch", {
 				stored: authcode.redirect_uri,
 				received: redirect_uri,
@@ -2156,11 +2231,13 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 		// Token is active - return metadata
 		return Response.json({
 			active: true,
+			sub: meValue,
 			me: meValue,
 			client_id: tokenData.client_id,
 			scope: tokenData.scope,
 			exp: tokenData.expires_at,
 			iat: tokenData.created_at,
+			username: tokenData.username,
 		});
 	} catch (error) {
 		console.error("Token introspection error:", error);
@@ -2209,10 +2286,31 @@ export async function tokenRevoke(req: Request): Promise<Response> {
 			);
 		}
 
-		// Mark token as revoked (per spec, return 200 even if token doesn't exist)
-		db.query("UPDATE tokens SET revoked = 1 WHERE token = ?").run(token);
+		// Check if it's a refresh token first (RFC 7009 §2.1: revoking a refresh token
+		// must also invalidate associated access tokens, and vice versa)
+		const refreshTokenData = db
+			.query("SELECT id FROM tokens WHERE refresh_token = ?")
+			.get(token) as { id: number } | undefined;
 
-		// Return 200 with empty body per RFC 7009
+		if (refreshTokenData) {
+			// Revoking refresh token — revoke the entire token record (access + refresh)
+			db.query("UPDATE tokens SET revoked = 1 WHERE id = ?").run(
+				refreshTokenData.id,
+			);
+		} else {
+			// Check if it's an access token — also invalidates the associated refresh token
+			const accessTokenData = db
+				.query("SELECT id FROM tokens WHERE token = ?")
+				.get(token) as { id: number } | undefined;
+
+			if (accessTokenData) {
+				db.query("UPDATE tokens SET revoked = 1 WHERE id = ?").run(
+					accessTokenData.id,
+				);
+			}
+		}
+
+		// Per RFC 7009, return 200 even if token doesn't exist
 		return new Response(null, { status: 200 });
 	} catch (error) {
 		console.error("Token revocation error:", error);
@@ -2233,12 +2331,9 @@ export function userinfo(req: Request): Response {
 		const authHeader = req.headers.get("Authorization");
 
 		if (!authHeader || !authHeader.startsWith("Bearer ")) {
-			return Response.json(
-				{
-					error: "invalid_request",
-					error_description: "Missing or invalid Authorization header",
-				},
-				{ status: 401 },
+			return unauthorizedResponse(
+				"invalid_request",
+				"Missing or invalid Authorization header",
 			);
 		}
 
@@ -2265,25 +2360,16 @@ export function userinfo(req: Request): Response {
 
 		// Token not found or revoked
 		if (!tokenData || tokenData.revoked === 1) {
-			return Response.json(
-				{
-					error: "invalid_token",
-					error_description: "Invalid or revoked access token",
-				},
-				{ status: 401 },
+			return unauthorizedResponse(
+				"invalid_token",
+				"Invalid or revoked access token",
 			);
 		}
 
 		// Check if expired
 		const now = Math.floor(Date.now() / 1000);
 		if (tokenData.expires_at < now) {
-			return Response.json(
-				{
-					error: "invalid_token",
-					error_description: "Access token expired",
-				},
-				{ status: 401 },
-			);
+			return unauthorizedResponse("invalid_token", "Access token expired");
 		}
 
 		// Parse scopes
@@ -2293,12 +2379,8 @@ export function userinfo(req: Request): Response {
 		const origin = process.env.ORIGIN || "http://localhost:3000";
 		const response: Record<string, string> = {};
 
-		// sub claim is always required for OIDC userinfo
-		if (tokenData.url) {
-			response.sub = tokenData.url;
-		} else {
-			response.sub = `${origin}/u/${tokenData.username}`;
-		}
+		// sub claim - use stable canonical profile URL (OIDC Core §2)
+		response.sub = `${origin}/u/${tokenData.username}`;
 
 		if (scopes.includes("profile")) {
 			response.name = tokenData.name;
