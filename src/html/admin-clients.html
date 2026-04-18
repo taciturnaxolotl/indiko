@@ -613,7 +613,7 @@
 	<main>
 		<div class="actions">
 			<h2>oauth clients</h2>
-			<button class="btn" id="createClientBtn">create client</button>
+			<button type="button" class="btn" id="createClientBtn">create client</button>
 		</div>
 		<div id="clientsList" class="clients-list">
 			<div class="loading">loading clients...</div>
@@ -631,7 +631,7 @@
 		<div class="modal-content">
 			<div class="modal-header">
 				<h3 class="modal-title" id="modalTitle">Create OAuth Client</h3>
-				<button class="modal-close" id="modalClose">&times;</button>
+				<button type="button" class="modal-close" id="modalClose">&times;</button>
 			</div>
 			<form id="clientForm">
 				<input type="hidden" id="editClientId" />
@@ -679,7 +679,7 @@
 		<div class="modal-content">
 			<div class="modal-header">
 				<h3 class="modal-title">Client Credentials Generated</h3>
-				<button class="modal-close" id="secretModalClose">&times;</button>
+				<button type="button" class="modal-close" id="secretModalClose">&times;</button>
 			</div>
 			<div style="margin-bottom: 1.5rem;">
 				<p style="color: var(--rosewood); font-weight: 600; margin-bottom: 1rem;">
@@ -690,14 +690,14 @@
 					<div style="background: rgba(0, 0, 0, 0.3); padding: 1rem; border: 1px solid var(--old-rose); margin-bottom: 0.5rem;">
 						<code id="generatedClientId" style="color: var(--lavender); font-size: 0.875rem; word-break: break-all; display: block;"></code>
 					</div>
-					<button class="btn" id="copyClientIdBtn" style="width: 100%; background: rgba(188, 141, 160, 0.2);">copy client id</button>
+					<button type="button" class="btn" id="copyClientIdBtn" style="width: 100%; background: rgba(188, 141, 160, 0.2);">copy client id</button>
 				</div>
 				<div style="margin-bottom: 1rem;">
 					<label style="display: block; color: var(--old-rose); font-size: 0.875rem; margin-bottom: 0.5rem;">Client Secret</label>
 					<div style="background: rgba(0, 0, 0, 0.3); padding: 1rem; border: 1px solid var(--old-rose); margin-bottom: 0.5rem;">
 						<code id="generatedSecret" style="color: var(--lavender); font-size: 0.875rem; word-break: break-all; display: block;"></code>
 					</div>
-					<button class="btn" id="copySecretBtn" style="width: 100%; background: rgba(188, 141, 160, 0.2);">copy secret</button>
+					<button type="button" class="btn" id="copySecretBtn" style="width: 100%; background: rgba(188, 141, 160, 0.2);">copy secret</button>
 				</div>
 			</div>
 		</div>

@@ -193,7 +193,7 @@ async function submitCreateInvite() {
 			) as HTMLSelectElement;
 
 			let role = "";
-			if (roleSelect && roleSelect.value) {
+			if (roleSelect?.value) {
 				role = roleSelect.value;
 			}
 

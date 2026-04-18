@@ -35,7 +35,7 @@ export async function checkLdapUser(username: string): Promise<boolean> {
 			verifyUserExists: true,
 		});
 		return !!user;
-	} catch (error) {
+	} catch (_error) {
 		// User not found or invalid credentials (expected for non-existence check)
 		return false;
 	}

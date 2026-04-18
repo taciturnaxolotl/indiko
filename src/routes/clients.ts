@@ -21,7 +21,7 @@ function getSessionUser(
 	| Response {
 	const authHeader = req.headers.get("Authorization");
 
-	if (!authHeader || !authHeader.startsWith("Bearer ")) {
+	if (!authHeader?.startsWith("Bearer ")) {
 		return Response.json({ error: "Unauthorized" }, { status: 401 });
 	}
 

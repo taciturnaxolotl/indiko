@@ -48,7 +48,7 @@ function highlightHTMLCSS(code: string): string {
 							);
 						}
 
-						result += attrs + "&gt;";
+						result += `${attrs}&gt;`;
 						return result;
 					},
 				);

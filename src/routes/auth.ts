@@ -42,7 +42,7 @@ export async function registerOptions(req: Request): Promise<Response> {
 			.get(username) as { id: number } | undefined;
 
 		// Allow re-registration if user exists but has no credentials (passkey reset case)
-		let isPasskeyReset = false;
+		let _isPasskeyReset = false;
 		if (existingUser) {
 			const credCount = db
 				.query("SELECT COUNT(*) as count FROM credentials WHERE user_id = ?")
@@ -55,7 +55,7 @@ export async function registerOptions(req: Request): Promise<Response> {
 				);
 			}
 			// User exists but has no credentials - this is a passkey reset
-			isPasskeyReset = true;
+			_isPasskeyReset = true;
 		}
 
 		// Check if this is bootstrap (first user)

@@ -569,11 +569,7 @@ clientForm.addEventListener("submit", async (e) => {
 		// If creating a new client, show the credentials in modal
 		if (!isEdit) {
 			const result = await response.json();
-			if (
-				result.client &&
-				result.client.clientId &&
-				result.client.clientSecret
-			) {
+			if (result.client?.clientId && result.client.clientSecret) {
 				const secretModal = document.getElementById(
 					"secretModal",
 				) as HTMLElement;

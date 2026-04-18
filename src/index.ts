@@ -45,6 +45,7 @@ import {
 import {
 	authorizeGet,
 	authorizePost,
+	clientMetadata,
 	createInvite,
 	deleteInvite,
 	indieauthMetadata,
@@ -156,6 +157,18 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 			);
 		},
 		"/.well-known/oauth-authorization-server": indieauthMetadata,
+		"/.well-known/oauth-client": (req: Request) => {
+			if (req.method === "GET") return clientMetadata(req);
+			if (req.method === "OPTIONS")
+				return new Response(null, {
+					status: 204,
+					headers: {
+						"Access-Control-Allow-Origin": "*",
+						"Access-Control-Allow-Methods": "GET, OPTIONS",
+					},
+				});
+			return new Response("Method not allowed", { status: 405 });
+		},
 		"/.well-known/openid-configuration": () => {
 			const origin = process.env.ORIGIN as string;
 			return Response.json(getDiscoveryDocument(origin));
