@@ -1,6 +1,6 @@
 # Indiko
 
-![screenshot of oauth page](https://hc-cdn.hel1.your-objectstorage.com/s/v3/c52ab5939b667050_95318.png)
+![screenshot of oauth page](https://l4.dunkirk.sh/i/tdChAD_1IvnH.webp)
 
 No that was not a typo the project's name actually is `indiko`! This is a small implementation of [IndieAuth](https://indieweb.org/How_to_set_up_web_sign-in_on_your_own_domain) running on bun with sqlite and serving as the authentication provider for my homelab / side projects it also supports custom clients with roles over the OAuth 2.0 spec.
 
@@ -79,6 +79,7 @@ Indiko supports two types of OAuth clients:
 #### Auto-registered Clients (IndieAuth)
 
 Any app can use Indiko without admin approval. On first authorization:
+
 - Use any valid URL as your `client_id` (e.g., `https://myapp.example.com`)
 - Indiko fetches metadata from your `client_id` URL
 - App is automatically registered
@@ -95,6 +96,7 @@ For apps requiring client secrets or role-based access control, admins can pre-r
 1. Go to `/admin/clients`
 2. Click "Create OAuth Client"
 3. Fill in:
+
    - **Name** - Display name for your app
    - **Logo URL** - (Optional) URL to app logo
    - **Description** - (Optional) Brief description
@@ -103,6 +105,7 @@ For apps requiring client secrets or role-based access control, admins can pre-r
    - **Default Role** - (Optional) Auto-assign this role on first auth
 
 4. Save and copy the generated credentials:
+
    - **Client ID** - Format: `ikc_xxxxxxxxxxxxxxxxxxxxx`
    - **Client Secret** - Format: `iks_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
 
@@ -110,6 +113,7 @@ For apps requiring client secrets or role-based access control, admins can pre-r
    > The client secret is only shown once! Save it securely.
 
 **Pre-registered clients:**
+
 - **MUST use both PKCE and client_secret** in token requests
 - Support role assignment for RBAC (Role-Based Access Control)
 - Admin-managed metadata and permissions
@@ -135,11 +139,13 @@ Now you can sign in to IndieAuth-compatible sites using `https://your-domain.com
 Indiko also supports OpenID Connect (OIDC) for modern authentication flows:
 
 **Discovery endpoint:**
+
 ```
 https://your-indiko-domain.com/.well-known/openid-configuration
 ```
 
 **Key features:**
+
 - Authorization Code Flow with PKCE
 - ID Token with RS256 signing
 - JWKS endpoint for token verification
