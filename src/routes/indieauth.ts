@@ -1409,10 +1409,11 @@ function showConsentScreen(
       This app would like to access the following information:
     </div>
 
-    <div class="scopes">
-      <div class="scope-title">requested permissions</div>
-      <ul class="scope-list">
-        ${scopes
+    <form method="POST" action="/auth/authorize">
+      <div class="scopes">
+        <div class="scope-title">requested permissions</div>
+        <ul class="scope-list">
+          ${scopes
 					.map((scope) => {
 						const isProfile = scope === "profile";
 						const scopeDescriptions: Record<string, string> = {
@@ -1434,10 +1435,9 @@ function showConsentScreen(
         `;
 					})
 					.join("")}
-      </ul>
-    </div>
+        </ul>
+      </div>
 
-    <form method="POST" action="/auth/authorize">
       <input type="hidden" name="client_id" value="${clientId}" />
       <input type="hidden" name="redirect_uri" value="${redirectUri}" />
       <input type="hidden" name="state" value="${state}" />
