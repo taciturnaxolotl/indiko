@@ -22,6 +22,7 @@ interface JWK {
 async function generateAndStoreKey(): Promise<OIDCKey> {
 	const { privateKey, publicKey } = await generateKeyPair("RS256", {
 		modulusLength: 2048,
+		extractable: true,
 	});
 
 	const privateKeyPem = await exportKeyToPem(privateKey);
