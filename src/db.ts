@@ -1,9 +1,11 @@
 import { Database } from "bun:sqlite";
 import { getMigrations, migrate } from "bun-sqlite-migrations";
 
-Bun.write("data/.gitkeep", "");
-
 const dbPath = process.env.DATABASE_URL || "data/indiko.db";
+
+if (dbPath !== ":memory:") {
+	Bun.write("data/.gitkeep", "");
+}
 const db = new Database(dbPath);
 
 db.run("PRAGMA journal_mode = WAL;");

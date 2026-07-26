@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { nanoid } from "nanoid";
 import { db } from "../db";
+import { getSessionUser } from "../lib/session";
 
 function hashSecret(secret: string): string {
 	return crypto.createHash("sha256").update(secret).digest("hex");
@@ -14,65 +15,13 @@ function generateClientId(): string {
 	return `ikc_${nanoid(21)}`; // indiko client
 }
 
-function getSessionUser(
-	req: Request,
-):
-	| { username: string; userId: number; is_admin: boolean; tier: string }
-	| Response {
-	const authHeader = req.headers.get("Authorization");
-
-	if (!authHeader?.startsWith("Bearer ")) {
-		return Response.json({ error: "Unauthorized" }, { status: 401 });
-	}
-
-	const token = authHeader.substring(7);
-
-	const session = db
-		.query(
-			`SELECT s.expires_at, s.user_id, u.username, u.is_admin, u.tier, u.status 
-			FROM sessions s 
-			JOIN users u ON s.user_id = u.id 
-			WHERE s.token = ?`,
-		)
-		.get(token) as
-		| {
-				expires_at: number;
-				user_id: number;
-				username: string;
-				is_admin: number;
-				tier: string;
-				status: string;
-		  }
-		| undefined;
-
-	if (!session) {
-		return Response.json({ error: "Invalid session" }, { status: 401 });
-	}
-
-	const now = Math.floor(Date.now() / 1000);
-	if (session.expires_at < now) {
-		return Response.json({ error: "Session expired" }, { status: 401 });
-	}
-
-	if (session.status !== "active") {
-		return Response.json({ error: "Account is suspended" }, { status: 403 });
-	}
-
-	return {
-		username: session.username,
-		userId: session.user_id,
-		is_admin: session.is_admin === 1,
-		tier: session.tier,
-	};
-}
-
 export function listClients(req: Request): Response {
 	const user = getSessionUser(req);
 	if (user instanceof Response) {
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -146,7 +95,7 @@ export async function createClient(req: Request): Promise<Response> {
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -265,7 +214,7 @@ export function getClient(req: Request, clientId: string): Response {
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -365,7 +314,7 @@ export async function updateClient(
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -470,7 +419,7 @@ export function deleteClient(req: Request, clientId: string): Response {
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -497,7 +446,7 @@ export async function setUserRole(
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -567,7 +516,7 @@ export function regenerateClientSecret(
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 

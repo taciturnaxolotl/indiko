@@ -1,58 +1,7 @@
 import { db } from "../db";
-import { validateProfileURL, verifyDomain } from "./indieauth";
-
-function getSessionUser(
-	req: Request,
-):
-	| { username: string; userId: number; is_admin: boolean; tier: string }
-	| Response {
-	const authHeader = req.headers.get("Authorization");
-
-	if (!authHeader?.startsWith("Bearer ")) {
-		return Response.json({ error: "Unauthorized" }, { status: 401 });
-	}
-
-	const token = authHeader.substring(7);
-
-	// Look up session
-	const session = db
-		.query(
-			`SELECT s.expires_at, s.user_id, u.username, u.is_admin, u.tier, u.status 
-			FROM sessions s 
-			JOIN users u ON s.user_id = u.id 
-			WHERE s.token = ?`,
-		)
-		.get(token) as
-		| {
-				expires_at: number;
-				user_id: number;
-				username: string;
-				is_admin: number;
-				tier: string;
-				status: string;
-		  }
-		| undefined;
-
-	if (!session) {
-		return Response.json({ error: "Invalid session" }, { status: 401 });
-	}
-
-	const now = Math.floor(Date.now() / 1000);
-	if (session.expires_at < now) {
-		return Response.json({ error: "Session expired" }, { status: 401 });
-	}
-
-	if (session.status !== "active") {
-		return Response.json({ error: "Account is suspended" }, { status: 403 });
-	}
-
-	return {
-		username: session.username,
-		userId: session.user_id,
-		is_admin: session.is_admin === 1,
-		tier: session.tier,
-	};
-}
+import { verifyDomain } from "../lib/oauth/client-metadata";
+import { validateProfileURL } from "../lib/oauth/urls";
+import { getSessionUser } from "../lib/session";
 
 export function hello(req: Request): Response {
 	const user = getSessionUser(req);
@@ -64,7 +13,7 @@ export function hello(req: Request): Response {
 		message: `Hello ${user.username}! You're authenticated with passkeys.`,
 		id: user.userId,
 		username: user.username,
-		isAdmin: user.is_admin,
+		isAdmin: user.isAdmin,
 		tier: user.tier,
 	});
 }
@@ -75,7 +24,7 @@ export function listUsers(req: Request): Response {
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -305,7 +254,7 @@ export function listAllApps(req: Request): Response {
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -347,7 +296,7 @@ export function getAppDetails(req: Request, clientId: string): Response {
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -418,7 +367,7 @@ export function revokeAppForUser(
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -451,7 +400,7 @@ export function disableUser(req: Request, userId: string): Response {
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -491,7 +440,7 @@ export function enableUser(req: Request, userId: string): Response {
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -522,7 +471,7 @@ export async function updateUserTier(
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -580,7 +529,7 @@ export function deleteUser(req: Request, userId: string): Response {
 		return user;
 	}
 
-	if (!user.is_admin) {
+	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
 	}
 
@@ -628,7 +577,7 @@ export function deleteSelfAccount(req: Request): Response {
 	}
 
 	// Prevent admins from deleting their own accounts
-	if (user.is_admin) {
+	if (user.isAdmin) {
 		return Response.json(
 			{
 				error:

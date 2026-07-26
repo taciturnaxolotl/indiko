@@ -42,22 +42,17 @@ import {
 	setUserRole,
 	updateClient,
 } from "./routes/clients";
+import { authorizeGet, authorizePost } from "./routes/oauth/authorize";
+import { clientMetadata, indieauthMetadata } from "./routes/oauth/discovery";
 import {
-	authorizeGet,
-	authorizePost,
-	clientMetadata,
 	createInvite,
 	deleteInvite,
-	indieauthMetadata,
 	listInvites,
-	logout,
-	token,
-	tokenIntrospect,
-	tokenRevoke,
 	updateInvite,
-	userinfo,
-	userProfile,
-} from "./routes/indieauth";
+} from "./routes/oauth/invites";
+import { userProfile } from "./routes/oauth/profile";
+import { token, tokenIntrospect, tokenRevoke } from "./routes/oauth/token";
+import { logout, userinfo } from "./routes/oauth/userinfo";
 import {
 	addPasskeyOptions,
 	addPasskeyVerify,
