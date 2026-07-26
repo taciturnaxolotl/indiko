@@ -1,5 +1,6 @@
+import "./ds";
+
 const token = localStorage.getItem("indiko_session");
-const footer = document.getElementById("footer") as HTMLElement;
 const usersList = document.getElementById("usersList") as HTMLElement;
 let currentUserId: number;
 
@@ -26,28 +27,6 @@ async function checkAuth() {
 		const data = await response.json();
 		currentUserId = data.id;
 
-		footer.innerHTML = `admin • signed in as <strong><a href="/u/${data.username}">${data.username}</a></strong> • <a href="/login" id="logoutLink">sign out</a>
-		<div class="back-link"><a href="/">← back to dashboard</a></div>`;
-
-		// Handle logout
-		document
-			.getElementById("logoutLink")
-			?.addEventListener("click", async (e) => {
-				e.preventDefault();
-				try {
-					await fetch("/auth/logout", {
-						method: "POST",
-						headers: {
-							Authorization: `Bearer ${token}`,
-						},
-					});
-				} catch {
-					// Ignore logout errors
-				}
-				localStorage.removeItem("indiko_session");
-				window.location.href = "/login";
-			});
-
 		// Check if admin
 		if (!data.isAdmin) {
 			window.location.href = "/";
@@ -58,7 +37,6 @@ async function checkAuth() {
 		loadUsers();
 	} catch (error) {
 		console.error("Auth check failed:", error);
-		footer.textContent = "error loading user info";
 		usersList.innerHTML = '<div class="error">Failed to load users</div>';
 	}
 }

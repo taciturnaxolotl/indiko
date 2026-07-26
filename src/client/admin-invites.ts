@@ -1,5 +1,6 @@
+import "./ds";
+
 const token = localStorage.getItem("indiko_session");
-const footer = document.getElementById("footer") as HTMLElement;
 const invitesList = document.getElementById("invitesList") as HTMLElement;
 const createInviteBtn = document.getElementById(
 	"createInviteBtn",
@@ -27,28 +28,6 @@ async function checkAuth() {
 
 		const data = await response.json();
 
-		footer.innerHTML = `admin • signed in as <strong><a href="/u/${data.username}">${data.username}</a></strong> • <a href="/login" id="logoutLink">sign out</a>
-		<div class="back-link"><a href="/">← back to dashboard</a></div>`;
-
-		// Handle logout
-		document
-			.getElementById("logoutLink")
-			?.addEventListener("click", async (e) => {
-				e.preventDefault();
-				try {
-					await fetch("/auth/logout", {
-						method: "POST",
-						headers: {
-							Authorization: `Bearer ${token}`,
-						},
-					});
-				} catch {
-					// Ignore logout errors
-				}
-				localStorage.removeItem("indiko_session");
-				window.location.href = "/login";
-			});
-
 		// Check if admin
 		if (!data.isAdmin) {
 			window.location.href = "/";
@@ -59,8 +38,7 @@ async function checkAuth() {
 		loadInvites();
 	} catch (error) {
 		console.error("Auth check failed:", error);
-		footer.textContent = "error loading user info";
-		usersList.innerHTML = '<div class="error">Failed to load users</div>';
+		invitesList.innerHTML = '<div class="error">Failed to load invites</div>';
 	}
 }
 

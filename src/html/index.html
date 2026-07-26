@@ -28,13 +28,13 @@
 
     header {
       width: 100%;
-      max-width: 44rem;
-      margin: 0 auto 2rem;
+      max-width: var(--page-width);
+      margin: 0 auto 3rem;
     }
 
     main {
       width: 100%;
-      max-width: 44rem;
+      max-width: var(--page-width);
       margin: 0 auto;
       display: flex;
       flex-direction: column;
@@ -42,11 +42,14 @@
     }
 
     h1 {
-      margin-bottom: 0.25rem;
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
     }
 
     .subtitle {
       color: var(--paper-dim);
+      font-size: 1.125rem;
+      font-weight: 300;
     }
 
     .profile-avatar {
@@ -140,7 +143,7 @@
 
     footer {
       width: 100%;
-      max-width: 44rem;
+      max-width: var(--page-width);
       margin: 2rem auto 0;
       text-align: center;
       color: var(--paper-dim);
@@ -163,6 +166,8 @@
 </head>
 
 <body>
+  <i-nav active="dashboard"></i-nav>
+
   <header>
     <h1 id="welcome">welcome</h1>
     <p class="subtitle" id="subtitle">loading...</p>
@@ -224,10 +229,6 @@
       </i-card>
     </div>
   </main>
-
-  <footer id="footer">
-    loading...
-  </footer>
 
   <i-toast id="toast"></i-toast>
 

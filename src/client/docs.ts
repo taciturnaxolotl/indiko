@@ -1,3 +1,5 @@
+import "./ds";
+
 // JSON syntax highlighter
 function highlightJSON(json: string): string {
 	return json

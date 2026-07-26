@@ -270,14 +270,13 @@
 </head>
 
 <body>
-  <header class="admin-header">
-    <img src="../../public/logo.svg" alt="indiko" class="admin-logo" />
-    <nav class="admin-nav">
-      <a href="/admin">users</a>
-      <a href="/admin/invites" class="active">invites</a>
-      <a href="/admin/clients">apps</a>
-    </nav>
-  </header>
+  <i-nav active="admin"></i-nav>
+
+  <nav class="admin-subnav">
+    <a href="/admin">users</a>
+    <a href="/admin/invites" class="active">invites</a>
+    <a href="/admin/clients">apps</a>
+  </nav>
 
   <main class="admin-main">
     <div class="invites-section">
@@ -290,10 +289,6 @@
       </div>
     </div>
   </main>
-
-  <footer id="footer" class="admin-footer">
-    <div class="back-link"><a href="/">← back to dashboard</a></div>
-  </footer>
 
   <i-toast id="toast"></i-toast>
 

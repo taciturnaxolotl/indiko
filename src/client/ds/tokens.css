@@ -10,6 +10,9 @@
 	--accent-deep: #a04668;
 	--danger: #e57373;
 
+	/* Layout — pages override this to keep nav + content aligned */
+	--page-width: 56.25rem;
+
 	/* Typography */
 	--font: "Space Grotesk", sans-serif;
 	--text-xs: 0.75rem;

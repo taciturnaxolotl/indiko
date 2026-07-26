@@ -1,5 +1,7 @@
 const token = localStorage.getItem("indiko_session");
-const footer = document.getElementById("footer") as HTMLElement;
+import "./ds";
+import type IToast from "./ds/toast";
+
 const clientsList = document.getElementById("clientsList") as HTMLElement;
 const createClientBtn = document.getElementById(
 	"createClientBtn",
@@ -15,9 +17,6 @@ const addRedirectUriBtn = document.getElementById(
 const redirectUrisList = document.getElementById(
 	"redirectUrisList",
 ) as HTMLElement;
-import "./ds";
-import type IToast from "./ds/toast";
-
 const toast = document.getElementById("toast") as unknown as IToast;
 
 function showToast(message: string, type: "success" | "error" = "success") {
@@ -45,27 +44,6 @@ async function checkAuth() {
 
 		const data = await response.json();
 
-		footer.innerHTML = `admin • signed in as <strong><a href="/u/${data.username}">${data.username}</a></strong> • <a href="/login" id="logoutLink">sign out</a>
-		<div class="back-link"><a href="/">← back to dashboard</a></div>`;
-
-		document
-			.getElementById("logoutLink")
-			?.addEventListener("click", async (e) => {
-				e.preventDefault();
-				try {
-					await fetch("/auth/logout", {
-						method: "POST",
-						headers: {
-							Authorization: `Bearer ${token}`,
-						},
-					});
-				} catch {
-					// Ignore logout errors
-				}
-				localStorage.removeItem("indiko_session");
-				window.location.href = "/login";
-			});
-
 		if (!data.isAdmin) {
 			window.location.href = "/";
 			return;
@@ -74,7 +52,6 @@ async function checkAuth() {
 		loadClients();
 	} catch (error) {
 		console.error("Auth check failed:", error);
-		footer.textContent = "error loading user info";
 		clientsList.innerHTML = '<div class="error">Failed to load clients</div>';
 	}
 }

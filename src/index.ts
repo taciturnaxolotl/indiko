@@ -106,6 +106,7 @@ const server = Bun.serve({
 	port: env.PORT ? Number.parseInt(env.PORT, 10) : 3000,
 	routes: {
 		"/favicon.svg": Bun.file("./public/favicon.svg"),
+		"/logo.svg": Bun.file("./public/logo.svg"),
 		"/": indexHTML,
 		"/health": () => {
 			try {

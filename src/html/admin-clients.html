@@ -603,14 +603,13 @@
 </head>
 
 <body>
-	<header class="admin-header">
-		<img src="../../public/logo.svg" alt="indiko" class="admin-logo" />
-		<nav class="admin-nav">
-			<a href="/admin">users</a>
-			<a href="/admin/invites">invites</a>
-			<a href="/admin/clients" class="active">apps</a>
-		</nav>
-	</header>
+	<i-nav active="admin"></i-nav>
+
+	<nav class="admin-subnav">
+		<a href="/admin">users</a>
+		<a href="/admin/invites">invites</a>
+		<a href="/admin/clients" class="active">apps</a>
+	</nav>
 
 	<main class="admin-main">
 		<div class="actions">
@@ -623,10 +622,6 @@
 	</main>
 
 	<i-toast id="toast"></i-toast>
-
-	<footer id="footer" class="admin-footer">
-		<div class="back-link"><a href="/">← back to dashboard</a></div>
-	</footer>
 
 	<div id="clientModal" class="modal">
 		<div class="modal-content">

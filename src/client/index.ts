@@ -5,7 +5,7 @@ import type IToast from "./ds/toast";
 
 const token = localStorage.getItem("indiko_session");
 
-let footer!: HTMLElement;
+
 let welcome!: HTMLElement;
 let subtitle!: HTMLElement;
 let recentApps!: HTMLElement;
@@ -44,7 +44,6 @@ function $(id: string): HTMLElement {
 }
 
 function init() {
-	footer = $("footer");
 	welcome = $("welcome");
 	subtitle = $("subtitle");
 	recentApps = $("recentApps");
@@ -138,36 +137,12 @@ async function checkAuth() {
 		welcome.textContent = `welcome, ${data.username}`;
 		subtitle.textContent = "your identity dashboard";
 
-		// Build footer with conditional admin link
-		const adminLink = data.isAdmin ? ' • <a href="/admin">admin</a>' : "";
-		footer.innerHTML = `signed in as <strong><a href="/u/${data.username}">${data.username}</a></strong> • <a href="/apps">apps</a> • <a href="/docs">docs</a>${adminLink} • <a href="/login" id="logoutLink">sign out</a>`;
-
-		// Handle logout
-		document
-			.getElementById("logoutLink")
-			?.addEventListener("click", async (e) => {
-				e.preventDefault();
-				try {
-					await fetch("/auth/logout", {
-						method: "POST",
-						headers: {
-							Authorization: `Bearer ${token}`,
-						},
-					});
-				} catch {
-					// Ignore logout errors
-				}
-				localStorage.removeItem("indiko_session");
-				window.location.href = "/login";
-			});
-
 		// Load profile and apps
 		loadProfile();
 		loadRecentApps();
 		loadPasskeys();
 	} catch (error) {
 		console.error("Auth check failed:", error);
-		footer.textContent = "error loading user info";
 	}
 }
 

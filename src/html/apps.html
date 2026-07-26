@@ -29,21 +29,24 @@
     header,
     main {
       width: 100%;
-      max-width: 44rem;
+      max-width: var(--page-width);
       margin-left: auto;
       margin-right: auto;
     }
 
     header {
-      margin-bottom: 2rem;
+      margin-bottom: 3rem;
     }
 
     h1 {
-      margin-bottom: 0.25rem;
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
     }
 
     .subtitle {
       color: var(--paper-dim);
+      font-size: 1.125rem;
+      font-weight: 300;
     }
 
     .apps-list {
@@ -134,24 +137,12 @@
       padding: 1rem 0;
     }
 
-    .back-link {
-      margin-top: 2rem;
-      text-align: center;
-      font-size: var(--text-sm);
-    }
-
-    .back-link a {
-      color: var(--accent);
-      text-decoration: none;
-    }
-
-    .back-link a:hover {
-      text-decoration: underline;
-    }
   </style>
 </head>
 
 <body>
+  <i-nav active="apps"></i-nav>
+
   <header>
     <h1>authorized apps</h1>
     <p class="subtitle">manage apps that have access to your account</p>
@@ -162,9 +153,6 @@
       <div class="loading">loading apps...</div>
     </div>
 
-    <div class="back-link">
-      <a href="/">← back to dashboard</a>
-    </div>
   </main>
 
   <i-toast id="toast"></i-toast>
