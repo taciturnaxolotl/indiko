@@ -60,7 +60,9 @@ async function checkRegistrationAllowed() {
 			}
 
 			(
-				document.getElementById("registerBtn") as HTMLButtonElement
+				document
+					.getElementById("registerBtn")
+					?.querySelector("button") as HTMLButtonElement
 			).textContent = "create account";
 			loginForm.style.display = "none";
 			registerForm.style.display = "block";
@@ -80,7 +82,9 @@ async function checkRegistrationAllowed() {
 				document.getElementById("registerUsername") as HTMLInputElement
 			).placeholder = "admin username";
 			(
-				document.getElementById("registerBtn") as HTMLButtonElement
+				document
+					.getElementById("registerBtn")
+					?.querySelector("button") as HTMLButtonElement
 			).textContent = "create admin account";
 			// Hide login form for first setup
 			loginForm.style.display = "none";
@@ -110,7 +114,9 @@ loginForm.addEventListener("submit", async (e) => {
 	e.preventDefault();
 	const username = (document.getElementById("username") as HTMLInputElement)
 		.value;
-	const loginBtn = document.getElementById("loginBtn") as HTMLButtonElement;
+	const loginBtn = document
+		.getElementById("loginBtn")
+		?.querySelector("button") as HTMLButtonElement;
 
 	try {
 		loginBtn.disabled = true;
@@ -183,9 +189,9 @@ registerForm.addEventListener("submit", async (e) => {
 	const username = (
 		document.getElementById("registerUsername") as HTMLInputElement
 	).value;
-	const registerBtn = document.getElementById(
-		"registerBtn",
-	) as HTMLButtonElement;
+	const registerBtn = document
+		.getElementById("registerBtn")
+		?.querySelector("button") as HTMLButtonElement;
 
 	try {
 		registerBtn.disabled = true;
@@ -296,7 +302,9 @@ ldapForm.addEventListener("submit", async (e) => {
 
 	const password = (document.getElementById("ldapPassword") as HTMLInputElement)
 		.value;
-	const ldapBtn = document.getElementById("ldapBtn") as HTMLButtonElement;
+	const ldapBtn = document
+		.getElementById("ldapBtn")
+		?.querySelector("button") as HTMLButtonElement;
 
 	try {
 		ldapBtn.disabled = true;

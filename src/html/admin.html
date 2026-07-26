@@ -7,129 +7,45 @@
   <title>admin • indiko</title>
   <meta name="description" content="Indiko admin panel - manage users and invites" />
   <link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
-  
-  <!-- Open Graph / Facebook -->
+
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Admin • Indiko" />
   <meta property="og:description" content="Indiko admin panel - manage users and invites" />
-  
-  <!-- Twitter -->
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Admin • Indiko" />
   <meta name="twitter:description" content="Indiko admin panel - manage users and invites" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../client/ds/tokens.css">
+  <link rel="stylesheet" href="../client/ds/components.css">
   <link rel="stylesheet" href="../styles.css">
-  <style>
-    /* Admin-specific styles */
-    header {
-      align-self: flex-start;
-      margin-left: auto;
-      margin-right: auto;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-    }
-
-    main {
-      padding: 2rem 1.25rem;
-    }
-
-    .users-section {
-      width: 100%;
-    }
-
-    .users-list {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .user-card {
-      background: rgba(188, 141, 160, 0.05);
-      border: 1px solid var(--old-rose);
-      padding: 1.5rem;
-      display: flex;
-      gap: 1.5rem;
-      align-items: center;
-      transition: background 0.2s;
-    }
-
-    .user-card:hover {
-      background: rgba(188, 141, 160, 0.1);
-    }
-
-    .user-info {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      flex: 1;
-    }
-
-    .user-name {
-      font-size: 1.125rem;
-      font-weight: 600;
-      color: var(--lavender);
-    }
-
-    .user-meta {
-      font-size: 0.875rem;
-      color: var(--old-rose);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-
-    .user-meta-item {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-    }
-
-    .user-badges {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    .user-actions {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    .user-suspended {
-      opacity: 0.5;
-    }
-  </style>
+  <link rel="stylesheet" href="./admin-shared.css">
 </head>
 
 <body>
-  <header>
-    <div>
-      <img src="../../public/logo.svg" alt="indiko" style="height: 2rem;" />
-    </div>
-    <div class="header-nav">
+  <header class="admin-header">
+    <img src="../../public/logo.svg" alt="indiko" class="admin-logo" />
+    <nav class="admin-nav">
       <a href="/admin" class="active">users</a>
       <a href="/admin/invites">invites</a>
       <a href="/admin/clients">apps</a>
-    </div>
+    </nav>
   </header>
 
-  <main>
-    <div class="users-section">
-      <h2>users</h2>
-      <div id="usersList" class="users-list">
-        <div class="loading">loading users...</div>
-      </div>
+  <main class="admin-main">
+    <h2 class="admin-title">users</h2>
+    <div id="usersList" class="users-list">
+      <div class="loading">loading users...</div>
     </div>
   </main>
 
-  <footer id="footer">
-    loading...
+  <footer id="footer" class="admin-footer">
     <div class="back-link"><a href="/">← back to dashboard</a></div>
   </footer>
+
+  <i-toast id="toast"></i-toast>
 
   <script type="module" src="../client/admin.ts"></script>
 </body>

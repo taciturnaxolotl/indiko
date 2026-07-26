@@ -1,0 +1,33 @@
+/* Indiko design tokens */
+:root {
+	/* Palette */
+	--ink: #26242b;
+	--ink-raised: #2e2c33;
+	--ink-sunken: #1c1b20;
+	--paper: #d9d0de;
+	--paper-dim: #bc8da0;
+	--accent: #ab4967;
+	--accent-deep: #a04668;
+	--danger: #e57373;
+
+	/* Typography */
+	--font: "Space Grotesk", sans-serif;
+	--text-xs: 0.75rem;
+	--text-sm: 0.875rem;
+	--text-md: 1rem;
+	--text-lg: 1.125rem;
+	--text-xl: 1.5rem;
+	--text-2xl: 2rem;
+
+	/* Spacing */
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-6: 1.5rem;
+	--space-8: 2rem;
+
+	/* Brutalist action shadow */
+	--shadow-hard: 6px 6px 0 var(--ink-sunken);
+	--shadow-hard-hover: 3px 3px 0 var(--ink-sunken);
+}

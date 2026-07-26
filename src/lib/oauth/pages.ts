@@ -167,8 +167,8 @@ export function errorPage(opts: ErrorPageOptions): Response {
 
 const CONSENT_STYLES = `
 	body { padding: 2rem 1rem; }
-	.consent-box {
-		max-width: 32rem;
+	.consent {
+		max-width: 30rem;
 		width: 100%;
 		background: rgba(188, 141, 160, 0.05);
 		border: 1px solid var(--old-rose);
@@ -176,15 +176,13 @@ const CONSENT_STYLES = `
 	}
 	.app-header {
 		display: flex;
-		gap: 1.5rem;
-		align-items: flex-start;
-		margin-bottom: 2rem;
-		padding-bottom: 2rem;
-		border-bottom: 1px solid var(--old-rose);
+		gap: 1.25rem;
+		align-items: center;
+		margin-bottom: 1.25rem;
 	}
 	.app-logo {
-		width: 5rem;
-		height: 5rem;
+		width: 4rem;
+		height: 4rem;
 		border-radius: 0.5rem;
 		background: rgba(188, 141, 160, 0.2);
 		display: flex;
@@ -192,50 +190,41 @@ const CONSENT_STYLES = `
 		justify-content: center;
 		flex-shrink: 0;
 		overflow: hidden;
-		font-size: 2rem;
+		font-size: 1.75rem;
 	}
 	.app-logo img {
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
 	}
-	.app-info { flex: 1; }
+	.app-info { flex: 1; min-width: 0; }
 	.app-name {
-		font-size: 1.5rem;
+		font-size: 1.375rem;
 		font-weight: 700;
 		color: var(--lavender);
-		margin-bottom: 0.5rem;
+		line-height: 1.2;
 	}
 	.app-url {
 		font-size: 0.875rem;
 		color: var(--old-rose);
 		font-family: monospace;
-		margin-bottom: 0.75rem;
+		margin-top: 0.25rem;
 	}
 	.app-description {
 		font-size: 0.9375rem;
 		color: var(--old-rose);
 		line-height: 1.6;
+		margin-top: 0.5rem;
 	}
-	.user-badge {
-		display: inline-block;
-		background: rgba(188, 141, 160, 0.1);
-		border-left: 3px solid var(--berry-crush);
-		padding: 0.75rem 1rem;
-		font-size: 0.875rem;
-		color: var(--old-rose);
-		margin-bottom: 2rem;
-	}
-	.user-badge strong { color: var(--lavender); }
 	.request-text {
-		font-size: 1.125rem;
-		color: var(--lavender);
+		font-size: 1rem;
+		color: var(--old-rose);
 		margin-bottom: 1.5rem;
 		line-height: 1.6;
 	}
 	.scopes {
-		margin-bottom: 2rem;
-		padding: 1.5rem;
+		margin-bottom: 1.75rem;
+		padding: 1.25rem;
 		background: rgba(12, 23, 19, 0.4);
 		border: 1px solid var(--old-rose);
 	}
@@ -244,13 +233,13 @@ const CONSENT_STYLES = `
 		color: var(--old-rose);
 		text-transform: uppercase;
 		letter-spacing: 0.1rem;
-		margin-bottom: 1rem;
+		margin-bottom: 0.75rem;
 	}
 	.scope-list {
 		list-style: none;
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
+		gap: 0.25rem;
 	}
 	.scope-list li {
 		color: var(--lavender);
@@ -262,7 +251,7 @@ const CONSENT_STYLES = `
 		align-items: center;
 		gap: 0.75rem;
 		cursor: pointer;
-		padding: 0.75rem;
+		padding: 0.625rem;
 		transition: background 0.2s;
 		border: 1px solid transparent;
 	}
@@ -272,14 +261,15 @@ const CONSENT_STYLES = `
 	}
 	.scope-list input[type="checkbox"] {
 		appearance: none;
-		width: 1.5rem;
-		height: 1.5rem;
+		width: 1.25rem;
+		height: 1.25rem;
 		border: 2px solid var(--old-rose);
 		background: rgba(12, 23, 19, 0.6);
 		cursor: pointer;
 		flex-shrink: 0;
 		position: relative;
 		transition: all 0.2s;
+		margin: 0;
 	}
 	.scope-list input[type="checkbox"]:checked {
 		background: var(--berry-crush);
@@ -288,17 +278,24 @@ const CONSENT_STYLES = `
 	.scope-list input[type="checkbox"]:checked::after {
 		content: "✓";
 		position: absolute;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
+		inset: 0;
+		display: grid;
+		place-items: center;
 		color: var(--lavender);
-		font-size: 1rem;
+		font-size: 0.875rem;
 		font-weight: 700;
 	}
-	.scope-list input[type="checkbox"]:disabled { cursor: not-allowed; }
+	.scope-list input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.7; }
+	.req {
+		font-style: normal;
+		color: var(--old-rose);
+		font-size: 0.75rem;
+		margin-left: 0.5rem;
+	}
 	.buttons {
 		display: flex;
 		gap: 1rem;
+		margin-top: 1.75rem;
 	}
 	.buttons button { flex: 1; }
 	.allow {
@@ -311,6 +308,13 @@ const CONSENT_STYLES = `
 		color: var(--old-rose);
 	}
 	.deny::before { border-color: var(--old-rose); }
+	.who {
+		margin-top: 1.5rem;
+		text-align: center;
+		font-size: 0.8125rem;
+		color: var(--old-rose);
+	}
+	.who strong { color: var(--lavender); font-weight: 600; }
 `;
 
 export interface ConsentPageOptions {
@@ -329,9 +333,10 @@ export interface ConsentPageOptions {
 }
 
 const SCOPE_DESCRIPTIONS: Record<string, string> = {
-	profile: "Your profile (name, photo, URL)",
-	email: "Your email address",
-	openid: "Authenticate with OpenID Connect (issues an id_token)",
+	profile: "See your profile (name, photo, URL)",
+	email: "See your email address",
+	openid: "Sign you in with OpenID Connect",
+	offline_access: "Keep you signed in long-term",
 };
 
 export function consentPage(opts: ConsentPageOptions): Response {
@@ -339,9 +344,7 @@ export function consentPage(opts: ConsentPageOptions): Response {
 		.map((scope) => {
 			const isProfile = scope === "profile";
 			const description = escapeHtml(SCOPE_DESCRIPTIONS[scope] ?? scope);
-			const required = isProfile
-				? ' <span style="color: var(--old-rose); font-size: 0.875rem; margin-left: 0.5rem;">(required)</span>'
-				: "";
+			const required = isProfile ? ' <em class="req">required</em>' : "";
 			return `
           <li>
             <label>
@@ -352,15 +355,10 @@ export function consentPage(opts: ConsentPageOptions): Response {
 		})
 		.join("");
 
-	const body = `  <div class="consent-box">
-    <div class="user-badge">
-      <span>Signing in as</span>
-      <strong>${escapeHtml(opts.username)}</strong>
-    </div>
-
+	const body = `  <main class="consent">
     <div class="app-header">
       <div class="app-logo">
-        ${opts.appLogo ? `<img src="${escapeHtml(opts.appLogo)}" alt="${escapeHtml(opts.appName)}" />` : "🔐"}
+        ${opts.appLogo ? `<img src="${escapeHtml(opts.appLogo)}" alt="" />` : "🔐"}
       </div>
       <div class="app-info">
         <div class="app-name">${escapeHtml(opts.appName)}</div>
@@ -369,9 +367,7 @@ export function consentPage(opts: ConsentPageOptions): Response {
       </div>
     </div>
 
-    <div class="request-text">
-      This app would like to access the following information:
-    </div>
+    <p class="request-text">wants to access your account</p>
 
     <div class="scopes">
       <div class="scope-title">requested permissions</div>
@@ -394,14 +390,18 @@ export function consentPage(opts: ConsentPageOptions): Response {
         <button type="submit" name="action" value="allow" class="allow">allow</button>
       </div>
     </form>
-  </div>`;
+
+    <div class="who">
+      signing in as <strong>${escapeHtml(opts.username)}</strong>
+    </div>
+  </main>`;
 
 	const html = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>authorize app • indiko</title>
+  <title>authorize ${escapeHtml(opts.appName)} • indiko</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

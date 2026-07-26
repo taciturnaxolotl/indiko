@@ -8,124 +8,79 @@
   <meta name="description" content="Your Indiko dashboard - manage your profile, apps, and passkeys" />
   <link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
 
-  <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Dashboard • Indiko" />
   <meta property="og:description" content="Your Indiko dashboard - manage your profile, apps, and passkeys" />
-
-  <!-- Twitter -->
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Dashboard • Indiko" />
   <meta name="twitter:description" content="Your Indiko dashboard - manage your profile, apps, and passkeys" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../client/ds/tokens.css">
+  <link rel="stylesheet" href="../client/ds/components.css">
   <link rel="stylesheet" href="../styles.css">
   <style>
-    /* Dashboard-specific styles */
-    .profile-section {
-      background: rgba(188, 141, 160, 0.05);
-      border: 1px solid var(--old-rose);
-      padding: 2rem;
-      margin-bottom: 2rem;
+    body {
+      align-items: stretch;
     }
 
-    .section-title {
-      font-size: 1.25rem;
-      font-weight: 600;
-      color: var(--lavender);
-      margin-bottom: 1.5rem;
+    header {
+      width: 100%;
+      max-width: 44rem;
+      margin: 0 auto 2rem;
+    }
+
+    main {
+      width: 100%;
+      max-width: 44rem;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    h1 {
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      color: var(--paper-dim);
+    }
+
+    .profile-avatar {
+      width: 80px;
+      height: 80px;
+      border: 3px solid var(--accent);
+      font-size: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--paper);
+      overflow: hidden;
     }
 
     .avatar-upload {
       display: flex;
       align-items: center;
       gap: 1.5rem;
-      margin-bottom: 2rem;
-    }
-
-    .profile-avatar {
-      width: 80px;
-      height: 80px;
-      border: 3px solid var(--berry-crush);
-      font-size: 2rem;
+      margin-bottom: 1.5rem;
     }
 
     .avatar-controls {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .profile-info {
       flex: 1;
     }
 
-    .profile-name {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: var(--lavender);
-      margin-bottom: 0.25rem;
-    }
-
-    .profile-username {
-      font-size: 1rem;
-      color: var(--old-rose);
-      margin-bottom: 0.5rem;
-    }
-
-    .profile-links {
-      display: flex;
-      gap: 1rem;
-      font-size: 0.875rem;
-    }
-
-    .profile-links a {
-      color: var(--berry-crush);
-      text-decoration: none;
-    }
-
-    .profile-links a:hover {
-      text-decoration: underline;
-    }
-
-    h1 {
-      margin-bottom: 0.5rem;
-    }
-
-    .dashboard-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 1.5rem;
-      margin-bottom: 2rem;
-    }
-
-    @media (min-width: 768px) {
-      .dashboard-grid {
-        grid-template-columns: 1fr 1fr;
-      }
+    label {
+      display: block;
+      margin-top: 1rem;
     }
 
     input[type="text"],
     input[type="email"],
     input[type="url"] {
-      margin-bottom: 1.5rem;
-    }
-
-    .button-group {
-      display: flex;
-      gap: 1rem;
-      margin-top: 1.5rem;
-    }
-
-    .button-group button {
-      flex: 1;
-    }
-
-    .message {
-      padding: 0.75rem;
-      margin-top: 1rem;
-      font-size: 0.875rem;
+      margin-bottom: 0.25rem;
     }
 
     .apps-preview {
@@ -136,8 +91,8 @@
 
     .app-item {
       padding: 0.75rem;
-      background: rgba(12, 23, 19, 0.6);
-      border: 1px solid var(--rosewood);
+      background: var(--ink-sunken);
+      border: 1px solid var(--accent-deep);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -145,111 +100,64 @@
 
     .app-name {
       font-weight: 500;
-      color: var(--lavender);
+      color: var(--paper);
     }
 
     .app-date {
-      font-size: 0.875rem;
-      color: var(--old-rose);
+      font-size: var(--text-sm);
+      color: var(--paper-dim);
+    }
+
+    .empty {
+      color: var(--paper-dim);
+      font-size: var(--text-sm);
+      padding: 0.75rem 0;
     }
 
     .view-all {
       display: block;
       text-align: center;
       margin-top: 1rem;
-      color: var(--berry-crush);
+      color: var(--accent);
       text-decoration: none;
-      font-size: 0.875rem;
+      font-size: var(--text-sm);
     }
 
     .view-all:hover {
       text-decoration: underline;
     }
 
-    .toast {
-      position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      background: var(--mahogany);
-      border: 2px solid var(--berry-crush);
-      padding: 1rem 1.5rem;
-      color: var(--lavender);
-      font-size: 0.875rem;
-      font-weight: 500;
-      z-index: 2000;
-      opacity: 0;
-      transform: translateY(1rem);
-      transition: opacity 0.3s, transform 0.3s;
-      max-width: 25rem;
-      box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5);
-    }
-
-    .toast.show {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    .toast.error {
-      border-color: var(--rosewood);
-    }
-
-    .toast.success {
-      border-color: var(--berry-crush);
-    }
-
-    .passkey-item {
-      padding: 0.75rem;
-      background: rgba(12, 23, 19, 0.6);
-      border: 1px solid var(--rosewood);
+    #passkeysList {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 1rem;
+      flex-direction: column;
+      gap: 0.75rem;
     }
 
-    .passkey-info {
-      flex: 1;
+    i-button {
+      display: block;
+      margin-top: 1rem;
     }
 
-    .passkey-name {
-      font-weight: 500;
-      color: var(--lavender);
-      margin-bottom: 0.25rem;
-    }
-
-    .passkey-date {
-      font-size: 0.75rem;
-      color: var(--old-rose);
-    }
-
-    .passkey-actions {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .passkey-actions button {
-      padding: 0.375rem 0.75rem;
-      font-size: 0.75rem;
-      margin: 0;
-    }
-
-    .rename-form {
-      display: flex;
-      gap: 0.5rem;
+    footer {
       width: 100%;
+      max-width: 44rem;
+      margin: 2rem auto 0;
+      text-align: center;
+      color: var(--paper-dim);
+      font-size: var(--text-sm);
     }
 
-    .rename-form input {
-      flex: 1;
-      margin: 0;
-      padding: 0.375rem 0.75rem;
-      font-size: 0.875rem;
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
     }
 
-    .rename-form button {
-      padding: 0.375rem 0.75rem;
-      font-size: 0.75rem;
-      margin: 0;
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    #dangerZone i-card {
+      border-color: var(--accent-deep);
     }
   </style>
 </head>
@@ -261,38 +169,32 @@
   </header>
 
   <main>
-    <div class="profile-section">
-      <h2 class="section-title">recent apps</h2>
+    <i-card>
+      <h2 class="card-title">recent apps</h2>
       <div id="recentApps" class="apps-preview">
-        <div class="loading">loading...</div>
+        <div class="empty">loading...</div>
       </div>
-    </div>
+    </i-card>
 
-    <div class="profile-section">
-      <h2 class="section-title">passkeys</h2>
-      <p style="color: var(--old-rose); margin-bottom: 1.5rem; line-height: 1.6;">
-        Manage your passkeys for secure, password-free authentication
+    <i-card>
+      <h2 class="card-title">passkeys</h2>
+      <p style="color: var(--paper-dim); margin-bottom: 1rem; line-height: 1.6; font-size: var(--text-sm);">
+        Manage your passkeys for secure, password-free authentication.
       </p>
-      <div id="passkeysList" class="apps-preview">
-        <div class="loading">loading...</div>
+      <div id="passkeysList">
+        <div class="empty">loading...</div>
       </div>
-      <button type="button" id="addPasskeyBtn" style="margin-top: 1rem;">
-        add new passkey
-      </button>
-    </div>
+      <i-button id="addPasskeyBtn"><button type="button">add new passkey</button></i-button>
+    </i-card>
 
-    <div class="profile-section">
-      <h2 class="section-title">profile settings</h2>
-
+    <i-card>
+      <h2 class="card-title">profile settings</h2>
       <form id="profileForm">
         <div class="avatar-upload">
-          <div class="profile-avatar" id="avatarPreview">
-            <!-- Avatar will be rendered here -->
-          </div>
+          <div class="profile-avatar" id="avatarPreview"></div>
           <div class="avatar-controls">
             <label for="photo">avatar url</label>
             <input type="url" id="photo" name="photo" placeholder="https://example.com/avatar.jpg" />
-            <small style="color: var(--old-rose); font-size: 0.75rem;">Enter a URL to an image</small>
           </div>
         </div>
 
@@ -308,18 +210,18 @@
         <label for="url">website</label>
         <input type="url" id="url" name="url" placeholder="https://example.com" />
 
-        <button type="submit" id="saveBtn">save changes</button>
+        <i-button id="saveBtn"><button type="submit">save changes</button></i-button>
       </form>
-    </div>
+    </i-card>
 
-    <div class="profile-section" id="dangerZone" style="border-color: var(--rosewood); display: none;">
-      <h2 class="section-title" style="color: var(--rosewood);">danger zone</h2>
-      <p style="color: var(--old-rose); margin-bottom: 1.5rem; line-height: 1.6;">
-        Permanently delete your account and all associated data. This action cannot be undone.
-      </p>
-      <button type="button" id="deleteAccountBtn" style="width: 100%;">
-        delete my account
-      </button>
+    <div id="dangerZone" style="display: none;">
+      <i-card>
+        <h2 class="card-title">danger zone</h2>
+        <p style="color: var(--paper-dim); margin-bottom: 1rem; line-height: 1.6; font-size: var(--text-sm);">
+          Permanently delete your account and all associated data. This action cannot be undone.
+        </p>
+        <i-button variant="danger" id="deleteAccountBtn"><button type="button">delete my account</button></i-button>
+      </i-card>
     </div>
   </main>
 
@@ -327,7 +229,7 @@
     loading...
   </footer>
 
-  <div id="toast" class="toast"></div>
+  <i-toast id="toast"></i-toast>
 
   <script type="module" src="../client/index.ts"></script>
 </body>

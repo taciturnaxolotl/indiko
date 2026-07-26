@@ -8,45 +8,53 @@
   <meta name="description" content="Sign in to your Indiko account with passkey authentication" />
   <link rel="icon" href="../../public/favicon.svg" type="image/svg+xml" />
 
-  <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Login • Indiko" />
   <meta property="og:description" content="Sign in to your Indiko account with passkey authentication" />
-
-  <!-- Twitter -->
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Login • Indiko" />
   <meta name="twitter:description" content="Sign in to your Indiko account with passkey authentication" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../client/ds/tokens.css">
+  <link rel="stylesheet" href="../client/ds/components.css">
   <link rel="stylesheet" href="../styles.css">
   <style>
-    /* Login-specific styles */
     body {
       justify-content: center;
     }
 
-    main {
-      max-width: 28rem !important;
+    main.login {
       width: 100%;
+      max-width: 28rem;
       text-align: center;
     }
 
-    h1 {
-      font-size: 3rem;
+    .brand {
+      margin-bottom: 1.5rem;
+    }
+
+    .brand img {
+      height: 3rem;
       margin-bottom: 0.5rem;
     }
 
     .subtitle {
-      margin-bottom: 2rem;
+      color: var(--paper-dim);
+      font-size: var(--text-md);
+      font-weight: 300;
+      letter-spacing: 0.05rem;
     }
 
-    .auth-box {
-      background: rgba(188, 141, 160, 0.05);
-      border: 1px solid var(--old-rose);
-      padding: 2rem;
+    i-card {
+      text-align: left;
       margin-bottom: 1rem;
+    }
+
+    label {
+      display: block;
     }
 
     input[type="text"],
@@ -56,66 +64,89 @@
 
     .ldap-user-display {
       background: rgba(188, 141, 160, 0.1);
-      border-left: 3px solid var(--berry-crush);
+      border-left: 3px solid var(--accent);
       padding: 0.75rem 1rem;
       margin-bottom: 1rem;
-      text-align: left;
-      font-size: 0.875rem;
+      font-size: var(--text-sm);
     }
 
     .ldap-user-display .label {
-      color: var(--old-rose);
-      font-size: 0.75rem;
+      color: var(--paper-dim);
+      font-size: var(--text-xs);
       text-transform: uppercase;
       letter-spacing: 0.05rem;
     }
 
     .ldap-user-display .username {
-      color: var(--lavender);
+      color: var(--paper);
       font-weight: 600;
     }
 
-    button {
-      width: 100%;
-      padding: 1.25rem 2rem;
-      font-size: 1.125rem;
-      margin-bottom: 0.75rem;
+    i-button {
+      display: block;
+    }
+
+    .message {
+      padding: 0.875rem;
+      margin-bottom: 1rem;
+      font-size: var(--text-sm);
+      display: none;
+      text-align: left;
+    }
+
+    .message.show {
+      display: block;
+    }
+
+    .message.error {
+      background: rgba(160, 70, 104, 0.2);
+      border: 2px solid var(--accent-deep);
+      color: var(--paper);
+    }
+
+    .message.success {
+      background: rgba(188, 141, 160, 0.2);
+      border: 2px solid var(--paper-dim);
+      color: var(--paper);
     }
 
     .info {
-      margin-top: 1.5rem;
       padding: 1rem;
       background: rgba(188, 141, 160, 0.05);
-      border-radius: 0.5rem;
-      font-size: 0.8125rem;
-      color: var(--old-rose);
+      border: 1px solid var(--paper-dim);
+      font-size: var(--text-xs);
+      color: var(--paper-dim);
       line-height: 1.6;
       text-align: left;
     }
 
     .info strong {
-      color: var(--lavender);
+      color: var(--paper);
     }
   </style>
 </head>
 
 <body>
-  <main>
-    <img src="../../public/logo.svg" alt="indiko" style="height: 3rem; margin-bottom: 0.5rem;" />
-    <p class="subtitle">sign in with passkey</p>
+  <main class="login">
+    <div class="brand">
+      <img src="../../public/logo.svg" alt="indiko" />
+      <p class="subtitle">sign in with passkey</p>
+    </div>
 
     <div id="message" class="message"></div>
 
-    <div class="auth-box">
+    <i-card>
       <form id="loginForm">
+        <label for="username">username</label>
         <input type="text" id="username" placeholder="username" required autocomplete="username webauthn" />
-        <button type="submit" id="loginBtn">sign in</button>
+        <i-button id="loginBtn"><button type="submit">sign in</button></i-button>
       </form>
 
       <form id="registerForm" style="display: none;">
+        <label for="registerUsername">username</label>
         <input type="text" id="registerUsername" placeholder="create username" required
           autocomplete="username webauthn" />
-        <button type="submit" class="secondary-btn" id="registerBtn">create passkey</button>
+        <i-button id="registerBtn" variant="ghost"><button type="submit">create passkey</button></i-button>
       </form>
 
       <form id="ldapForm" style="display: none;">
@@ -123,10 +154,11 @@
           <div class="label">username</div>
           <div class="username" id="ldapUsername"></div>
         </div>
+        <label for="ldapPassword">ldap password</label>
         <input type="password" id="ldapPassword" placeholder="LDAP password" required autocomplete="current-password" />
-        <button type="submit" id="ldapBtn">verify & continue</button>
+        <i-button id="ldapBtn"><button type="submit">verify &amp; continue</button></i-button>
       </form>
-    </div>
+    </i-card>
 
     <div class="info">
       <strong>What's a passkey?</strong><br>

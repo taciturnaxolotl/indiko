@@ -20,6 +20,10 @@
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="../client/ds/tokens.css">
+	<link rel="stylesheet" href="../client/ds/components.css">
+	<link rel="stylesheet" href="../styles.css">
+	<link rel="stylesheet" href="./admin-shared.css">
 	<style>
 		:root {
 			--mahogany: #26242b;
@@ -599,18 +603,16 @@
 </head>
 
 <body>
-	<header>
-		<div>
-			<img src="../../public/logo.svg" alt="indiko" style="height: 2rem;" />
-		</div>
-		<div class="header-nav">
+	<header class="admin-header">
+		<img src="../../public/logo.svg" alt="indiko" class="admin-logo" />
+		<nav class="admin-nav">
 			<a href="/admin">users</a>
 			<a href="/admin/invites">invites</a>
 			<a href="/admin/clients" class="active">apps</a>
-		</div>
+		</nav>
 	</header>
 
-	<main>
+	<main class="admin-main">
 		<div class="actions">
 			<h2>oauth clients</h2>
 			<button type="button" class="btn" id="createClientBtn">create client</button>
@@ -620,10 +622,9 @@
 		</div>
 	</main>
 
-	<div id="toast" class="toast"></div>
+	<i-toast id="toast"></i-toast>
 
-	<footer id="footer">
-		loading...
+	<footer id="footer" class="admin-footer">
 		<div class="back-link"><a href="/">← back to dashboard</a></div>
 	</footer>
 

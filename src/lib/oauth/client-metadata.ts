@@ -92,13 +92,13 @@ export async function fetchClientMetadata(clientId: string): Promise<{
 
 		for (const tagMatch of html.matchAll(linkTagRegex)) {
 			const tag = tagMatch[0];
-			const relMatch = tag.match(/rel=["']?([^"'\s>]+)["']?/i);
-			if (!relMatch) continue;
-			if (!relMatch[1].split(/\s+/).includes("redirect_uri")) continue;
+			const rel = tag.match(/rel=["']?([^"'\s>]+)["']?/i)?.[1];
+			if (!rel) continue;
+			if (!rel.split(/\s+/).includes("redirect_uri")) continue;
 
-			const hrefMatch = tag.match(/href=["']?([^"'\s>]+)["']?/i);
-			if (hrefMatch && !redirectUris.includes(hrefMatch[1])) {
-				redirectUris.push(hrefMatch[1]);
+			const href = tag.match(/href=["']?([^"'\s>]+)["']?/i)?.[1];
+			if (href && !redirectUris.includes(href)) {
+				redirectUris.push(href);
 			}
 		}
 
@@ -181,13 +181,13 @@ export async function verifyDomain(
 
 	for (const tagMatch of html.matchAll(tagRegex)) {
 		const tag = tagMatch[0];
-		const relMatch = tag.match(/rel=["']?([^"'\s>]+)["']?/i);
-		if (!relMatch) continue;
-		if (!relMatch[1].split(/\s+/).includes("me")) continue;
+		const rel = tag.match(/rel=["']?([^"'\s>]+)["']?/i)?.[1];
+		if (!rel) continue;
+		if (!rel.split(/\s+/).includes("me")) continue;
 
-		const hrefMatch = tag.match(/href=["']?([^"'\s>]+)["']?/i);
-		if (hrefMatch && !relMeLinks.includes(hrefMatch[1])) {
-			relMeLinks.push(hrefMatch[1]);
+		const href = tag.match(/href=["']?([^"'\s>]+)["']?/i)?.[1];
+		if (href && !relMeLinks.includes(href)) {
+			relMeLinks.push(href);
 		}
 	}
 
@@ -210,7 +210,7 @@ export async function verifyDomain(
 		);
 		return {
 			success: false,
-			error: `Domain must have <link rel="me" href="${indikoProfileUrl}" /> or <a rel="me" href="${indikoProfileUrl}">...</a> to verify ownership`,
+			error: `Your site must link back to ${indikoProfileUrl} with rel="me" to verify you own it. Add a link tag or anchor with rel="me" pointing to that URL, then try again.`,
 		};
 	}
 

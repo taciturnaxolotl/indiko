@@ -1,34 +1,79 @@
 import { startRegistration } from "@simplewebauthn/browser";
+import "./ds";
+import type IButton from "./ds/button";
+import type IToast from "./ds/toast";
 
 const token = localStorage.getItem("indiko_session");
-const footer = document.getElementById("footer") as HTMLElement;
-const welcome = document.getElementById("welcome") as HTMLElement;
-const subtitle = document.getElementById("subtitle") as HTMLElement;
-const recentApps = document.getElementById("recentApps") as HTMLElement;
-const passkeysList = document.getElementById("passkeysList") as HTMLElement;
-const addPasskeyBtn = document.getElementById(
-	"addPasskeyBtn",
-) as HTMLButtonElement;
-const toast = document.getElementById("toast") as HTMLElement;
 
-// Profile form elements
-const profileForm = document.getElementById("profileForm") as HTMLFormElement;
-const avatarPreview = document.getElementById("avatarPreview") as HTMLElement;
-const usernameInput = document.getElementById("username") as HTMLInputElement;
-const nameInput = document.getElementById("name") as HTMLInputElement;
-const emailInput = document.getElementById("email") as HTMLInputElement;
-const photoInput = document.getElementById("photo") as HTMLInputElement;
-const urlInput = document.getElementById("url") as HTMLInputElement;
-const saveBtn = document.getElementById("saveBtn") as HTMLButtonElement;
-const deleteAccountBtn = document.getElementById(
-	"deleteAccountBtn",
-) as HTMLButtonElement;
-const dangerZone = document.getElementById("dangerZone") as HTMLElement;
+let footer!: HTMLElement;
+let welcome!: HTMLElement;
+let subtitle!: HTMLElement;
+let recentApps!: HTMLElement;
+let passkeysList!: HTMLElement;
+let addPasskeyBtn!: IButton;
+let toast!: IToast;
+let profileForm!: HTMLFormElement;
+let avatarPreview!: HTMLElement;
+let usernameInput!: HTMLInputElement;
+let nameInput!: HTMLInputElement;
+let emailInput!: HTMLInputElement;
+let photoInput!: HTMLInputElement;
+let urlInput!: HTMLInputElement;
+let saveBtn!: HTMLButtonElement;
+let deleteAccountBtn!: HTMLButtonElement;
+let addPasskeyNativeBtn!: HTMLButtonElement;
+let dangerZone!: HTMLElement;
 
 let isAdmin = false;
 
 if (!token) {
 	window.location.href = "/login";
+}
+
+function $(id: string): HTMLElement {
+	const el = document.getElementById(id);
+	if (!el) {
+		console.error(
+			`[indiko] #${id} missing from page. ` +
+				`readyState=${document.readyState} url=${location.href} ` +
+				`html-has-id=${document.documentElement.innerHTML.includes(`id="${id}"`)}`,
+		);
+		throw new Error(`#${id} missing from page`);
+	}
+	return el;
+}
+
+function init() {
+	footer = $("footer");
+	welcome = $("welcome");
+	subtitle = $("subtitle");
+	recentApps = $("recentApps");
+	passkeysList = $("passkeysList");
+	addPasskeyBtn = $("addPasskeyBtn") as IButton;
+	toast = $("toast") as unknown as IToast;
+	profileForm = $("profileForm") as HTMLFormElement;
+	avatarPreview = $("avatarPreview");
+	usernameInput = $("username") as HTMLInputElement;
+	nameInput = $("name") as HTMLInputElement;
+	emailInput = $("email") as HTMLInputElement;
+	photoInput = $("photo") as HTMLInputElement;
+	urlInput = $("url") as HTMLInputElement;
+	saveBtn = $("saveBtn").querySelector("button") as HTMLButtonElement;
+	deleteAccountBtn = $("deleteAccountBtn").querySelector(
+		"button",
+	) as HTMLButtonElement;
+	addPasskeyNativeBtn = $("addPasskeyBtn").querySelector(
+		"button",
+	) as HTMLButtonElement;
+	dangerZone = $("dangerZone");
+
+	profileForm.addEventListener("submit", onProfileSubmit);
+	deleteAccountBtn.addEventListener("click", onDeleteAccount);
+	passkeysList.addEventListener("rename", onPasskeyRename as unknown as EventListener);
+	passkeysList.addEventListener("remove", onPasskeyRemove as unknown as EventListener);
+	addPasskeyBtn.addEventListener("click", onAddPasskey);
+
+	checkAuth();
 }
 
 interface App {
@@ -55,12 +100,7 @@ interface Passkey {
 }
 
 function showToast(message: string, type: "success" | "error" = "success") {
-	toast.textContent = message;
-	toast.className = `toast ${type} show`;
-
-	setTimeout(() => {
-		toast.classList.remove("show");
-	}, 3000);
+	toast.show(message, type);
 }
 
 function updateAvatarPreview(photo: string | null, username: string) {
@@ -217,7 +257,7 @@ async function loadRecentApps() {
 }
 
 // Profile form submission
-profileForm.addEventListener("submit", async (e) => {
+async function onProfileSubmit(e: SubmitEvent) {
 	e.preventDefault();
 
 	saveBtn.disabled = true;
@@ -250,10 +290,10 @@ profileForm.addEventListener("submit", async (e) => {
 		saveBtn.disabled = false;
 		saveBtn.textContent = "save changes";
 	}
-});
+}
 
 // Delete account handler
-deleteAccountBtn.addEventListener("click", async () => {
+async function onDeleteAccount() {
 	const confirmMessage =
 		"Are you absolutely sure you want to delete your account?\n\n" +
 		"This will permanently delete:\n" +
@@ -302,7 +342,7 @@ deleteAccountBtn.addEventListener("click", async () => {
 		deleteAccountBtn.disabled = false;
 		deleteAccountBtn.textContent = "delete my account";
 	}
-});
+}
 
 async function loadPasskeys() {
 	try {
@@ -325,118 +365,36 @@ async function loadPasskeys() {
 			return;
 		}
 
-		passkeysList.innerHTML = passkeys
-			.map((passkey) => {
-				const createdDate = new Date(
-					passkey.created_at * 1000,
-				).toLocaleDateString();
-
-				return `
-				<div class="passkey-item" data-passkey-id="${passkey.id}">
-					<div class="passkey-info">
-						<div class="passkey-name">${passkey.name}</div>
-						<div class="passkey-date">added ${createdDate}</div>
-					</div>
-					<div class="passkey-actions">
-						<button type="button" class="rename-passkey-btn" data-passkey-id="${passkey.id}">rename</button>
-						${passkeys.length > 1 ? `<button type="button" class="delete-passkey-btn" data-passkey-id="${passkey.id}">delete</button>` : ""}
-					</div>
-				</div>
-			`;
-			})
-			.join("");
-
-		// Add event listeners for rename buttons
-		document.querySelectorAll(".rename-passkey-btn").forEach((btn) => {
-			btn.addEventListener("click", () => {
-				const passkeyId = btn.getAttribute("data-passkey-id");
-				showRenameForm(Number(passkeyId));
-			});
-		});
-
-		// Add event listeners for delete buttons
-		document.querySelectorAll(".delete-passkey-btn").forEach((btn) => {
-			btn.addEventListener("click", async () => {
-				const passkeyId = btn.getAttribute("data-passkey-id");
-				await deletePasskeyHandler(Number(passkeyId));
-			});
-		});
+		passkeysList.replaceChildren();
+		for (const passkey of passkeys) {
+			const row = document.createElement("i-passkey-row");
+			row.setAttribute("pid", String(passkey.id));
+			row.setAttribute("name", passkey.name);
+			row.setAttribute("created", String(passkey.created_at));
+			passkeysList.appendChild(row);
+		}
 	} catch (error) {
 		console.error("Failed to load passkeys:", error);
 		passkeysList.innerHTML = '<div class="empty">Failed to load passkeys</div>';
 	}
 }
 
-function showRenameForm(passkeyId: number) {
-	const passkeyItem = document.querySelector(
-		`[data-passkey-id="${passkeyId}"]`,
-	);
-	if (!passkeyItem) return;
-
-	const infoDiv = passkeyItem.querySelector(".passkey-info");
-	const nameDiv = infoDiv?.querySelector(".passkey-name");
-	if (!nameDiv) return;
-
-	const currentName = nameDiv.textContent || "";
-
-	// Replace the info div with a rename form
-	if (infoDiv) {
-		infoDiv.innerHTML = `
-			<div class="rename-form">
-				<input type="text" value="${currentName}" class="rename-input" data-passkey-id="${passkeyId}" />
-				<button type="button" class="save-rename-btn" data-passkey-id="${passkeyId}">save</button>
-				<button type="button" class="cancel-rename-btn" data-passkey-id="${passkeyId}">cancel</button>
-			</div>
-		`;
-
-		const input = infoDiv.querySelector(".rename-input") as HTMLInputElement;
-		input.focus();
-		input.select();
-
-		// Save button
-		infoDiv
-			.querySelector(".save-rename-btn")
-			?.addEventListener("click", async () => {
-				await renamePasskeyHandler(passkeyId, input.value);
-			});
-
-		// Cancel button
-		infoDiv
-			.querySelector(".cancel-rename-btn")
-			?.addEventListener("click", () => {
-				loadPasskeys();
-			});
-
-		// Enter to save
-		input.addEventListener("keypress", async (e) => {
-			if (e.key === "Enter") {
-				await renamePasskeyHandler(passkeyId, input.value);
-			}
-		});
-
-		// Escape to cancel
-		input.addEventListener("keydown", (e) => {
-			if (e.key === "Escape") {
-				loadPasskeys();
-			}
-		});
-	}
-}
-
-async function renamePasskeyHandler(passkeyId: number, newName: string) {
-	if (!newName.trim()) {
+// Component events bubble up from <i-passkey-row>
+async function onPasskeyRename(e: CustomEvent<{ id: string; name: string }>) {
+	const { id, name } = e.detail;
+	if (!name.trim()) {
 		showToast("Passkey name cannot be empty", "error");
 		return;
 	}
 
 	try {
-		const response = await fetch(`/api/passkeys/${passkeyId}`, {
+		const response = await fetch(`/api/passkeys/${id}`, {
 			method: "PATCH",
 			headers: {
 				Authorization: `Bearer ${token}`,
 				"Content-Type": "application/json",
 			},
-			body: JSON.stringify({ name: newName }),
+			body: JSON.stringify({ name }),
 		});
 
 		if (!response.ok) {
@@ -445,13 +403,15 @@ async function renamePasskeyHandler(passkeyId: number, newName: string) {
 		}
 
 		showToast("Passkey renamed successfully!", "success");
-		loadPasskeys();
 	} catch (error) {
 		showToast((error as Error).message || "Failed to rename passkey", "error");
+		loadPasskeys();
 	}
 }
 
-async function deletePasskeyHandler(passkeyId: number) {
+async function onPasskeyRemove(e: CustomEvent<{ id: string }>) {
+	const { id } = e.detail;
+
 	if (
 		!confirm(
 			"Are you sure you want to delete this passkey? You will no longer be able to use it to sign in.",
@@ -461,7 +421,7 @@ async function deletePasskeyHandler(passkeyId: number) {
 	}
 
 	try {
-		const response = await fetch(`/api/passkeys/${passkeyId}`, {
+		const response = await fetch(`/api/passkeys/${id}`, {
 			method: "DELETE",
 			headers: {
 				Authorization: `Bearer ${token}`,
@@ -481,9 +441,9 @@ async function deletePasskeyHandler(passkeyId: number) {
 }
 
 // Add passkey button handler
-addPasskeyBtn.addEventListener("click", async () => {
-	addPasskeyBtn.disabled = true;
-	addPasskeyBtn.textContent = "preparing...";
+async function onAddPasskey() {
+	addPasskeyNativeBtn.disabled = true;
+	addPasskeyNativeBtn.textContent = "preparing...";
 
 	try {
 		// Get registration options
@@ -501,12 +461,12 @@ addPasskeyBtn.addEventListener("click", async () => {
 
 		const options = await optionsRes.json();
 
-		addPasskeyBtn.textContent = "create your passkey...";
+		addPasskeyNativeBtn.textContent = "create your passkey...";
 
 		// Start registration
 		const regResponse = await startRegistration(options);
 
-		addPasskeyBtn.textContent = "verifying...";
+		addPasskeyNativeBtn.textContent = "verifying...";
 
 		// Ask for a name
 		const name = prompt(
@@ -537,9 +497,13 @@ addPasskeyBtn.addEventListener("click", async () => {
 	} catch (error) {
 		showToast((error as Error).message || "Failed to add passkey", "error");
 	} finally {
-		addPasskeyBtn.disabled = false;
-		addPasskeyBtn.textContent = "add new passkey";
+		addPasskeyNativeBtn.disabled = false;
+		addPasskeyNativeBtn.textContent = "add new passkey";
 	}
-});
+}
 
-checkAuth();
+if (document.readyState === "complete") {
+	init();
+} else {
+	document.addEventListener("DOMContentLoaded", init);
+}

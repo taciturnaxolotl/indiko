@@ -15,15 +15,13 @@ const addRedirectUriBtn = document.getElementById(
 const redirectUrisList = document.getElementById(
 	"redirectUrisList",
 ) as HTMLElement;
-const toast = document.getElementById("toast") as HTMLElement;
+import "./ds";
+import type IToast from "./ds/toast";
+
+const toast = document.getElementById("toast") as unknown as IToast;
 
 function showToast(message: string, type: "success" | "error" = "success") {
-	toast.textContent = message;
-	toast.className = `toast ${type} show`;
-
-	setTimeout(() => {
-		toast.classList.remove("show");
-	}, 3000);
+	toast.show(message, type);
 }
 
 async function checkAuth() {

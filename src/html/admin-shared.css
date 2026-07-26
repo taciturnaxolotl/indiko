@@ -1,0 +1,144 @@
+/* Shared admin shell: header nav + layout, used by users/invites/clients */
+
+body {
+	align-items: stretch;
+}
+
+.admin-header {
+	width: 100%;
+	max-width: 64rem;
+	margin: 0 auto 2rem;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 1rem;
+}
+
+.admin-logo {
+	height: 2rem;
+}
+
+.admin-nav {
+	display: flex;
+	gap: 1.5rem;
+}
+
+.admin-nav a {
+	color: var(--paper-dim);
+	text-decoration: none;
+	font-size: var(--text-sm);
+	font-weight: 600;
+	text-transform: lowercase;
+	letter-spacing: 0.05rem;
+	padding-bottom: 0.25rem;
+	border-bottom: 2px solid transparent;
+}
+
+.admin-nav a:hover {
+	color: var(--paper);
+}
+
+.admin-nav a.active {
+	color: var(--accent);
+	border-bottom-color: var(--accent);
+}
+
+.admin-main {
+	width: 100%;
+	max-width: 64rem;
+	margin: 0 auto;
+}
+
+.admin-title {
+	font-size: var(--text-xl);
+	font-weight: 600;
+	color: var(--paper);
+	margin-bottom: 1.5rem;
+	letter-spacing: -0.05rem;
+}
+
+.admin-footer {
+	width: 100%;
+	max-width: 64rem;
+	margin: 2rem auto 0;
+}
+
+.loading,
+.empty {
+	color: var(--paper-dim);
+	font-size: var(--text-sm);
+	padding: 1rem 0;
+}
+
+.back-link {
+	text-align: center;
+	font-size: var(--text-sm);
+}
+
+.back-link a {
+	color: var(--accent);
+	text-decoration: none;
+}
+
+.back-link a:hover {
+	text-decoration: underline;
+}
+
+/* User cards */
+.users-list {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.user-card {
+	background: rgba(188, 141, 160, 0.05);
+	border: 1px solid var(--paper-dim);
+	padding: 1.5rem;
+	display: flex;
+	gap: 1.5rem;
+	align-items: center;
+	transition: background 0.2s;
+}
+
+.user-card:hover {
+	background: rgba(188, 141, 160, 0.1);
+}
+
+.user-info {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	flex: 1;
+	min-width: 0;
+}
+
+.user-name {
+	font-size: var(--text-lg);
+	font-weight: 600;
+	color: var(--paper);
+}
+
+.user-meta {
+	font-size: var(--text-sm);
+	color: var(--paper-dim);
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+}
+
+.user-badges {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+
+.user-actions {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+
+.user-suspended {
+	opacity: 0.5;
+}

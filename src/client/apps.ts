@@ -1,5 +1,7 @@
+import "./ds";
+import type IToast from "./ds/toast";
+
 const token = localStorage.getItem("indiko_session");
-const appsList = document.getElementById("appsList") as HTMLElement;
 
 if (!token) {
 	window.location.href = "/login";
@@ -13,12 +15,27 @@ interface App {
 	lastUsed: number;
 }
 
+function $(id: string): HTMLElement {
+	const el = document.getElementById(id);
+	if (!el) throw new Error(`#${id} missing from page`);
+	return el;
+}
+
+let appsList: HTMLElement;
+let toast: IToast;
+
+function escapeHtml(value: string): string {
+	return value
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;");
+}
+
 async function loadApps() {
 	try {
 		const response = await fetch("/api/apps", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+			headers: { Authorization: `Bearer ${token}` },
 		});
 
 		if (response.status === 401 || response.status === 403) {
@@ -27,9 +44,7 @@ async function loadApps() {
 			return;
 		}
 
-		if (!response.ok) {
-			throw new Error("Failed to load apps");
-		}
+		if (!response.ok) throw new Error("Failed to load apps");
 
 		const data = await response.json();
 		displayApps(data.apps);
@@ -51,88 +66,89 @@ function displayApps(apps: App[]) {
 		.map((app) => {
 			const lastUsedDate = new Date(app.lastUsed * 1000).toLocaleDateString();
 			const grantedDate = new Date(app.grantedAt * 1000).toLocaleDateString();
+			const badges = app.scopes
+				.map((s) => `<span class="scope-badge">${escapeHtml(s)}</span>`)
+				.join("");
 
 			return `
-			<div class="app-card" data-client-id="${app.clientId}">
-				<div class="app-header">
+			<i-card class="app-card" data-client-id="${escapeHtml(app.clientId)}">
+				<div class="app-head">
 					<div>
-						<div class="app-name">${app.name}</div>
-						<div class="app-meta">Granted ${grantedDate} • Last used ${lastUsedDate}</div>
+						<div class="app-name">${escapeHtml(app.name)}</div>
+						<div class="app-meta">granted ${grantedDate} • last used ${lastUsedDate}</div>
 					</div>
-					<button class="revoke-btn" onclick="revokeApp('${app.clientId}', event)">revoke</button>
+					<button type="button" class="revoke-btn" data-client-id="${escapeHtml(app.clientId)}">revoke</button>
 				</div>
 				<div class="scopes">
 					<div class="scope-title">permissions</div>
-					<div class="scope-list">
-						${app.scopes.map((scope) => `<span class="scope-badge">${scope}</span>`).join("")}
-					</div>
+					<div class="scope-list">${badges}</div>
 				</div>
-			</div>
+			</i-card>
 		`;
 		})
 		.join("");
 }
 
-(window as any).revokeApp = async (clientId: string, event?: Event) => {
-	const btn = event?.target as HTMLButtonElement | undefined;
+async function handleRevoke(btn: HTMLButtonElement) {
+	const clientId = btn.dataset.clientId;
+	if (!clientId) return;
 
-	// Double-click confirmation pattern
-	if (btn?.dataset.confirmState === "pending") {
-		// Second click - execute revoke
-		delete btn.dataset.confirmState;
-		btn.disabled = true;
-		btn.textContent = "revoking...";
-
-		const card = document.querySelector(`[data-client-id="${clientId}"]`);
-
-		try {
-			const response = await fetch(
-				`/api/apps/${encodeURIComponent(clientId)}`,
-				{
-					method: "DELETE",
-					headers: {
-						Authorization: `Bearer ${token}`,
-					},
-				},
-			);
-
-			if (!response.ok) {
-				throw new Error("Failed to revoke app");
-			}
-
-			// Remove from UI
-			card?.remove();
-
-			// Check if list is now empty
-			const remaining = document.querySelectorAll(".app-card");
-			if (remaining.length === 0) {
-				appsList.innerHTML =
-					'<div class="empty">No authorized apps yet. Apps will appear here after you grant them access.</div>';
-			}
-		} catch (error) {
-			console.error("Failed to revoke app:", error);
-			alert("Failed to revoke app access. Please try again.");
-			if (btn) {
-				btn.disabled = false;
+	// Two-step confirm: first click arms, second click revokes
+	if (btn.dataset.confirmState !== "pending") {
+		btn.dataset.confirmState = "pending";
+		btn.textContent = "you sure?";
+		setTimeout(() => {
+			if (btn.dataset.confirmState === "pending") {
+				delete btn.dataset.confirmState;
 				btn.textContent = "revoke";
 			}
-		}
-	} else {
-		// First click - set pending state
-		if (btn) {
-			const originalText = btn.textContent;
-			btn.dataset.confirmState = "pending";
-			btn.textContent = "you sure?";
-
-			// Reset after 3 seconds if not confirmed
-			setTimeout(() => {
-				if (btn.dataset.confirmState === "pending") {
-					delete btn.dataset.confirmState;
-					btn.textContent = originalText;
-				}
-			}, 3000);
-		}
+		}, 3000);
+		return;
 	}
-};
 
-loadApps();
+	delete btn.dataset.confirmState;
+	btn.disabled = true;
+	btn.textContent = "revoking...";
+
+	try {
+		const response = await fetch(`/api/apps/${encodeURIComponent(clientId)}`, {
+			method: "DELETE",
+			headers: { Authorization: `Bearer ${token}` },
+		});
+
+		if (!response.ok) throw new Error("Failed to revoke app");
+
+		document.querySelector(`[data-client-id="${clientId}"]`)?.remove();
+		toast.show("App access revoked", "success");
+
+		if (document.querySelectorAll(".app-card").length === 0) {
+			appsList.innerHTML =
+				'<div class="empty">No authorized apps yet. Apps will appear here after you grant them access.</div>';
+		}
+	} catch (error) {
+		console.error("Failed to revoke app:", error);
+		toast.show("Failed to revoke app access. Please try again.", "error");
+		btn.disabled = false;
+		btn.textContent = "revoke";
+	}
+}
+
+function init() {
+	appsList = $("appsList");
+	toast = $("toast") as unknown as IToast;
+
+	appsList.addEventListener("click", (e) => {
+		const btn = (e.target as HTMLElement).closest(
+			".revoke-btn",
+		) as HTMLButtonElement | null;
+		if (btn) handleRevoke(btn);
+	});
+
+	loadApps();
+}
+
+if (document.readyState === "complete") {
+	init();
+} else {
+	document.addEventListener("DOMContentLoaded", init);
+}

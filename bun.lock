@@ -5,6 +5,7 @@
     "": {
       "name": "indiko",
       "dependencies": {
+        "@elenajs/core": "^1.0.0",
         "@simplewebauthn/browser": "^13.2.2",
         "@simplewebauthn/server": "^13.2.2",
         "bun-sqlite-migrations": "^1.0.2",
@@ -22,6 +23,8 @@
     },
   },
   "packages": {
+    "@elenajs/core": ["@elenajs/core@1.0.0", "", {}, "sha512-YOlSv7qpvVVrzlVYoyx7s1c8cBML0b5Q8WhxXaNeO3Awd2iNcf9HcJKDWuOi9KT53F7L8K9uQNLCzyb7EVxlpw=="],
+
     "@hexagon/base64": ["@hexagon/base64@1.1.28", "", {}, "sha512-lhqDEAvWixy3bZ+UOYbPwUbBkwBq5C1LAJ/xPC8Oi+lL54oyakv/npbA0aU2hgCsx/1NUd4IBvV03+aUBWxerw=="],
 
     "@levischuck/tiny-cbor": ["@levischuck/tiny-cbor@0.2.11", "", {}, "sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow=="],

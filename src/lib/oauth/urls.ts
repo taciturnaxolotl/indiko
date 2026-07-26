@@ -81,8 +81,8 @@ export function validateProfileURL(urlString: string): {
 // `new URL` collapses them, so inspect the string directly: strip the
 // scheme://authority prefix, query, and hash, then split the raw path.
 function hasDotSegments(urlString: string): boolean {
-	const withoutHash = urlString.split("#", 1)[0];
-	const withoutQuery = withoutHash.split("?", 1)[0];
+	const withoutHash = urlString.split("#", 1)[0] ?? "";
+	const withoutQuery = withoutHash.split("?", 1)[0] ?? "";
 	const authorityEnd = withoutQuery.indexOf("://");
 	if (authorityEnd === -1) return false;
 	const pathStart = withoutQuery.indexOf("/", authorityEnd + 3);
