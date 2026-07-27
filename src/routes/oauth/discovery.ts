@@ -121,6 +121,7 @@ export function indieauthMetadata(): Response {
 		client_id_metadata_document_supported: true,
 		authorization_response_iss_parameter_supported: true,
 		device_authorization_endpoint: `${origin}/auth/device`,
+		registration_endpoint: `${origin}/oauth/register`,
 	};
 
 	return Response.json(metadata, {

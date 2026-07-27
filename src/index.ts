@@ -53,6 +53,7 @@ import {
 	updateInvite,
 } from "./routes/oauth/invites";
 import { userProfile } from "./routes/oauth/profile";
+import { registerClient } from "./routes/oauth/register";
 import { token, tokenIntrospect, tokenRevoke } from "./routes/oauth/token";
 import { logout, userinfo } from "./routes/oauth/userinfo";
 import {
@@ -249,6 +250,10 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 		"/auth/authorize": async (req: Request) => {
 			if (req.method === "GET") return authorizeGet(req);
 			if (req.method === "POST") return await authorizePost(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/oauth/register": async (req: Request) => {
+			if (req.method === "POST") return await registerClient(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
 		"/auth/device": async (req: Request) => {

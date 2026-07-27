@@ -112,6 +112,7 @@ Copy this themed button for your app's login page. It matches Indiko's visual st
 | `/userinfo` | GET | Get user profile data with bearer token |
 | `/auth/device` | POST | Request device and user codes (RFC 8628) |
 | `/device` | GET | User verification page (enter code, approve/deny) |
+| `/oauth/register` | POST | Dynamic client registration (RFC 7591) |
 | `/u/:username` | GET | Public user profile (h-card with discovery links) |
 
 ### authentication endpoints
@@ -471,3 +472,38 @@ Apps that an admin registers manually get additional features:
 - No metadata publishing required
 
 > **Choosing a type:** Use auto-registration for most apps. Pre-register when you need a client secret, role-based access control, or custom branding on the consent screen.
+
+## dynamic client registration (RFC 7591)
+
+Register a confidential client programmatically instead of asking an admin. Returns an opaque `client_id` and `client_secret` for use with the authorization code flow.
+
+```http
+POST {{origin}}/oauth/register
+Content-Type: application/json
+
+{
+  "redirect_uris": ["https://myapp.example.com/callback"],
+  "client_name": "My App",
+  "logo_uri": "https://myapp.example.com/logo.png"
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "client_id": "ikc_abc123...",
+  "client_secret": "iks_xyz789...",
+  "client_id_issued_at": 1735686000,
+  "client_secret_expires_at": 0,
+  "redirect_uris": ["https://myapp.example.com/callback"],
+  "client_name": "My App",
+  "token_endpoint_auth_method": "client_secret_post",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"]
+}
+```
+
+> **Store the secret now:** `client_secret` is returned in plaintext **only once**, in this response. It is stored hashed and never shown again. Use it as `client_secret` in the [token exchange](#4-exchange-code-for-token). If you lose it, an admin must regenerate it.
+
+> **When to use DCR vs auto-registration:** DCR gives you a confidential client with a secret (better for server-side apps that can keep one). Auto-registration (using a URL as your `client_id`) is simpler for public clients and needs no secret.
