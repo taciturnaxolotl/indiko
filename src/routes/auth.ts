@@ -402,7 +402,26 @@ export async function registerVerify(req: Request): Promise<Response> {
 export async function loginOptions(req: Request): Promise<Response> {
 	try {
 		const body = await req.json();
-		const { username } = body;
+		const { username, conditional } = body as {
+			username?: string;
+			conditional?: boolean;
+		};
+
+		// Conditional UI flow: no username needed, browser shows all discoverable creds
+		if (conditional) {
+			const options: PublicKeyCredentialRequestOptionsJSON =
+				await generateAuthenticationOptions({
+					rpID: process.env.RP_ID || "",
+					userVerification: "required",
+				});
+
+			const expiresAt = Math.floor(Date.now() / 1000) + 300;
+			db.query(
+				"INSERT INTO challenges (challenge, username, type, expires_at) VALUES (?, '', 'authentication', ?)",
+			).run(options.challenge, expiresAt);
+
+			return Response.json(options);
+		}
 
 		if (!username || typeof username !== "string") {
 			return Response.json({ error: "Username required" }, { status: 400 });
@@ -497,16 +516,18 @@ export async function loginOptions(req: Request): Promise<Response> {
 export async function loginVerify(req: Request): Promise<Response> {
 	try {
 		const body = await req.json();
-		const { username, response } = body as {
-			username: string;
+		const { username, response, conditional } = body as {
+			username?: string;
 			response: AuthenticationResponseJSON;
+			conditional?: boolean;
 		};
 
-		if (!username || !response) {
-			return Response.json(
-				{ error: "Username and response required" },
-				{ status: 400 },
-			);
+		if (!response) {
+			return Response.json({ error: "Response required" }, { status: 400 });
+		}
+
+		if (!conditional && !username) {
+			return Response.json({ error: "Username required" }, { status: 400 });
 		}
 
 		// Look up credential by ID to discover the username
@@ -536,8 +557,8 @@ export async function loginVerify(req: Request): Promise<Response> {
 			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
-		// Verify the username matches
-		if (credentialWithUser.username !== username) {
+		// Verify the username matches (skip for conditional UI where browser picks the cred)
+		if (!conditional && credentialWithUser.username !== username) {
 			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
@@ -547,13 +568,18 @@ export async function loginVerify(req: Request): Promise<Response> {
 			counter: credentialWithUser.counter,
 		};
 		const user = { id: credentialWithUser.user_id };
+		const resolvedUsername = credentialWithUser.username;
 
 		// Verify challenge exists and is valid
+		// Conditional UI stores challenge with empty username; normal flow uses the actual username
+		const challengeUsername = conditional ? "" : resolvedUsername;
 		const challenge = db
 			.query(
 				"SELECT challenge, expires_at FROM challenges WHERE username = ? AND type = 'authentication' ORDER BY created_at DESC LIMIT 1",
 			)
-			.get(username) as { challenge: string; expires_at: number } | undefined;
+			.get(challengeUsername) as
+			| { challenge: string; expires_at: number }
+			| undefined;
 
 		if (!challenge) {
 			return Response.json({ error: "Invalid challenge" }, { status: 400 });
@@ -614,7 +640,7 @@ export async function loginVerify(req: Request): Promise<Response> {
 		return Response.json(
 			{
 				token,
-				username,
+				username: resolvedUsername,
 			},
 			{
 				headers: {

@@ -97,6 +97,50 @@ async function checkRegistrationAllowed() {
 
 checkRegistrationAllowed();
 
+// Conditional UI: show passkeys in the browser's autofill dropdown
+async function initConditionalUI() {
+	try {
+		const optionsRes = await fetch("/auth/login/options", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ conditional: true }),
+		});
+
+		if (!optionsRes.ok) return;
+
+		const options = await optionsRes.json();
+
+		// This call blocks until the user picks a passkey from the autofill menu
+		const authResponse = await startAuthentication({
+			optionsJSON: options,
+			useBrowserAutofill: true,
+		});
+
+		const verifyRes = await fetch("/auth/login/verify", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ response: authResponse, conditional: true }),
+		});
+
+		if (!verifyRes.ok) {
+			const error = await verifyRes.json();
+			showMessage(error.error || "Authentication failed");
+			return;
+		}
+
+		const { token } = await verifyRes.json();
+		localStorage.setItem("indiko_session", token);
+		showMessage("Login successful!", "success");
+		setTimeout(() => {
+			window.location.href = "/";
+		}, 1000);
+	} catch {
+		// User cancelled or browser doesn't support conditional UI — fall back to manual flow
+	}
+}
+
+initConditionalUI();
+
 function showMessage(
 	text: string,
 	type: "error" | "success" = "error",
