@@ -66,23 +66,17 @@ export function userProfile(req: Request): Response {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/ds/tokens.css">
   <style>
-    :root {
-      --mahogany: #26242b;
-      --lavender: #d9d0de;
-      --old-rose: #bc8da0;
-      --rosewood: #a04668;
-      --berry-crush: #ab4967;
-    }
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
     body {
-      font-family: "Space Grotesk", sans-serif;
-      background: var(--mahogany);
-      color: var(--lavender);
+      font-family: var(--font);
+      background: var(--ink);
+      color: var(--paper);
       min-height: 100vh;
       padding: 2.5rem 1.25rem;
     }
@@ -92,7 +86,7 @@ export function userProfile(req: Request): Response {
     }
     .h-card {
       background: rgba(188, 141, 160, 0.05);
-      border: 1px solid var(--old-rose);
+      border: 1px solid var(--paper-dim);
       padding: 2rem;
       margin-bottom: 2rem;
       display: flex;
@@ -106,26 +100,26 @@ export function userProfile(req: Request): Response {
       border-radius: 50%;
       object-fit: cover;
       margin-bottom: 1rem;
-      border: 3px solid var(--berry-crush);
+      border: 3px solid var(--accent);
     }
     .p-name {
       font-size: 1.5rem;
       font-weight: 700;
       text-decoration: none;
-      color: var(--lavender);
+      color: var(--paper);
       margin-bottom: 0.5rem;
     }
     .p-name:hover {
-      color: var(--berry-crush);
+      color: var(--accent);
     }
     .u-email, .u-url-link {
-      color: var(--old-rose);
+      color: var(--paper-dim);
       text-decoration: none;
       margin-top: 0.5rem;
       font-size: 0.875rem;
     }
     .u-email:hover, .u-url-link:hover {
-      color: var(--berry-crush);
+      color: var(--accent);
     }
     .links {
       display: flex;
@@ -136,50 +130,50 @@ export function userProfile(req: Request): Response {
       margin-top: 1rem;
       padding: 1rem;
       background: rgba(12, 23, 19, 0.6);
-      border: 1px solid var(--rosewood);
+      border: 1px solid var(--accent-deep);
       font-size: 0.875rem;
-      color: var(--old-rose);
+      color: var(--paper-dim);
     }
     .identity-info code {
-      color: var(--berry-crush);
-      font-family: "Space Grotesk", monospace;
+      color: var(--accent);
+      font-family: var(--font), monospace;
     }
     .indieauth-info {
       background: rgba(188, 141, 160, 0.05);
-      border: 1px solid var(--old-rose);
+      border: 1px solid var(--paper-dim);
       padding: 2rem;
     }
     .indieauth-info h2 {
       font-size: 1.25rem;
       font-weight: 600;
       margin-bottom: 1rem;
-      color: var(--lavender);
+      color: var(--paper);
     }
     .indieauth-info p {
       margin-bottom: 1rem;
-      color: var(--old-rose);
+      color: var(--paper-dim);
       line-height: 1.6;
     }
     .indieauth-info code {
-      color: var(--berry-crush);
-      font-family: "Space Grotesk", monospace;
+      color: var(--accent);
+      font-family: var(--font), monospace;
     }
     .code-box {
       background: rgba(12, 23, 19, 0.6);
-      border: 2px solid var(--rosewood);
+      border: 2px solid var(--accent-deep);
       padding: 1rem;
       margin: 1rem 0;
-      font-family: "Space Grotesk", monospace;
+      font-family: var(--font), monospace;
       font-size: 0.875rem;
       overflow-x: auto;
       white-space: pre-wrap;
       word-break: break-all;
     }
     .html-tag {
-      color: var(--berry-crush);
+      color: var(--accent);
     }
     .html-attr {
-      color: #81c784;
+      color: var(--paper-dim);
     }
     .html-value {
       color: #a5d6a7;
@@ -190,7 +184,7 @@ export function userProfile(req: Request): Response {
       font-size: 0.875rem;
     }
     .back-link a {
-      color: var(--berry-crush);
+      color: var(--accent);
       text-decoration: none;
     }
     .back-link a:hover {

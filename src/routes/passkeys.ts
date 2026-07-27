@@ -75,14 +75,14 @@ export async function addPasskeyOptions(req: Request): Promise<Response> {
 		.all(session.user_id) as Array<{ credential_id: Buffer }>;
 
 	const excludeCredentials = existingCredentials.map((cred) => ({
-		id: cred.credential_id,
+		id: Buffer.from(cred.credential_id).toString("base64url"),
 		type: "public-key" as const,
 	}));
 
 	// Generate WebAuthn registration options
 	const options = await generateRegistrationOptions({
 		rpName: RP_NAME,
-		rpID: process.env.RP_ID!,
+		rpID: process.env.RP_ID ?? "",
 		userName: user.username,
 		userDisplayName: user.username,
 		attestationType: "none",
@@ -171,8 +171,8 @@ export async function addPasskeyVerify(req: Request): Promise<Response> {
 			verification = await verifyRegistrationResponse({
 				response,
 				expectedChallenge: challenge.challenge,
-				expectedOrigin: process.env.ORIGIN!,
-				expectedRPID: process.env.RP_ID!,
+				expectedOrigin: process.env.ORIGIN ?? "",
+				expectedRPID: process.env.RP_ID ?? "",
 			});
 		} catch (error) {
 			console.error("WebAuthn verification failed:", error);

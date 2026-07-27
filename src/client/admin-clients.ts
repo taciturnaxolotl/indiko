@@ -1,3 +1,18 @@
+declare global {
+	interface Window {
+		toggleClient: (clientId: string) => Promise<void>;
+		setUserRole: (
+			clientId: string,
+			username: string,
+			role: string,
+		) => Promise<void>;
+		editClient: (clientId: string) => Promise<void>;
+		deleteClient: (clientId: string, event?: Event) => Promise<void>;
+		removeRedirectUri: (btn: HTMLButtonElement) => void;
+		regenerateSecret: (clientId: string, event?: Event) => Promise<void>;
+		revokeUserPermission: (clientId: string, username: string) => Promise<void>;
+	}
+}
 const token = localStorage.getItem("indiko_session");
 
 import "./ds";
@@ -76,14 +91,6 @@ interface ClientUser {
 	name: string;
 	scopes: string[];
 	role: string | null;
-	grantedAt: number;
-	lastUsed: number;
-}
-
-interface AppPermission {
-	username: string;
-	name: string;
-	scopes: string[];
 	grantedAt: number;
 	lastUsed: number;
 }
@@ -167,7 +174,7 @@ function displayClients(clients: Client[]) {
 		.join("");
 }
 
-(window as any).toggleClient = async (clientId: string) => {
+window.toggleClient = async (clientId: string) => {
 	const card = document.querySelector(
 		`[data-client-id="${clientId}"]`,
 	) as HTMLElement;
@@ -295,7 +302,7 @@ function displayClients(clients: Client[]) {
 	}
 };
 
-(window as any).setUserRole = async (
+window.setUserRole = async (
 	clientId: string,
 	username: string,
 	role: string,
@@ -324,7 +331,7 @@ function displayClients(clients: Client[]) {
 	}
 };
 
-(window as any).editClient = async (clientId: string) => {
+window.editClient = async (clientId: string) => {
 	try {
 		const response = await fetch(
 			`/api/admin/clients/${encodeURIComponent(clientId)}`,
@@ -374,7 +381,7 @@ function displayClients(clients: Client[]) {
 	}
 };
 
-(window as any).deleteClient = async (clientId: string, event?: Event) => {
+window.deleteClient = async (clientId: string, event?: Event) => {
 	const btn = event?.target as HTMLButtonElement | undefined;
 
 	// Double-click confirmation pattern
@@ -455,7 +462,7 @@ addRedirectUriBtn.addEventListener("click", () => {
 	redirectUrisList.appendChild(newItem);
 });
 
-(window as any).removeRedirectUri = (btn: HTMLButtonElement) => {
+window.removeRedirectUri = (btn: HTMLButtonElement) => {
 	const items = redirectUrisList.querySelectorAll(".redirect-uri-item");
 	if (items.length > 1) {
 		btn.parentElement?.remove();
@@ -576,7 +583,7 @@ clientForm.addEventListener("submit", async (e) => {
 	}
 });
 
-(window as any).regenerateSecret = async (clientId: string, event?: Event) => {
+window.regenerateSecret = async (clientId: string, event?: Event) => {
 	const btn = event?.target as HTMLButtonElement | undefined;
 
 	// Double-click confirmation pattern (same as delete)
@@ -647,7 +654,7 @@ clientForm.addEventListener("submit", async (e) => {
 	}
 };
 
-(window as any).revokeUserPermission = async (
+window.revokeUserPermission = async (
 	clientId: string,
 	username: string,
 	event?: Event,

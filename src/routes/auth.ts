@@ -12,7 +12,7 @@ import {
 } from "@simplewebauthn/server";
 import { authenticate } from "ldap-authentication";
 import { db } from "../db";
-import { checkLdapGroupMembership } from "../ldap-cleanup";
+import { checkLdapGroupMembership, checkLdapUser } from "../ldap-cleanup";
 
 const RP_NAME = "Indiko";
 

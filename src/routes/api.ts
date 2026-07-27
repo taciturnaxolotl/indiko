@@ -144,10 +144,12 @@ export async function updateProfile(req: Request): Promise<Response> {
 			const origin = process.env.ORIGIN || "http://localhost:3000";
 			const indikoProfileUrl = `${origin}/u/${user.username}`;
 
-			const verification = await verifyDomain(
-				validation.canonicalUrl!,
-				indikoProfileUrl,
-			);
+			const canonicalUrl = validation.canonicalUrl;
+			if (!canonicalUrl) {
+				return Response.json({ error: "Invalid URL format" }, { status: 400 });
+			}
+
+			const verification = await verifyDomain(canonicalUrl, indikoProfileUrl);
 			if (!verification.success) {
 				return Response.json(
 					{ error: verification.error || "Failed to verify domain" },
@@ -410,7 +412,7 @@ export function disableUser(req: Request, userId: string): Response {
 	}
 
 	// Prevent disabling self
-	if (targetUserId === user.id) {
+	if (targetUserId === user.userId) {
 		return Response.json(
 			{ error: "Cannot disable your own account" },
 			{ status: 400 },

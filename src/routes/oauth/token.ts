@@ -310,6 +310,11 @@ function verifyClientCredentials(
 	client_id: string | undefined,
 	client_secret: string | undefined,
 ): Response | null {
+	// No client_id means we can't look up the app; treat as public/unknown.
+	if (!client_id) {
+		return null;
+	}
+
 	const app = db
 		.query(
 			"SELECT is_preregistered, client_secret_hash FROM apps WHERE client_id = ?",

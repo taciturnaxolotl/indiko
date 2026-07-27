@@ -1,5 +1,15 @@
 import "./ds";
 
+declare global {
+	interface Window {
+		submitCreateInvite: () => Promise<void>;
+		closeCreateInviteModal: () => void;
+		editInvite: (inviteId: number) => Promise<void>;
+		submitEditInvite: () => Promise<void>;
+		closeEditInviteModal: () => void;
+		deleteInvite: (inviteId: number, event?: Event) => Promise<void>;
+	}
+}
 const token = localStorage.getItem("indiko_session");
 const invitesList = document.getElementById("invitesList") as HTMLElement;
 const createInviteBtn = document.getElementById(
@@ -244,8 +254,8 @@ function closeCreateInviteModal() {
 }
 
 // Expose functions to global scope for HTML onclick handlers
-(window as any).submitCreateInvite = submitCreateInvite;
-(window as any).closeCreateInviteModal = closeCreateInviteModal;
+window.submitCreateInvite = submitCreateInvite;
+window.closeCreateInviteModal = closeCreateInviteModal;
 
 async function loadInvites() {
 	try {
@@ -386,7 +396,7 @@ createInviteBtn.addEventListener("click", createInvite);
 document.addEventListener("keydown", (e) => {
 	if (e.key === "Escape") {
 		closeCreateInviteModal();
-		closeEditInviteModal();
+		window.closeEditInviteModal();
 	}
 });
 
@@ -399,14 +409,14 @@ document.getElementById("createInviteModal")?.addEventListener("click", (e) => {
 
 document.getElementById("editInviteModal")?.addEventListener("click", (e) => {
 	if (e.target === e.currentTarget) {
-		closeEditInviteModal();
+		window.closeEditInviteModal();
 	}
 });
 
 let currentEditInviteId: number | null = null;
 
 // Make editInvite globally available for onclick handler
-(window as any).editInvite = async (inviteId: number) => {
+window.editInvite = async (inviteId: number) => {
 	try {
 		const response = await fetch("/api/invites", {
 			headers: {
@@ -466,7 +476,7 @@ let currentEditInviteId: number | null = null;
 	}
 };
 
-(window as any).submitEditInvite = async () => {
+window.submitEditInvite = async () => {
 	if (currentEditInviteId === null) return;
 
 	const maxUsesInput = document.getElementById(
@@ -510,7 +520,7 @@ let currentEditInviteId: number | null = null;
 		}
 
 		await loadInvites();
-		closeEditInviteModal();
+		window.closeEditInviteModal();
 	} catch (error) {
 		console.error("Failed to update invite:", error);
 		alert("Failed to update invite");
@@ -520,7 +530,7 @@ let currentEditInviteId: number | null = null;
 	}
 };
 
-(window as any).closeEditInviteModal = () => {
+window.closeEditInviteModal = () => {
 	const modal = document.getElementById("editInviteModal");
 	if (modal) {
 		modal.style.display = "none";
@@ -535,7 +545,7 @@ let currentEditInviteId: number | null = null;
 	}
 };
 
-(window as any).deleteInvite = async (inviteId: number, event?: Event) => {
+window.deleteInvite = async (inviteId: number, event?: Event) => {
 	const btn = event?.target as HTMLButtonElement | undefined;
 
 	// Double-click confirmation pattern

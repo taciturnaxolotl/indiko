@@ -19,9 +19,11 @@ const USER_CODE_CHARS = "BCDFGHJKLMNPQRSTVWXZ";
 function generateUserCode(): string {
 	const bytes = crypto.randomBytes(8);
 	const chars: string[] = [];
-	for (let i = 0; i < 8; i++) {
+	let i = 0;
+	for (const byte of bytes) {
 		if (i === 4) chars.push("-");
-		chars.push(USER_CODE_CHARS[bytes[i] % USER_CODE_CHARS.length]);
+		chars.push(USER_CODE_CHARS[byte % USER_CODE_CHARS.length] as string);
+		i++;
 	}
 	return chars.join("");
 }

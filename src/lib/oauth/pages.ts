@@ -10,18 +10,11 @@ export function escapeHtml(value: string): string {
 }
 
 export const BASE_STYLES = `
-	:root {
-		--mahogany: #26242b;
-		--lavender: #d9d0de;
-		--old-rose: #bc8da0;
-		--rosewood: #a04668;
-		--berry-crush: #ab4967;
-	}
 	* { margin: 0; padding: 0; box-sizing: border-box; }
 	body {
-		font-family: "Space Grotesk", sans-serif;
-		background: var(--mahogany);
-		color: var(--lavender);
+		font-family: var(--font);
+		background: var(--ink);
+		color: var(--paper);
 		min-height: 100vh;
 		display: flex;
 		align-items: center;
@@ -31,22 +24,19 @@ export const BASE_STYLES = `
 	h1 {
 		font-size: 2rem;
 		font-weight: 700;
-		background: linear-gradient(135deg, var(--old-rose), var(--rosewood));
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
+		color: var(--accent);
 		margin-bottom: 1.5rem;
 		letter-spacing: -0.05rem;
 	}
 	p {
 		line-height: 1.8;
 		margin-bottom: 1rem;
-		color: var(--lavender);
+		color: var(--paper);
 	}
 	code {
 		background: rgba(12, 23, 19, 0.8);
 		padding: 0.25rem 0.5rem;
-		color: var(--berry-crush);
+		color: var(--accent);
 		font-size: 0.875rem;
 		word-break: break-all;
 		display: inline-block;
@@ -55,37 +45,37 @@ export const BASE_STYLES = `
 	.box {
 		max-width: 600px;
 		background: rgba(188, 141, 160, 0.05);
-		border: 2px solid var(--rosewood);
+		border: 2px solid var(--accent-deep);
 		padding: 2.5rem;
 	}
 	.error-details {
 		background: rgba(160, 70, 104, 0.1);
-		border-left: 4px solid var(--rosewood);
+		border-left: 4px solid var(--accent-deep);
 		padding: 1rem;
 		margin: 1.5rem 0;
 	}
 	.error-details strong {
 		display: block;
 		margin-bottom: 0.5rem;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 	}
 	.hint {
 		margin-top: 1.5rem;
 		font-size: 0.875rem;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 	}
 	button {
 		position: relative;
 		padding: 1rem 1.5rem;
-		border: 4px solid var(--mahogany);
-		font-family: "Space Grotesk", sans-serif;
+		border: 4px solid var(--ink-sunken);
+		font-family: var(--font);
 		font-size: 1rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1rem;
 		cursor: pointer;
 		transition: all 0.15s ease;
-		box-shadow: 6px 6px 0 var(--mahogany);
+		box-shadow: var(--shadow-hard);
 	}
 	button::before {
 		content: '';
@@ -98,14 +88,14 @@ export const BASE_STYLES = `
 	}
 	button:hover {
 		transform: translate(3px, 3px);
-		box-shadow: 3px 3px 0 var(--mahogany);
+		box-shadow: var(--shadow-hard-hover);
 	}
 	button:hover::before {
 		top: -7px; left: -7px; right: -7px; bottom: -7px;
 	}
 	button:active {
 		transform: translate(6px, 6px);
-		box-shadow: 0 0 0 var(--mahogany);
+		box-shadow: 0 0 0 var(--ink-sunken);
 	}
 `;
 
@@ -126,6 +116,7 @@ function page(title: string, styles: string, body: string): Response {
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="/ds/tokens.css">
 	<style>${BASE_STYLES}${styles}</style>
 </head>
 <body>
@@ -177,7 +168,7 @@ const CONSENT_STYLES = `
 		max-width: 30rem;
 		width: 100%;
 		background: rgba(188, 141, 160, 0.05);
-		border: 1px solid var(--old-rose);
+		border: 1px solid var(--paper-dim);
 		padding: 2.5rem;
 	}
 	.app-header {
@@ -207,24 +198,24 @@ const CONSENT_STYLES = `
 	.app-name {
 		font-size: 1.375rem;
 		font-weight: 700;
-		color: var(--lavender);
+		color: var(--paper);
 		line-height: 1.2;
 	}
 	.app-url {
 		font-size: 0.875rem;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 		font-family: monospace;
 		margin-top: 0.25rem;
 	}
 	.app-description {
 		font-size: 0.9375rem;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 		line-height: 1.6;
 		margin-top: 0.5rem;
 	}
 	.request-text {
 		font-size: 1rem;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 		margin-bottom: 1.5rem;
 		line-height: 1.6;
 	}
@@ -232,11 +223,11 @@ const CONSENT_STYLES = `
 		margin-bottom: 1.75rem;
 		padding: 1.25rem;
 		background: rgba(12, 23, 19, 0.4);
-		border: 1px solid var(--old-rose);
+		border: 1px solid var(--paper-dim);
 	}
 	.scope-title {
 		font-size: 0.75rem;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 		text-transform: uppercase;
 		letter-spacing: 0.1rem;
 		margin-bottom: 0.75rem;
@@ -248,7 +239,7 @@ const CONSENT_STYLES = `
 		gap: 0.25rem;
 	}
 	.scope-list li {
-		color: var(--lavender);
+		color: var(--paper);
 		font-size: 0.9375rem;
 		line-height: 1.5;
 	}
@@ -263,13 +254,13 @@ const CONSENT_STYLES = `
 	}
 	.scope-list label:hover {
 		background: rgba(188, 141, 160, 0.1);
-		border-color: var(--old-rose);
+		border-color: var(--paper-dim);
 	}
 	.scope-list input[type="checkbox"] {
 		appearance: none;
 		width: 1.25rem;
 		height: 1.25rem;
-		border: 2px solid var(--old-rose);
+		border: 2px solid var(--paper-dim);
 		background: rgba(12, 23, 19, 0.6);
 		cursor: pointer;
 		flex-shrink: 0;
@@ -278,8 +269,8 @@ const CONSENT_STYLES = `
 		margin: 0;
 	}
 	.scope-list input[type="checkbox"]:checked {
-		background: var(--berry-crush);
-		border-color: var(--berry-crush);
+		background: var(--accent);
+		border-color: var(--accent);
 	}
 	.scope-list input[type="checkbox"]:checked::after {
 		content: "✓";
@@ -287,14 +278,14 @@ const CONSENT_STYLES = `
 		inset: 0;
 		display: grid;
 		place-items: center;
-		color: var(--lavender);
+		color: var(--paper);
 		font-size: 0.875rem;
 		font-weight: 700;
 	}
 	.scope-list input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.7; }
 	.req {
 		font-style: normal;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 		font-size: 0.75rem;
 		margin-left: 0.5rem;
 	}
@@ -305,33 +296,33 @@ const CONSENT_STYLES = `
 	}
 	.buttons button { flex: 1; }
 	.allow {
-		background: var(--berry-crush);
-		color: var(--lavender);
+		background: var(--accent);
+		color: var(--paper);
 	}
-	.allow::before { border-color: var(--rosewood); }
+	.allow::before { border-color: var(--accent-deep); }
 	.deny {
 		background: transparent;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 	}
-	.deny::before { border-color: var(--old-rose); }
+	.deny::before { border-color: var(--paper-dim); }
 	.who {
 		margin-top: 1.5rem;
 		text-align: center;
 		font-size: 0.8125rem;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 	}
-	.who strong { color: var(--lavender); font-weight: 600; }
+	.who strong { color: var(--paper); font-weight: 600; }
 	.me-identity {
 		margin-top: 1rem;
 		padding: 0.75rem 1rem;
 		background: rgba(12, 23, 19, 0.4);
-		border: 1px solid var(--old-rose);
+		border: 1px solid var(--paper-dim);
 		font-size: 0.8125rem;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 		text-align: center;
 	}
 	.me-identity code {
-		color: var(--berry-crush);
+		color: var(--accent);
 		font-size: 0.8125rem;
 	}
 `;
@@ -426,6 +417,7 @@ export function consentPage(opts: ConsentPageOptions): Response {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/ds/tokens.css">
   <style>${BASE_STYLES}${CONSENT_STYLES}</style>
 </head>
 <body>

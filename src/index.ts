@@ -221,35 +221,27 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 			if (req.method === "DELETE") return deleteInvite(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
-		"/api/admin/users/:id/disable": (req: Request) => {
+		"/api/admin/users/:id/disable": (req) => {
 			if (req.method === "POST") {
-				const url = new URL(req.url);
-				const userId = url.pathname.split("/")[4];
-				return disableUser(req, userId);
+				return disableUser(req, req.params.id);
 			}
 			return new Response("Method not allowed", { status: 405 });
 		},
-		"/api/admin/users/:id/enable": (req: Request) => {
+		"/api/admin/users/:id/enable": (req) => {
 			if (req.method === "POST") {
-				const url = new URL(req.url);
-				const userId = url.pathname.split("/")[4];
-				return enableUser(req, userId);
+				return enableUser(req, req.params.id);
 			}
 			return new Response("Method not allowed", { status: 405 });
 		},
-		"/api/admin/users/:id/tier": (req: Request) => {
+		"/api/admin/users/:id/tier": (req) => {
 			if (req.method === "PUT") {
-				const url = new URL(req.url);
-				const userId = url.pathname.split("/")[4];
-				return updateUserTier(req, userId);
+				return updateUserTier(req, req.params.id);
 			}
 			return new Response("Method not allowed", { status: 405 });
 		},
-		"/api/admin/users/:id/delete": (req: Request) => {
+		"/api/admin/users/:id/delete": (req) => {
 			if (req.method === "DELETE") {
-				const url = new URL(req.url);
-				const userId = url.pathname.split("/")[4];
-				return deleteUser(req, userId);
+				return deleteUser(req, req.params.id);
 			}
 			return new Response("Method not allowed", { status: 405 });
 		},
