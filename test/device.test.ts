@@ -30,7 +30,7 @@ function seedApp() {
 
 async function requestDeviceCode(
 	clientId = CLIENT_ID,
-	scope = "profile",
+	scope = "profile offline_access",
 ): Promise<{
 	device_code: string;
 	user_code: string;
@@ -120,7 +120,7 @@ describe("POST /auth/device", () => {
 
 	test("stores device code in database", async () => {
 		seedApp();
-		const body = await requestDeviceCode();
+		const body = await requestDeviceCode(CLIENT_ID, "profile");
 
 		const row = db
 			.query(
@@ -210,7 +210,7 @@ describe("token endpoint: device_code grant", () => {
 		expect(body.token_type).toBe("Bearer");
 		expect(body.refresh_token).toBeString();
 		expect(body.me).toContain("/u/kieran");
-		expect(body.scope).toBe("profile");
+		expect(body.scope).toBe("profile offline_access");
 
 		// Device code should be cleaned up (single use)
 		const row = db

@@ -145,7 +145,7 @@ describe("token endpoint: authorization_code grant", () => {
 	test("happy path: issues access + refresh tokens, marks code used", async () => {
 		const userId = createUser({ username: "kieran" });
 		seedApp();
-		const code = seedAuthCode(userId, { scopes: ["profile"] });
+		const code = seedAuthCode(userId, { scopes: ["profile", "offline_access"] });
 
 		const res = await token(tokenReq(exchangeBody(code)));
 		expect(res.status).toBe(200);
@@ -155,7 +155,7 @@ describe("token endpoint: authorization_code grant", () => {
 		expect(body.token_type).toBe("Bearer");
 		expect(body.access_token).toBeString();
 		expect(body.refresh_token).toBeString();
-		expect(body.scope).toBe("profile");
+		expect(body.scope).toBe("profile offline_access");
 		expect(body.me).toContain("/u/kieran");
 		expect(body.profile.name).toBeString();
 
@@ -186,12 +186,37 @@ describe("token endpoint: authorization_code grant", () => {
 		const second = await token(tokenReq(exchangeBody(code)));
 		expect(second.status).toBe(400);
 	});
+
+	test("no refresh token without offline_access scope", async () => {
+		const userId = createUser({});
+		seedApp();
+		const code = seedAuthCode(userId, { scopes: ["profile"] });
+
+		const res = await token(tokenReq(exchangeBody(code)));
+		expect(res.status).toBe(200);
+
+		const body = await res.json();
+		expect(body.access_token).toBeString();
+		expect(body.refresh_token).toBeUndefined();
+	});
+
+	test("refresh token issued when offline_access scope requested", async () => {
+		const userId = createUser({});
+		seedApp();
+		const code = seedAuthCode(userId, { scopes: ["profile", "offline_access"] });
+
+		const res = await token(tokenReq(exchangeBody(code)));
+		expect(res.status).toBe(200);
+
+		const body = await res.json();
+		expect(body.refresh_token).toBeString();
+	});
 });
 
 describe("token endpoint: refresh_token grant", () => {
 	async function issueTokens(userId: number) {
 		seedApp();
-		const code = seedAuthCode(userId);
+		const code = seedAuthCode(userId, { scopes: ["profile", "offline_access"] });
 		const res = await token(tokenReq(exchangeBody(code)));
 		return (await res.json()) as {
 			access_token: string;
@@ -250,7 +275,7 @@ describe("token endpoint: refresh_token grant", () => {
 describe("token endpoint: refresh family detection (RFC 9700)", () => {
 	async function issueTokens(userId: number) {
 		seedApp();
-		const code = seedAuthCode(userId);
+		const code = seedAuthCode(userId, { scopes: ["profile", "offline_access"] });
 		const res = await token(tokenReq(exchangeBody(code)));
 		return (await res.json()) as {
 			access_token: string;

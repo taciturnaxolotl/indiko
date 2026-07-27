@@ -229,6 +229,8 @@ Indiko provides a complete OAuth 2.0 token management system with access tokens,
 
 ### refresh tokens
 
+A refresh token is only issued when your app requests the `offline_access` scope at authorization time. If you don't request it, the grant is one-shot: you get an access token (1 hour) and nothing more. See [scopes](#scopes).
+
 Exchange a refresh token for a new access token (and a new rotated refresh token):
 
 ```http
@@ -249,12 +251,14 @@ Response:
   "expires_in": 3600,
   "refresh_token": "RT_new_rotated_token...",
   "me": "{{origin}}/u/username",
-  "scope": "profile email",
+  "scope": "profile email offline_access",
   "iss": "{{origin}}"
 }
 ```
 
 > **Token rotation:** Refresh tokens are rotated on every use. The old refresh token is invalidated when a new one is issued. Always store and use the latest refresh token from the response.
+
+> **Reuse detection (RFC 9700):** If a refresh token that was already rotated is presented again, Indiko treats it as a possible token leak and **revokes the entire token family** — the current access and refresh tokens in that chain stop working immediately. This means a stolen refresh token can't be replayed without killing the session it came from. Well-behaved clients never replay an old token, so this only fires on a race or a leak; if it fires for you, re-authorize and check how the token was stored.
 
 ### token introspection
 
@@ -406,8 +410,11 @@ Scopes control what data your app can access:
 | `profile` | Access to user profile (name, photo, URL) — **always required** |
 | `email` | Access to user email address |
 | `openid` | Request an OIDC ID token |
+| `offline_access` | Request a refresh token for long-lived access |
 
 Users can uncheck optional scopes during authorization. The `profile` scope is always granted.
+
+> **offline_access:** Request this only if your app needs to act on the user's behalf after the access token expires. Without it you get a 1-hour access token and no refresh token. Users see it on the consent screen as a distinct "keep you signed in long-term" permission.
 
 > **Scope handling:** Requested scopes appear as checkboxes on the consent screen. Users can deny optional scopes, and your app receives only the approved subset in the token response.
 

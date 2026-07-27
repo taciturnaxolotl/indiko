@@ -293,8 +293,10 @@ async function handleDeviceCodeGrant(
 
 	const accessToken = generateToken();
 	const expiresAt = now + ACCESS_TOKEN_TTL;
-	const refreshToken = generateToken();
-	const refreshExpiresAt = now + REFRESH_TOKEN_TTL;
+
+	const issueRefresh = scopes.includes("offline_access");
+	const refreshToken = issueRefresh ? generateToken() : null;
+	const refreshExpiresAt = issueRefresh ? now + REFRESH_TOKEN_TTL : null;
 
 	db.query(
 		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -319,19 +321,21 @@ async function handleDeviceCodeGrant(
 		profile.email = user.email;
 	}
 
-	return Response.json(
-		{
-			access_token: accessToken,
-			token_type: "Bearer",
-			expires_in: ACCESS_TOKEN_TTL,
-			refresh_token: refreshToken,
-			me: meValue,
-			profile,
-			scope: deviceCode.scope,
-			iss: origin,
-		},
-		{ headers: NO_STORE_HEADERS },
-	);
+	const deviceResponse: Record<string, unknown> = {
+		access_token: accessToken,
+		token_type: "Bearer",
+		expires_in: ACCESS_TOKEN_TTL,
+		me: meValue,
+		profile,
+		scope: deviceCode.scope,
+		iss: origin,
+	};
+
+	if (refreshToken) {
+		deviceResponse.refresh_token = refreshToken;
+	}
+
+	return Response.json(deviceResponse, { headers: NO_STORE_HEADERS });
 }
 
 // Verify pre-registered client credentials; returns a Response on failure
@@ -532,8 +536,12 @@ async function handleAuthorizationCodeGrant(
 
 	const accessToken = generateToken();
 	const expiresAt = now + ACCESS_TOKEN_TTL;
-	const refreshToken = generateToken();
-	const refreshExpiresAt = now + REFRESH_TOKEN_TTL;
+
+	// Only issue a refresh token when the client requested offline_access
+	// (OIDC Core §11). Otherwise this is a one-shot grant, access token only.
+	const issueRefresh = scopes.includes("offline_access");
+	const refreshToken = issueRefresh ? generateToken() : null;
+	const refreshExpiresAt = issueRefresh ? now + REFRESH_TOKEN_TTL : null;
 
 	db.query(
 		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -552,12 +560,15 @@ async function handleAuthorizationCodeGrant(
 		access_token: accessToken,
 		token_type: "Bearer",
 		expires_in: ACCESS_TOKEN_TTL,
-		refresh_token: refreshToken,
 		me: meValue,
 		profile,
 		scope: scopes.join(" "),
 		iss: origin,
 	};
+
+	if (refreshToken) {
+		response.refresh_token = refreshToken;
+	}
 
 	if (refreshToken) {
 		response.refresh_token = refreshToken;

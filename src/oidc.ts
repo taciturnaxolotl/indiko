@@ -143,7 +143,7 @@ export function getDiscoveryDocument(origin: string) {
 		token_endpoint: `${origin}/auth/token`,
 		userinfo_endpoint: `${origin}/userinfo`,
 		jwks_uri: `${origin}/jwks`,
-		scopes_supported: ["openid", "profile", "email"],
+		scopes_supported: ["openid", "profile", "email", "offline_access"],
 		response_types_supported: ["code"],
 		grant_types_supported: [
 			"authorization_code",
