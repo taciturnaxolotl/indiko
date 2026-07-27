@@ -120,9 +120,12 @@ export async function authorizeGet(req: Request): Promise<Response> {
 	// Step 5: redirect_uri is now trusted — report remaining errors via
 	// redirect per RFC 6749 §4.1.2.1
 	const redirectError = (error: string, description: string): Response => {
+		const origin = process.env.ORIGIN || "http://localhost:3000";
 		const errorUrl = new URL(redirectUri);
 		errorUrl.searchParams.set("error", error);
 		errorUrl.searchParams.set("error_description", description);
+		// RFC 9207: iss must be present on error responses too
+		errorUrl.searchParams.set("iss", origin);
 		if (state) errorUrl.searchParams.set("state", state);
 		return Response.redirect(errorUrl.toString(), 302);
 	};
@@ -336,8 +339,9 @@ export async function authorizePost(req: Request): Promise<Response> {
 	}
 
 	if (action === "deny") {
+		const origin = process.env.ORIGIN || "http://localhost:3000";
 		return Response.redirect(
-			`${redirectUri}?error=access_denied&state=${state}`,
+			`${redirectUri}?error=access_denied&state=${state}&iss=${encodeURIComponent(origin)}`,
 		);
 	}
 
