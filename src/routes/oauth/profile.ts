@@ -237,6 +237,8 @@ export function userProfile(req: Request): Response {
 		headers: {
 			"Content-Type": "text/html",
 			Link: `<${origin}/.well-known/oauth-authorization-server>; rel="indieauth-metadata"`,
+			"X-Frame-Options": "DENY",
+			"Content-Security-Policy": "frame-ancestors 'none'",
 		},
 	});
 }

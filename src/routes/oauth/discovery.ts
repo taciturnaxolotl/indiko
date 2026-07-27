@@ -115,6 +115,7 @@ export function indieauthMetadata(): Response {
 		token_endpoint_auth_methods_supported: ["none", "client_secret_post"],
 		service_documentation: `${origin}/docs`,
 		client_id_metadata_document_supported: true,
+		authorization_response_iss_parameter_supported: true,
 	};
 
 	return Response.json(metadata, {

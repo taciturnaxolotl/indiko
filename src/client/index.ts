@@ -5,7 +5,6 @@ import type IToast from "./ds/toast";
 
 const token = localStorage.getItem("indiko_session");
 
-
 let welcome!: HTMLElement;
 let subtitle!: HTMLElement;
 let recentApps!: HTMLElement;
@@ -68,8 +67,14 @@ function init() {
 
 	profileForm.addEventListener("submit", onProfileSubmit);
 	deleteAccountBtn.addEventListener("click", onDeleteAccount);
-	passkeysList.addEventListener("rename", onPasskeyRename as unknown as EventListener);
-	passkeysList.addEventListener("remove", onPasskeyRemove as unknown as EventListener);
+	passkeysList.addEventListener(
+		"rename",
+		onPasskeyRename as unknown as EventListener,
+	);
+	passkeysList.addEventListener(
+		"remove",
+		onPasskeyRemove as unknown as EventListener,
+	);
 	addPasskeyBtn.addEventListener("click", onAddPasskey);
 
 	checkAuth();

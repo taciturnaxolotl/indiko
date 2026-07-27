@@ -1,4 +1,5 @@
 const token = localStorage.getItem("indiko_session");
+
 import "./ds";
 import type IToast from "./ds/toast";
 

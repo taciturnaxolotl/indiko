@@ -25,6 +25,14 @@ describe("errorPage", () => {
 		expect(html).toContain("&lt;img src=x&gt;");
 		expect(html).not.toContain("<img src=x>");
 	});
+
+	test("includes clickjacking protection headers", () => {
+		const res = errorPage({ title: "t", message: "m" });
+		expect(res.headers.get("X-Frame-Options")).toBe("DENY");
+		expect(res.headers.get("Content-Security-Policy")).toBe(
+			"frame-ancestors 'none'",
+		);
+	});
 });
 
 describe("consentPage", () => {
@@ -71,5 +79,13 @@ describe("consentPage", () => {
 		expect(html).toContain('name="code_challenge" value="challenge"');
 		expect(html).toContain('name="me" value="https://me.example/"');
 		expect(html).toContain('name="nonce" value="n-1"');
+	});
+
+	test("includes clickjacking protection headers", () => {
+		const res = consentPage(base);
+		expect(res.headers.get("X-Frame-Options")).toBe("DENY");
+		expect(res.headers.get("Content-Security-Policy")).toBe(
+			"frame-ancestors 'none'",
+		);
 	});
 });

@@ -109,6 +109,12 @@ const BASE_STYLES = `
 	}
 `;
 
+// RFC 9700 §4.16: prevent clickjacking on the authorization endpoint
+const FRAME_DENY_HEADERS = {
+	"X-Frame-Options": "DENY",
+	"Content-Security-Policy": "frame-ancestors 'none'",
+};
+
 function page(title: string, styles: string, body: string): Response {
 	const html = `<!DOCTYPE html>
 <html lang="en">
@@ -129,7 +135,7 @@ ${body}
 
 	return new Response(html, {
 		status: 400,
-		headers: { "Content-Type": "text/html" },
+		headers: { "Content-Type": "text/html", ...FRAME_DENY_HEADERS },
 	});
 }
 
@@ -414,6 +420,6 @@ ${body}
 </html>`;
 
 	return new Response(html, {
-		headers: { "Content-Type": "text/html" },
+		headers: { "Content-Type": "text/html", ...FRAME_DENY_HEADERS },
 	});
 }

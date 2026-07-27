@@ -163,5 +163,6 @@ export function getDiscoveryDocument(origin: string) {
 			"website",
 		],
 		code_challenge_methods_supported: ["S256"],
+		authorization_response_iss_parameter_supported: true,
 	};
 }

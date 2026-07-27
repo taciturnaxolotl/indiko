@@ -59,12 +59,14 @@ export default class INav extends Elena(HTMLElement) {
 					${user?.isAdmin ? this.link("/admin", "admin", "admin") : nothing}
 				</div>
 				<div class="who">
-					${user
-						? html`
+					${
+						user
+							? html`
 							<a href="/u/${user.username}" class="user">${user.username}</a>
 							<button type="button" class="signout" id="signout">sign out</button>
 						`
-						: nothing}
+							: nothing
+					}
 				</div>
 			</nav>
 		`;
