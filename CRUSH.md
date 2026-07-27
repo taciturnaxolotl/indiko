@@ -231,6 +231,8 @@ test/                  # Tests (bun:test)
 - `bun run start` - Start production server
 - `bun run format` - Format all files with Biome
 - `bun test` - Run tests (bun:test)
+- `bun scripts/seed-dev.ts` - Seed database with dev data (6 users, 5 apps, permissions, invites, tokens)
+- `bun scripts/seed-dev.ts --reset` - Wipe tables then seed
 - `bun scripts/audit-ldap-orphans.ts [--suspend|--deactivate|--dry-run]` - Audit LDAP orphans
 - `bun scripts/reset-passkey.ts <username>` - Reset user passkey
 
