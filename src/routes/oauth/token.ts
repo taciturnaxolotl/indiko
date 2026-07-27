@@ -7,6 +7,7 @@ import {
 	unauthorizedResponse,
 } from "../../lib/oauth/errors";
 import { canonicalizeURL, verifyPKCE } from "../../lib/oauth/urls";
+import { verifySecret } from "../../lib/secrets";
 import { signIDToken } from "../../oidc";
 
 const ACCESS_TOKEN_TTL = 3600; // 1 hour
@@ -343,12 +344,7 @@ function verifyClientCredentials(
 		return oauthError(500, "server_error", "Client secret not configured");
 	}
 
-	const providedSecretHash = crypto
-		.createHash("sha256")
-		.update(client_secret)
-		.digest("hex");
-
-	if (providedSecretHash !== app.client_secret_hash) {
+	if (!verifySecret(client_secret, app.client_secret_hash)) {
 		return unauthorizedResponse("invalid_client", "Invalid client_secret");
 	}
 

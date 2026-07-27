@@ -1,11 +1,7 @@
-import crypto from "node:crypto";
 import { nanoid } from "nanoid";
 import { db } from "../db";
+import { hashSecret } from "../lib/secrets";
 import { getSessionUser } from "../lib/session";
-
-function hashSecret(secret: string): string {
-	return crypto.createHash("sha256").update(secret).digest("hex");
-}
 
 function generateClientSecret(): string {
 	return `iks_${nanoid(43)}`; // indiko secret
