@@ -8,9 +8,76 @@ export interface ClientMetadata {
 	client_uri?: string;
 	logo_uri?: string;
 	redirect_uris?: string[];
+	token_endpoint_auth_method?: string;
+	[key: string]: unknown;
 }
 
-// Fetch client metadata from client_id URL (with SSRF protection)
+// Per the Client ID Metadata Document draft, a public client publishing
+// metadata at its URL must not claim a shared-secret auth method.
+const SECRET_AUTH_METHODS = new Set([
+	"client_secret_post",
+	"client_secret_basic",
+	"client_secret_jwt",
+	"private_key_jwt",
+]);
+
+// Draft recommends bounding the metadata document size.
+const MAX_METADATA_BYTES = 5 * 1024;
+
+// Validate a fetched metadata document against the client_id URL it came
+// from. Pure so it's directly testable without a live fetch.
+export function validateMetadataDocument(
+	text: string,
+	clientId: string,
+): { success: boolean; metadata?: ClientMetadata; error?: string } {
+	if (text.length > MAX_METADATA_BYTES) {
+		return { success: false, error: "Client metadata document too large" };
+	}
+
+	let metadata: ClientMetadata;
+	try {
+		metadata = JSON.parse(text) as ClientMetadata;
+	} catch {
+		return { success: false, error: "Invalid JSON in client metadata" };
+	}
+
+	if (metadata.client_id && metadata.client_id !== clientId) {
+		return {
+			success: false,
+			error: "client_id in metadata does not match URL",
+		};
+	}
+
+	// Public clients publishing metadata must not request a shared-secret
+	// auth method; there's no registration step to establish one.
+	if (
+		metadata.token_endpoint_auth_method &&
+		SECRET_AUTH_METHODS.has(metadata.token_endpoint_auth_method)
+	) {
+		return {
+			success: false,
+			error: `token_endpoint_auth_method "${metadata.token_endpoint_auth_method}" is not allowed for URL-based clients`,
+		};
+	}
+
+	// Validate metadata URL fields to prevent SSRF via later fetches
+	if (metadata.logo_uri) {
+		const logoValidation = validateExternalURL(metadata.logo_uri);
+		if (!logoValidation.safe) {
+			delete metadata.logo_uri;
+		}
+	}
+
+	if (metadata.client_uri) {
+		const clientUriValidation = validateExternalURL(metadata.client_uri);
+		if (!clientUriValidation.safe) {
+			delete metadata.client_uri;
+		}
+	}
+
+	return { success: true, metadata };
+}
+
 export async function fetchClientMetadata(clientId: string): Promise<{
 	success: boolean;
 	metadata?: ClientMetadata;
@@ -52,35 +119,8 @@ export async function fetchClientMetadata(clientId: string): Promise<{
 	const contentType = response.headers.get("content-type") || "";
 
 	if (contentType.includes("application/json")) {
-		try {
-			const metadata = (await response.json()) as ClientMetadata;
-
-			if (metadata.client_id && metadata.client_id !== clientId) {
-				return {
-					success: false,
-					error: "client_id in metadata does not match URL",
-				};
-			}
-
-			// Validate metadata URL fields to prevent SSRF via later fetches
-			if (metadata.logo_uri) {
-				const logoValidation = validateExternalURL(metadata.logo_uri);
-				if (!logoValidation.safe) {
-					delete metadata.logo_uri;
-				}
-			}
-
-			if (metadata.client_uri) {
-				const clientUriValidation = validateExternalURL(metadata.client_uri);
-				if (!clientUriValidation.safe) {
-					delete metadata.client_uri;
-				}
-			}
-
-			return { success: true, metadata };
-		} catch {
-			return { success: false, error: "Invalid JSON in client metadata" };
-		}
+		const text = await response.text();
+		return validateMetadataDocument(text, clientId);
 	}
 
 	// HTML: look for <link rel="redirect_uri"> tags

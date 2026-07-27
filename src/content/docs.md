@@ -76,6 +76,8 @@ Alternatively, you can publish redirect URIs as HTML `<link>` tags:
 
 > **Security:** If your `redirect_uri` uses a different host than your `client_id`, you MUST publish `redirect_uris` in your client metadata. This prevents unauthorized apps from hijacking your client_id.
 
+> **Client ID Metadata Document (CIMD):** This URL-published metadata follows the OAuth Client ID Metadata Document draft. A few rules apply: the `client_id` in the document must exactly match the URL it's fetched from, the document must be under 5 KB, and it must not request a shared-secret `token_endpoint_auth_method` (like `client_secret_post`) — public URL-based clients have no secret. If you need a client secret, use [dynamic registration](#dynamic-client-registration-rfc-7591) instead.
+
 ### for users
 
 You'll need an invite code to create an account. Once registered:
