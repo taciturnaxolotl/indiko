@@ -4,7 +4,6 @@ import adminHTML from "./html/admin.html";
 import adminClientsHTML from "./html/admin-clients.html";
 import adminInvitesHTML from "./html/admin-invites.html";
 import appsHTML from "./html/apps.html";
-import docsHTML from "./html/docs.html";
 import indexHTML from "./html/index.html";
 import loginHTML from "./html/login.html";
 import { getLdapAccounts, updateOrphanedAccounts } from "./ldap-cleanup";
@@ -42,6 +41,7 @@ import {
 	setUserRole,
 	updateClient,
 } from "./routes/clients";
+import { docsJs, docsMarkdown, docsPage } from "./routes/docs";
 import { authorizeGet, authorizePost } from "./routes/oauth/authorize";
 import { deviceAuthorization } from "./routes/oauth/device";
 import { deviceGet, devicePost } from "./routes/oauth/device-verify";
@@ -130,7 +130,13 @@ const server = Bun.serve({
 		"/admin/apps": () => Response.redirect("/admin/clients", 302),
 		"/admin/clients": adminClientsHTML,
 		"/login": loginHTML,
-		"/docs": docsHTML,
+		"/docs": docsPage,
+		"/docs.md": docsMarkdown,
+		"/docs.css": Bun.file("./public/docs.css"),
+		"/docs.js": docsJs,
+		"/styles.css": Bun.file("./src/styles.css"),
+		"/ds/tokens.css": Bun.file("./src/client/ds/tokens.css"),
+		"/ds/components.css": Bun.file("./src/client/ds/components.css"),
 		"/apps": appsHTML,
 		// Well-known endpoints
 		"/.well-known/security.txt": () => {
