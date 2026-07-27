@@ -97,7 +97,7 @@ export async function addPasskeyOptions(req: Request): Promise<Response> {
 	// Store challenge
 	const expiresAt = Math.floor(Date.now() / 1000) + 300; // 5 minutes
 	db.query(
-		"INSERT INTO challenges (challenge, username, type, expires_at) VALUES (?, ?, 'passkey_add', ?)",
+		"INSERT INTO challenges (challenge, username, type, expires_at) VALUES (?, ?, 'registration', ?)",
 	).run(options.challenge, user.username, expiresAt);
 
 	return Response.json(options);
@@ -150,7 +150,7 @@ export async function addPasskeyVerify(req: Request): Promise<Response> {
 		// Verify challenge exists and is valid
 		const challenge = db
 			.query(
-				"SELECT challenge, expires_at FROM challenges WHERE challenge = ? AND username = ? AND type = 'passkey_add'",
+				"SELECT challenge, expires_at FROM challenges WHERE challenge = ? AND username = ? AND type = 'registration'",
 			)
 			.get(expectedChallenge, user.username) as
 			| { challenge: string; expires_at: number }

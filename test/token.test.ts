@@ -145,7 +145,9 @@ describe("token endpoint: authorization_code grant", () => {
 	test("happy path: issues access + refresh tokens, marks code used", async () => {
 		const userId = createUser({ username: "kieran" });
 		seedApp();
-		const code = seedAuthCode(userId, { scopes: ["profile", "offline_access"] });
+		const code = seedAuthCode(userId, {
+			scopes: ["profile", "offline_access"],
+		});
 
 		const res = await token(tokenReq(exchangeBody(code)));
 		expect(res.status).toBe(200);
@@ -203,7 +205,9 @@ describe("token endpoint: authorization_code grant", () => {
 	test("refresh token issued when offline_access scope requested", async () => {
 		const userId = createUser({});
 		seedApp();
-		const code = seedAuthCode(userId, { scopes: ["profile", "offline_access"] });
+		const code = seedAuthCode(userId, {
+			scopes: ["profile", "offline_access"],
+		});
 
 		const res = await token(tokenReq(exchangeBody(code)));
 		expect(res.status).toBe(200);
@@ -216,7 +220,9 @@ describe("token endpoint: authorization_code grant", () => {
 describe("token endpoint: refresh_token grant", () => {
 	async function issueTokens(userId: number) {
 		seedApp();
-		const code = seedAuthCode(userId, { scopes: ["profile", "offline_access"] });
+		const code = seedAuthCode(userId, {
+			scopes: ["profile", "offline_access"],
+		});
 		const res = await token(tokenReq(exchangeBody(code)));
 		return (await res.json()) as {
 			access_token: string;
@@ -275,7 +281,9 @@ describe("token endpoint: refresh_token grant", () => {
 describe("token endpoint: refresh family detection (RFC 9700)", () => {
 	async function issueTokens(userId: number) {
 		seedApp();
-		const code = seedAuthCode(userId, { scopes: ["profile", "offline_access"] });
+		const code = seedAuthCode(userId, {
+			scopes: ["profile", "offline_access"],
+		});
 		const res = await token(tokenReq(exchangeBody(code)));
 		return (await res.json()) as {
 			access_token: string;
@@ -340,9 +348,7 @@ describe("token endpoint: refresh family detection (RFC 9700)", () => {
 		expect(afterRevoke.status).toBe(400);
 
 		const rows = db
-			.query(
-				"SELECT revoked FROM tokens WHERE client_id = ? AND revoked = 1",
-			)
+			.query("SELECT revoked FROM tokens WHERE client_id = ? AND revoked = 1")
 			.all(CLIENT_ID) as Array<{ revoked: number }>;
 		expect(rows.length).toBeGreaterThan(0);
 	});

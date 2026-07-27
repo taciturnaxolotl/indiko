@@ -35,15 +35,19 @@ if (reset) {
 		db.run(`DELETE FROM ${table};`);
 	}
 	// Reset autoincrement counters
-	db.run("DELETE FROM sqlite_sequence WHERE name IN ('users','credentials','sessions','apps','permissions','invites','tokens','invite_roles','invite_uses','authcodes','challenges');");
+	db.run(
+		"DELETE FROM sqlite_sequence WHERE name IN ('users','credentials','sessions','apps','permissions','invites','tokens','invite_roles','invite_uses','authcodes','challenges');",
+	);
 	console.log("done.");
 }
 
 const now = Math.floor(Date.now() / 1000);
 
 // --- Users ---
+// tacy is always the admin (index 0). Look up existing users by username
+// so we can seed on top of a live db without --reset.
 const users = [
-	{ username: "kieran", name: "Kieran Klukas", email: "kieran@dunkirk.sh", tier: "admin", status: "active" },
+	{ username: "tacy", name: "Kieran Klukas", email: "kieran@dunkirk.sh", tier: "admin", status: "active" },
 	{ username: "alice", name: "Alice Carter", email: "alice@example.com", tier: "developer", status: "active" },
 	{ username: "bob", name: "Bob Nguyen", email: "bob@example.com", tier: "user", status: "active" },
 	{ username: "charlie", name: "Charlie Park", email: "charlie@example.com", tier: "user", status: "suspended" },
@@ -52,30 +56,46 @@ const users = [
 ];
 
 const userIds: number[] = [];
+let insertedUsers = 0;
 for (const u of users) {
-	const isAdmin = u.tier === "admin" ? 1 : 0;
-	const res = db
-		.query(
-			`INSERT INTO users (username, name, email, tier, status, is_admin, created_at, url)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		)
-		.run(
-			u.username,
-			u.name,
-			u.email,
-			u.tier,
-			u.status,
-			isAdmin,
-			now - Math.floor(Math.random() * 30 * 86400),
-			`https://${u.username}.example.com`,
-		);
-	userIds.push(Number(res.lastInsertRowid));
+	const existing = db
+		.query("SELECT id FROM users WHERE username = ?")
+		.get(u.username) as { id: number } | undefined;
+
+	if (existing) {
+		userIds.push(existing.id);
+	} else {
+		const isAdmin = u.tier === "admin" ? 1 : 0;
+		const res = db
+			.query(
+				`INSERT INTO users (username, name, email, tier, status, is_admin, created_at, url)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			)
+			.run(
+				u.username,
+				u.name,
+				u.email,
+				u.tier,
+				u.status,
+				isAdmin,
+				now - Math.floor(Math.random() * 30 * 86400),
+				`https://${u.username}.example.com`,
+			);
+		userIds.push(Number(res.lastInsertRowid));
+		insertedUsers++;
+	}
 }
-console.log(`inserted ${userIds.length} users`);
+console.log(`${insertedUsers} new users inserted, ${users.length - insertedUsers} existing`);
 
 // --- Credentials (fake passkeys) ---
+// Only insert fake creds for newly-created users. Existing users keep their real passkeys.
 let credCount = 0;
 for (const [i, uid] of userIds.entries()) {
+	const existingCreds = db
+		.query("SELECT COUNT(*) as count FROM credentials WHERE user_id = ?")
+		.get(uid) as { count: number };
+	if (existingCreds.count > 0) continue;
+
 	const numCreds = i === 0 ? 3 : i % 2 === 0 ? 2 : 1;
 	for (let j = 0; j < numCreds; j++) {
 		const credId = crypto.getRandomValues(new Uint8Array(32));
@@ -97,11 +117,20 @@ for (const [i, uid] of userIds.entries()) {
 console.log(`inserted ${credCount} credentials`);
 
 // --- Sessions (valid for 24h so you can actually log in) ---
-const sessionToken = "dev-session-kieran";
-db.query(
-	"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
-).run(sessionToken, userIds[0], now + 86400);
-console.log("inserted 1 dev session (token: dev-session-kieran)");
+const sessionToken = "dev-session-tacy";
+const existingSession = db
+	.query("SELECT id FROM sessions WHERE token = ?")
+	.get(sessionToken) as { id: number } | undefined;
+if (!existingSession) {
+	db.query(
+		"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
+	).run(sessionToken, userIds[0], now + 86400);
+	console.log("inserted 1 dev session (token: dev-session-tacy)");
+} else {
+	// Refresh expiry on existing session
+	db.query("UPDATE sessions SET expires_at = ? WHERE token = ?").run(now + 86400, sessionToken);
+	console.log("refreshed existing dev session (token: dev-session-tacy)");
+}
 
 // --- Apps (OAuth clients) ---
 const apps = [
@@ -118,7 +147,8 @@ const apps = [
 	},
 	{
 		client_id: "https://blog.dunkirk.sh",
-		redirect_uris: '["https://blog.dunkirk.sh/auth/callback","https://blog.dunkirk.sh/indieauth"]',
+		redirect_uris:
+			'["https://blog.dunkirk.sh/auth/callback","https://blog.dunkirk.sh/indieauth"]',
 		name: "Dunkirk Blog",
 		logo_url: null,
 		description: "IndieWeb blog with Micropub support",
@@ -162,7 +192,13 @@ const apps = [
 	},
 ];
 
+let insertedApps = 0;
 for (const a of apps) {
+	const existing = db
+		.query("SELECT id FROM apps WHERE client_id = ?")
+		.get(a.client_id) as { id: number } | undefined;
+	if (existing) continue;
+
 	db.query(
 		`INSERT INTO apps (client_id, redirect_uris, name, logo_url, description, is_preregistered, client_secret_hash, available_roles, default_role, first_seen, last_used)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -179,34 +215,111 @@ for (const a of apps) {
 		now - Math.floor(Math.random() * 90 * 86400),
 		now - Math.floor(Math.random() * 7 * 86400),
 	);
+	insertedApps++;
 }
-console.log(`inserted ${apps.length} apps`);
+console.log(`${insertedApps} new apps inserted`);
 
 // --- Permissions (user -> app links) ---
 const perms = [
 	// Kieran has access to everything
-	{ user: 0, client: "https://auth.dunkirk.sh", scopes: '["profile","email","openid"]', role: "admin" },
-	{ user: 0, client: "https://blog.dunkirk.sh", scopes: '["profile","create","update"]', role: null },
-	{ user: 0, client: "https://infra.dunkirk.sh", scopes: '["profile","email"]', role: "admin" },
-	{ user: 0, client: "https://webring.dunkirk.sh", scopes: '["profile"]', role: null },
-	{ user: 0, client: "https://photos.kieranklukas.com", scopes: '["profile","email","upload"]', role: "admin" },
+	{
+		user: 0,
+		client: "https://auth.dunkirk.sh",
+		scopes: '["profile","email","openid"]',
+		role: "admin",
+	},
+	{
+		user: 0,
+		client: "https://blog.dunkirk.sh",
+		scopes: '["profile","create","update"]',
+		role: null,
+	},
+	{
+		user: 0,
+		client: "https://infra.dunkirk.sh",
+		scopes: '["profile","email"]',
+		role: "admin",
+	},
+	{
+		user: 0,
+		client: "https://webring.dunkirk.sh",
+		scopes: '["profile"]',
+		role: null,
+	},
+	{
+		user: 0,
+		client: "https://photos.kieranklukas.com",
+		scopes: '["profile","email","upload"]',
+		role: "admin",
+	},
 	// Alice has access to a few
-	{ user: 1, client: "https://auth.dunkirk.sh", scopes: '["profile","email"]', role: "editor" },
-	{ user: 1, client: "https://blog.dunkirk.sh", scopes: '["profile","create"]', role: null },
-	{ user: 1, client: "https://photos.kieranklukas.com", scopes: '["profile","upload"]', role: "editor" },
+	{
+		user: 1,
+		client: "https://auth.dunkirk.sh",
+		scopes: '["profile","email"]',
+		role: "editor",
+	},
+	{
+		user: 1,
+		client: "https://blog.dunkirk.sh",
+		scopes: '["profile","create"]',
+		role: null,
+	},
+	{
+		user: 1,
+		client: "https://photos.kieranklukas.com",
+		scopes: '["profile","upload"]',
+		role: "editor",
+	},
 	// Bob has access to 2
-	{ user: 2, client: "https://blog.dunkirk.sh", scopes: '["profile"]', role: null },
-	{ user: 2, client: "https://infra.dunkirk.sh", scopes: '["profile","email"]', role: "operator" },
+	{
+		user: 2,
+		client: "https://blog.dunkirk.sh",
+		scopes: '["profile"]',
+		role: null,
+	},
+	{
+		user: 2,
+		client: "https://infra.dunkirk.sh",
+		scopes: '["profile","email"]',
+		role: "operator",
+	},
 	// Dana has access to 3
-	{ user: 4, client: "https://auth.dunkirk.sh", scopes: '["profile","email"]', role: "viewer" },
-	{ user: 4, client: "https://photos.kieranklukas.com", scopes: '["profile","upload"]', role: "editor" },
-	{ user: 4, client: "https://webring.dunkirk.sh", scopes: '["profile"]', role: null },
+	{
+		user: 4,
+		client: "https://auth.dunkirk.sh",
+		scopes: '["profile","email"]',
+		role: "viewer",
+	},
+	{
+		user: 4,
+		client: "https://photos.kieranklukas.com",
+		scopes: '["profile","upload"]',
+		role: "editor",
+	},
+	{
+		user: 4,
+		client: "https://webring.dunkirk.sh",
+		scopes: '["profile"]',
+		role: null,
+	},
 	// Eve has access to 1
-	{ user: 5, client: "https://blog.dunkirk.sh", scopes: '["profile","email"]', role: null },
+	{
+		user: 5,
+		client: "https://blog.dunkirk.sh",
+		scopes: '["profile","email"]',
+		role: null,
+	},
 ];
 
+let insertedPerms = 0;
 for (const p of perms) {
 	const clientId = p.client;
+	const existing = db
+		.query("SELECT id FROM permissions WHERE user_id = ? AND client_id = ?")
+		.get(userIds[p.user], clientId) as { id: number } | undefined;
+	if (existing) continue;
+
 	db.query(
 		`INSERT INTO permissions (user_id, client_id, scopes, role, granted_at, last_used)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
@@ -218,36 +331,99 @@ for (const p of perms) {
 		now - Math.floor(Math.random() * 60 * 86400),
 		now - Math.floor(Math.random() * 3 * 86400),
 	);
+	insertedPerms++;
 }
-console.log(`inserted ${perms.length} permissions`);
+console.log(`${insertedPerms} new permissions inserted`);
 
 // --- Tokens (active access tokens) ---
 const tokens = [
 	{ user: 0, client: "https://auth.dunkirk.sh", scope: "profile email openid" },
-	{ user: 0, client: "https://blog.dunkirk.sh", scope: "profile create update" },
-	{ user: 1, client: "https://photos.kieranklukas.com", scope: "profile upload" },
+	{
+		user: 0,
+		client: "https://blog.dunkirk.sh",
+		scope: "profile create update",
+	},
+	{
+		user: 1,
+		client: "https://photos.kieranklukas.com",
+		scope: "profile upload",
+	},
 	{ user: 2, client: "https://infra.dunkirk.sh", scope: "profile email" },
 ];
 
+let insertedTokens = 0;
 for (const t of tokens) {
+	// Check if this user+client combo already has an active token
+	const existing = db
+		.query("SELECT id FROM tokens WHERE user_id = ? AND client_id = ? AND revoked = 0")
+		.get(userIds[t.user], t.client) as { id: number } | undefined;
+	if (existing) continue;
+
 	const tokStr = `tok_${crypto.randomUUID().replace(/-/g, "")}`;
 	db.query(
 		`INSERT INTO tokens (token, user_id, client_id, scope, created_at, expires_at, revoked)
 		 VALUES (?, ?, ?, ?, ?, ?, 0)`,
 	).run(tokStr, userIds[t.user], t.client, t.scope, now - 3600, now + 86400);
+	insertedTokens++;
 }
-console.log(`inserted ${tokens.length} tokens`);
+console.log(`${insertedTokens} new tokens inserted`);
 
 // --- Invites ---
 const invites = [
-	{ code: "invite-alpha-001", createdBy: 0, maxUses: 5, currentUses: 2, expiresAt: now + 7 * 86400, note: "general community invite", message: "Welcome to Indiko!" },
-	{ code: "invite-beta-002", createdBy: 0, maxUses: 1, currentUses: 1, expiresAt: now - 86400, note: "for Bob", message: null },
-	{ code: "invite-gamma-003", createdBy: 0, maxUses: 10, currentUses: 0, expiresAt: null, note: "open invite for team", message: "Hey, come join us!" },
-	{ code: "invite-delta-004", createdBy: 1, maxUses: 3, currentUses: 1, expiresAt: now + 30 * 86400, note: null, message: null },
-	{ code: "invite-epsilon-005", createdBy: 0, maxUses: 1, currentUses: 0, expiresAt: now + 3 * 86400, note: "for the new dev", message: "Welcome aboard!" },
+	{
+		code: "invite-alpha-001",
+		createdBy: 0,
+		maxUses: 5,
+		currentUses: 2,
+		expiresAt: now + 7 * 86400,
+		note: "general community invite",
+		message: "Welcome to Indiko!",
+	},
+	{
+		code: "invite-beta-002",
+		createdBy: 0,
+		maxUses: 1,
+		currentUses: 1,
+		expiresAt: now - 86400,
+		note: "for Bob",
+		message: null,
+	},
+	{
+		code: "invite-gamma-003",
+		createdBy: 0,
+		maxUses: 10,
+		currentUses: 0,
+		expiresAt: null,
+		note: "open invite for team",
+		message: "Hey, come join us!",
+	},
+	{
+		code: "invite-delta-004",
+		createdBy: 1,
+		maxUses: 3,
+		currentUses: 1,
+		expiresAt: now + 30 * 86400,
+		note: null,
+		message: null,
+	},
+	{
+		code: "invite-epsilon-005",
+		createdBy: 0,
+		maxUses: 1,
+		currentUses: 0,
+		expiresAt: now + 3 * 86400,
+		note: "for the new dev",
+		message: "Welcome aboard!",
+	},
 ];
 
+let insertedInvites = 0;
 for (const inv of invites) {
+	const existing = db
+		.query("SELECT id FROM invites WHERE code = ?")
+		.get(inv.code) as { id: number } | undefined;
+	if (existing) continue;
+
 	db.query(
 		`INSERT INTO invites (code, created_by, used, max_uses, current_uses, expires_at, note, message, created_at)
 		 VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)`,
@@ -261,29 +437,48 @@ for (const inv of invites) {
 		inv.message,
 		now - Math.floor(Math.random() * 14 * 86400),
 	);
+	insertedInvites++;
 }
-console.log(`inserted ${invites.length} invites`);
+console.log(`${insertedInvites} new invites inserted`);
 
-// Mark one invite as used by Bob
-const bobInvite = db.query("SELECT id FROM invites WHERE code = 'invite-beta-002'").get() as { id: number };
-db.query(
-	"UPDATE invites SET used = 1, used_by = ?, used_at = ? WHERE id = ?",
-).run(userIds[2], now - 86400, bobInvite.id);
-db.query(
-	"INSERT INTO invite_uses (invite_id, user_id, used_at) VALUES (?, ?, ?)",
-).run(bobInvite.id, userIds[2], now - 86400);
+// Mark one invite as used by Bob (idempotent)
+const bobInvite = db
+	.query("SELECT id FROM invites WHERE code = 'invite-beta-002'")
+	.get() as { id: number } | undefined;
+if (bobInvite) {
+	const alreadyUsed = db
+		.query("SELECT id FROM invite_uses WHERE invite_id = ? AND user_id = ?")
+		.get(bobInvite.id, userIds[2]) as { id: number } | undefined;
+	if (!alreadyUsed) {
+		db.query(
+			"UPDATE invites SET used = 1, used_by = ?, used_at = ? WHERE id = ?",
+		).run(userIds[2], now - 86400, bobInvite.id);
+		db.query(
+			"INSERT INTO invite_uses (invite_id, user_id, used_at) VALUES (?, ?, ?)",
+		).run(bobInvite.id, userIds[2], now - 86400);
+	}
+}
 
-// Mark one as used by Dana
-const danaInvite = db.query("SELECT id FROM invites WHERE code = 'invite-delta-004'").get() as { id: number };
-db.query(
-	"UPDATE invites SET used = 1, used_by = ?, used_at = ? WHERE id = ?",
-).run(userIds[4], now - 2 * 86400, danaInvite.id);
-db.query(
-	"INSERT INTO invite_uses (invite_id, user_id, used_at) VALUES (?, ?, ?)",
-).run(danaInvite.id, userIds[4], now - 2 * 86400);
+// Mark one as used by Dana (idempotent)
+const danaInvite = db
+	.query("SELECT id FROM invites WHERE code = 'invite-delta-004'")
+	.get() as { id: number } | undefined;
+if (danaInvite) {
+	const alreadyUsed = db
+		.query("SELECT id FROM invite_uses WHERE invite_id = ? AND user_id = ?")
+		.get(danaInvite.id, userIds[4]) as { id: number } | undefined;
+	if (!alreadyUsed) {
+		db.query(
+			"UPDATE invites SET used = 1, used_by = ?, used_at = ? WHERE id = ?",
+		).run(userIds[4], now - 2 * 86400, danaInvite.id);
+		db.query(
+			"INSERT INTO invite_uses (invite_id, user_id, used_at) VALUES (?, ?, ?)",
+		).run(danaInvite.id, userIds[4], now - 2 * 86400);
+	}
+}
 
 console.log("marked 2 invites as used");
 
 console.log("\nseed complete!");
-console.log("login token: dev-session-kieran");
-console.log("admin user: kieran");
+console.log("login token: dev-session-tacy");
+console.log("admin user: tacy");

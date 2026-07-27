@@ -8,11 +8,11 @@ export function hashSecret(secret: string): string {
 // Compare a presented secret against a stored sha256 hex digest in constant
 // time. String equality short-circuits on the first differing byte, which
 // leaks how much of the secret is correct; compare the raw digests instead.
-export function verifySecret(presented: string, storedHashHex: string): boolean {
-	const presentedHash = crypto
-		.createHash("sha256")
-		.update(presented)
-		.digest();
+export function verifySecret(
+	presented: string,
+	storedHashHex: string,
+): boolean {
+	const presentedHash = crypto.createHash("sha256").update(presented).digest();
 
 	const storedHash = Buffer.from(storedHashHex, "hex");
 

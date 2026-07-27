@@ -127,9 +127,7 @@ async function handleRefreshTokenGrant(
 	const refreshExpiresAt = now + REFRESH_TOKEN_TTL;
 	const family = tokenData.family ?? crypto.randomUUID();
 
-	db.query(
-		"UPDATE tokens SET rotated = 1 WHERE id = ?",
-	).run(tokenData.id);
+	db.query("UPDATE tokens SET rotated = 1 WHERE id = ?").run(tokenData.id);
 
 	db.query(
 		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

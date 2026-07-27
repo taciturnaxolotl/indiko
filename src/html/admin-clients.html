@@ -25,147 +25,16 @@
 	<link rel="stylesheet" href="../styles.css">
 	<link rel="stylesheet" href="./admin-shared.css">
 	<style>
-		:root {
-			--mahogany: #26242b;
-			--lavender: #d9d0de;
-			--old-rose: #bc8da0;
-			--rosewood: #a04668;
-			--berry-crush: #ab4967;
-		}
-
-		* {
-			margin: 0;
-			padding: 0;
-			box-sizing: border-box;
-		}
-
-		body {
-			font-family: "Space Grotesk", sans-serif;
-			background: var(--mahogany);
-			color: var(--lavender);
-			min-height: 100vh;
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			padding: 2.5rem 1.25rem;
-		}
-
-		header {
-			width: 100%;
-			max-width: 56.25rem;
-			align-self: flex-start;
-			margin-left: auto;
-			margin-right: auto;
-			margin-bottom: 2rem;
-			display: flex;
-			justify-content: space-between;
-			align-items: flex-start;
-		}
-
-		.header-nav {
-			display: flex;
-			gap: 1rem;
-			margin-top: 0.5rem;
-		}
-
-		.header-nav a {
-			color: var(--old-rose);
-			text-decoration: none;
-			font-size: 0.875rem;
-			font-weight: 500;
-			padding: 0.5rem 1rem;
-			border: 1px solid var(--old-rose);
-			transition: all 0.2s;
-		}
-
-		.header-nav a:hover {
-			background: rgba(188, 141, 160, 0.1);
-			color: var(--berry-crush);
-			border-color: var(--berry-crush);
-		}
-
-		.header-nav a.active {
-			background: var(--berry-crush);
-			color: var(--lavender);
-			border-color: var(--berry-crush);
-		}
-
-		h1 {
-			font-size: 2rem;
-			font-weight: 700;
-			background: linear-gradient(135deg, var(--old-rose), var(--berry-crush), var(--rosewood));
-			-webkit-background-clip: text;
-			-webkit-text-fill-color: transparent;
-			background-clip: text;
-			letter-spacing: -0.125rem;
-		}
-
-		main {
-			flex: 1;
-			width: 100%;
-			max-width: 56.25rem;
-			padding: 2rem 1.25rem;
-		}
-
-		h2 {
-			font-size: 1.5rem;
-			font-weight: 600;
-			color: var(--lavender);
-			margin-bottom: 1.5rem;
-			letter-spacing: -0.05rem;
-		}
-
-		footer {
-			width: 100%;
-			max-width: 56.25rem;
-			padding: 1rem;
-			text-align: center;
-			color: var(--old-rose);
-			font-size: 0.875rem;
-			font-weight: 300;
-			letter-spacing: 0.05rem;
-		}
-
-		.actions {
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			margin-bottom: 1.5rem;
-		}
-
-		.btn {
-			padding: 0.75rem 1.5rem;
-			background: var(--berry-crush);
-			color: var(--lavender);
-			border: none;
-			cursor: pointer;
-			font-family: inherit;
-			font-size: 1rem;
-			font-weight: 500;
-			transition: background 0.2s;
-			text-decoration: none;
-			display: inline-block;
-		}
-
-		.btn:hover {
-			background: var(--rosewood);
-		}
-
-		.btn:disabled {
-			opacity: 0.5;
-			cursor: not-allowed;
-		}
-
+		/* Compact client cards */
 		.clients-list {
 			display: flex;
 			flex-direction: column;
-			gap: 1rem;
+			gap: var(--space-2);
 		}
 
 		.client-card {
 			background: rgba(188, 141, 160, 0.05);
-			border: 1px solid var(--old-rose);
-			padding: 1.5rem;
+			border: 1px solid var(--paper-dim);
 			cursor: pointer;
 			transition: background 0.2s;
 		}
@@ -180,14 +49,15 @@
 
 		.client-header {
 			display: flex;
-			gap: 1rem;
+			gap: var(--space-3);
 			align-items: flex-start;
+			cursor: pointer;
+			padding: var(--space-3) var(--space-4);
 		}
 
 		.client-logo {
-			width: 4rem;
-			height: 4rem;
-			border-radius: 0.5rem;
+			width: 2.5rem;
+			height: 2.5rem;
 			background: rgba(188, 141, 160, 0.2);
 			display: flex;
 			align-items: center;
@@ -203,65 +73,65 @@
 		}
 
 		.client-logo-placeholder {
-			font-size: 1.5rem;
-			color: var(--old-rose);
+			font-size: 1rem;
+			color: var(--paper-dim);
 		}
 
 		.client-info {
 			flex: 1;
+			min-width: 0;
 		}
 
 		.client-name {
-			font-size: 1.125rem;
+			font-size: var(--text-md);
 			font-weight: 600;
-			color: var(--lavender);
-			margin-bottom: 0.25rem;
+			color: var(--paper);
 		}
 
 		.client-id {
-			font-size: 0.75rem;
-			color: var(--old-rose);
+			font-size: var(--text-xs);
+			color: var(--paper-dim);
 			font-family: monospace;
-			margin-bottom: 0.5rem;
+			margin-top: var(--space-1);
 		}
 
 		.client-description {
-			font-size: 0.875rem;
-			color: var(--old-rose);
-			margin-bottom: 0.5rem;
+			font-size: var(--text-xs);
+			color: var(--paper-dim);
+			margin-top: var(--space-1);
 		}
 
-		.client-badges {
-			display: flex;
-			gap: 0.5rem;
-			flex-wrap: wrap;
-			margin-top: 0.5rem;
+		.client-meta {
+			font-size: var(--text-xs);
+			color: var(--paper-dim);
+			margin-top: var(--space-1);
 		}
 
-		.badge {
-			padding: 0.25rem 0.75rem;
-			font-size: 0.75rem;
+		.badge-auto {
+			background: rgba(188, 141, 160, 0.2);
+			color: var(--paper);
+			border: 1px solid var(--paper-dim);
+			padding: var(--space-1) var(--space-2);
+			font-size: var(--text-xs);
 			font-weight: 700;
 			text-transform: uppercase;
 			letter-spacing: 0.05rem;
 		}
 
 		.badge-preregistered {
-			background: var(--berry-crush);
-			color: var(--lavender);
-		}
-
-		.badge-auto {
-			background: rgba(188, 141, 160, 0.2);
-			color: var(--lavender);
-			border: 1px solid var(--old-rose);
+			background: var(--accent);
+			color: var(--paper);
+			padding: var(--space-1) var(--space-2);
+			font-size: var(--text-xs);
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.05rem;
 		}
 
 		.client-details {
-			margin-top: 1.5rem;
-			padding-top: 1.5rem;
-			border-top: 1px solid var(--old-rose);
+			border-top: 1px solid var(--paper-dim);
 			display: none;
+			padding: var(--space-4);
 		}
 
 		.client-card.expanded .client-details {
@@ -269,155 +139,150 @@
 		}
 
 		.detail-section {
-			margin-bottom: 1.5rem;
+			margin-bottom: var(--space-4);
 		}
 
 		.detail-title {
-			font-size: 0.75rem;
-			color: var(--old-rose);
+			font-size: var(--text-xs);
+			color: var(--paper-dim);
 			text-transform: uppercase;
 			letter-spacing: 0.05rem;
-			margin-bottom: 0.5rem;
+			margin-bottom: var(--space-2);
 		}
 
 		.redirect-uris {
 			display: flex;
 			flex-direction: column;
-			gap: 0.25rem;
+			gap: var(--space-1);
 		}
 
 		.redirect-uri {
 			font-family: monospace;
-			font-size: 0.75rem;
-			color: var(--lavender);
-			background: rgba(0, 0, 0, 0.2);
-			padding: 0.5rem;
+			font-size: var(--text-xs);
+			color: var(--paper);
+			background: var(--ink-sunken);
+			padding: var(--space-2);
 		}
 
-		.users-list {
+		.client-details .users-list {
 			display: flex;
 			flex-direction: column;
-			gap: 0.75rem;
+			gap: var(--space-2);
 		}
 
-		.user-item {
-			background: rgba(0, 0, 0, 0.2);
-			padding: 1rem;
+		.client-details .user-item {
+			background: var(--ink-sunken);
+			padding: var(--space-3);
 			display: flex;
 			justify-content: space-between;
 			align-items: center;
 		}
 
-		.user-info {
+		.client-details .user-info {
 			flex: 1;
 		}
 
-		.user-name {
+		.client-details .user-name {
 			font-weight: 600;
-			color: var(--lavender);
-			margin-bottom: 0.25rem;
+			color: var(--paper);
 		}
 
-		.user-role-input {
+		.client-details .user-role-input {
 			display: flex;
-			gap: 0.5rem;
+			gap: var(--space-2);
 			align-items: center;
-			margin-top: 0.5rem;
+			margin-top: var(--space-2);
 		}
 
-		.user-role-input input {
-			padding: 0.5rem;
+		.client-details .user-role-input input {
+			padding: var(--space-2);
 			background: rgba(0, 0, 0, 0.3);
-			border: 1px solid var(--old-rose);
-			color: var(--lavender);
+			border: 1px solid var(--paper-dim);
+			color: var(--paper);
 			font-family: inherit;
-			font-size: 0.875rem;
+			font-size: var(--text-sm);
 		}
 
-		.user-role-input button {
-			padding: 0.5rem 1rem;
-			background: var(--berry-crush);
-			color: var(--lavender);
+		.client-details .user-role-input button {
+			padding: var(--space-2) var(--space-3);
+			background: var(--accent);
+			color: var(--paper);
 			border: none;
 			cursor: pointer;
 			font-family: inherit;
-			font-size: 0.875rem;
+			font-size: var(--text-xs);
+			font-weight: 600;
 			transition: background 0.2s;
 		}
 
-		.user-role-input button:hover {
-			background: var(--rosewood);
+		.client-details .user-role-input button:hover {
+			background: var(--accent-deep);
 		}
 
-		.user-meta {
-			font-size: 0.75rem;
-			color: var(--old-rose);
+		.client-details .user-meta {
+			font-size: var(--text-xs);
+			color: var(--paper-dim);
 		}
 
 		.expand-indicator {
-			color: var(--old-rose);
-			font-size: 0.75rem;
+			color: var(--paper-dim);
+			font-size: var(--text-xs);
 			text-transform: uppercase;
 			letter-spacing: 0.05rem;
-			cursor: pointer;
-		}
-
-		.client-header {
-			cursor: pointer;
 		}
 
 		.client-actions {
 			display: flex;
-			gap: 0.5rem;
-			margin-top: 1rem;
+			gap: var(--space-2);
+			margin-top: var(--space-3);
+			align-items: center;
 		}
 
-		.btn-edit, .btn-delete, .revoke-btn {
-			padding: 0.5rem 1rem;
+		.client-actions .btn-edit,
+		.client-actions .btn-delete {
+			padding: var(--space-2) var(--space-3);
 			font-family: inherit;
-			font-size: 0.875rem;
+			font-size: var(--text-xs);
 			font-weight: 600;
 			cursor: pointer;
 			transition: all 0.2s;
 			border: none;
 		}
 
-		.btn-edit {
+		.client-actions .btn-edit {
 			background: rgba(188, 141, 160, 0.2);
-			color: var(--lavender);
+			color: var(--paper);
 		}
 
-		.btn-edit:hover {
+		.client-actions .btn-edit:hover {
 			background: rgba(188, 141, 160, 0.3);
 		}
 
-		.btn-delete, .revoke-btn {
+		.client-actions .btn-delete {
 			background: rgba(160, 70, 104, 0.2);
-			color: var(--lavender);
-			border: 2px solid var(--rosewood);
+			color: var(--paper);
+			border: 1px solid var(--accent-deep);
 		}
 
-		.btn-delete:hover, .revoke-btn:hover {
+		.client-actions .btn-delete:hover {
 			background: rgba(160, 70, 104, 0.3);
 		}
 
 		.loading, .error, .empty {
 			text-align: center;
-			padding: 2rem;
-			color: var(--old-rose);
+			padding: var(--space-4);
+			color: var(--paper-dim);
 		}
 
 		.error {
-			color: var(--rosewood);
+			color: var(--accent-deep);
 		}
 
+		/* Modal */
 		.modal {
 			display: none;
 			position: fixed;
-			top: 0;
-			left: 0;
-			right: 0;
-			bottom: 0;
+			inset: 0;
 			background: rgba(0, 0, 0, 0.8);
 			z-index: 1000;
 			align-items: center;
@@ -429,9 +294,9 @@
 		}
 
 		.modal-content {
-			background: var(--mahogany);
-			border: 2px solid var(--old-rose);
-			padding: 2rem;
+			background: var(--ink);
+			border: 2px solid var(--paper-dim);
+			padding: var(--space-6);
 			max-width: 40rem;
 			width: 90%;
 			max-height: 90vh;
@@ -442,19 +307,19 @@
 			display: flex;
 			justify-content: space-between;
 			align-items: center;
-			margin-bottom: 1.5rem;
+			margin-bottom: var(--space-4);
 		}
 
 		.modal-title {
-			font-size: 1.5rem;
+			font-size: var(--text-xl);
 			font-weight: 600;
-			color: var(--lavender);
+			color: var(--paper);
 		}
 
 		.modal-close {
 			background: none;
 			border: none;
-			color: var(--old-rose);
+			color: var(--paper-dim);
 			font-size: 1.5rem;
 			cursor: pointer;
 			padding: 0;
@@ -463,38 +328,38 @@
 		}
 
 		.modal-close:hover {
-			color: var(--lavender);
+			color: var(--paper);
 		}
 
-		.form-group {
-			margin-bottom: 1rem;
+		.modal .form-group {
+			margin-bottom: var(--space-4);
 		}
 
-		.form-label {
+		.modal .form-label {
 			display: block;
-			font-size: 0.875rem;
-			color: var(--old-rose);
-			margin-bottom: 0.5rem;
+			font-size: var(--text-xs);
+			color: var(--paper-dim);
+			margin-bottom: var(--space-2);
 			text-transform: uppercase;
 			letter-spacing: 0.05rem;
 		}
 
-		.form-input {
+		.modal .form-input {
 			width: 100%;
-			padding: 0.75rem;
+			padding: var(--space-3);
 			background: rgba(0, 0, 0, 0.3);
-			border: 1px solid var(--old-rose);
-			color: var(--lavender);
+			border: 1px solid var(--paper-dim);
+			color: var(--paper);
 			font-family: inherit;
-			font-size: 1rem;
+			font-size: var(--text-sm);
 		}
 
-		.form-input:focus {
+		.modal .form-input:focus {
 			outline: none;
-			border-color: var(--berry-crush);
+			border-color: var(--accent);
 		}
 
-		.form-textarea {
+		.modal .form-textarea {
 			min-height: 5rem;
 			resize: vertical;
 		}
@@ -502,24 +367,23 @@
 		.redirect-uris-list {
 			display: flex;
 			flex-direction: column;
-			gap: 0.5rem;
-			margin-top: 0.5rem;
+			gap: var(--space-2);
 		}
 
 		.redirect-uri-item {
 			display: flex;
-			gap: 0.5rem;
+			gap: var(--space-2);
 		}
 
-		.redirect-uri-item input {
+		.redirect-uri-item .form-input {
 			flex: 1;
 		}
 
 		.btn-remove {
-			padding: 0.5rem 1rem;
+			padding: var(--space-2) var(--space-3);
 			background: rgba(160, 70, 104, 0.2);
-			color: var(--lavender);
-			border: none;
+			color: var(--paper);
+			border: 1px solid var(--accent-deep);
 			cursor: pointer;
 			font-family: inherit;
 		}
@@ -529,11 +393,11 @@
 		}
 
 		.btn-add {
-			margin-top: 0.5rem;
-			padding: 0.5rem 1rem;
+			margin-top: var(--space-2);
+			padding: var(--space-2) var(--space-3);
 			background: rgba(188, 141, 160, 0.2);
-			color: var(--lavender);
-			border: none;
+			color: var(--paper);
+			border: 1px solid var(--paper-dim);
 			cursor: pointer;
 			font-family: inherit;
 		}
@@ -544,43 +408,33 @@
 
 		.form-actions {
 			display: flex;
-			gap: 1rem;
-			margin-top: 1.5rem;
+			gap: var(--space-3);
+			margin-top: var(--space-4);
 		}
 
 		.form-actions .btn {
 			flex: 1;
+			padding: var(--space-3) var(--space-4);
+			background: var(--accent);
+			color: var(--paper);
+			border: none;
+			cursor: pointer;
+			font-family: inherit;
+			font-size: var(--text-sm);
+			font-weight: 600;
+			transition: background 0.2s;
 		}
 
-		.toast {
-			position: fixed;
-			bottom: 2rem;
-			right: 2rem;
-			background: var(--mahogany);
-			border: 2px solid var(--berry-crush);
-			padding: 1rem 1.5rem;
-			color: var(--lavender);
-			font-size: 0.875rem;
-			font-weight: 500;
-			z-index: 2000;
-			opacity: 0;
-			transform: translateY(1rem);
-			transition: opacity 0.3s, transform 0.3s;
-			max-width: 25rem;
-			box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5);
+		.form-actions .btn:hover {
+			background: var(--accent-deep);
 		}
 
-		.toast.show {
-			opacity: 1;
-			transform: translateY(0);
+		.form-actions .btn:last-child {
+			background: rgba(188, 141, 160, 0.2);
 		}
 
-		.toast.error {
-			border-color: var(--rosewood);
-		}
-
-		.toast.success {
-			border-color: var(--berry-crush);
+		.form-actions .btn:last-child:hover {
+			background: rgba(188, 141, 160, 0.3);
 		}
 	</style>
 </head>
@@ -595,9 +449,8 @@
 	</nav>
 
 	<main class="admin-main">
-		<div class="actions">
-			<h2>oauth clients</h2>
-			<button type="button" class="btn" id="createClientBtn">create client</button>
+		<div class="invite-actions">
+			<button type="button" class="invite-btn" id="createClientBtn">create client</button>
 		</div>
 		<div id="clientsList" class="clients-list">
 			<div class="loading">loading clients...</div>

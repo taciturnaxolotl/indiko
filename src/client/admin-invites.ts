@@ -316,40 +316,68 @@ async function loadInvites() {
 
 					const roleInfo =
 						invite.appRoles.length > 0
-							? `<div class="invite-roles">App roles: ${invite.appRoles
-									.map((r) => {
-										const appName = r.name || r.clientId;
-										return `${appName} (${r.role})`;
-									})
-									.join(", ")}</div>`
+							? `<div class="invite-meta-item">
+							<div class="invite-meta-label">app roles</div>
+							<div class="invite-roles">${invite.appRoles
+								.map((r) => {
+									const appName = r.name || r.clientId;
+									return `<span class="invite-role">${appName} • ${r.role}</span>`;
+								})
+								.join("")}</div>
+						</div>`
 							: "";
 
 					const usedByInfo =
 						invite.usedBy.length > 0
-							? `<div class="invite-used-by">Used by: ${invite.usedBy.map((u) => `${u.username} (${new Date(u.usedAt * 1000).toLocaleDateString()})`).join(", ")}</div>`
+							? `<div class="invite-meta-item">
+							<div class="invite-meta-label">used by</div>
+							<div class="invite-meta-value">${invite.usedBy.map((u) => `${u.username} (${new Date(u.usedAt * 1000).toLocaleDateString()})`).join(", ")}</div>
+						</div>`
 							: "";
 
 					const noteInfo = invite.note
-						? `<div class="invite-note">Internal note: ${invite.note}</div>`
+						? `<div class="invite-extra-item"><span class="invite-extra-label">Internal note:</span> ${invite.note}</div>`
 						: "";
 
 					const messageInfo = invite.message
-						? `<div class="invite-message">Message to invitees: ${invite.message}</div>`
+						? `<div class="invite-extra-item"><span class="invite-extra-label">Message to invitees:</span> ${invite.message}</div>`
 						: "";
 
 					const isActive = !invite.isExpired && !invite.isFullyUsed;
+					const statusBadgeClass = isActive ? "badge-active" : "badge-inactive";
+					const statusText = isActive ? "active" : status;
 
 					return `
 				<div class="invite-item ${isActive ? "" : "invite-inactive"}">
-					<div>
-						<div class="invite-code">${invite.code}</div>
-						<div class="invite-meta">Created by ${invite.createdBy} on ${createdDate} • ${status}</div>
-						<div class="invite-meta">${expiryInfo}</div>
-						${noteInfo}
-						${messageInfo}
-						${roleInfo}
-						${usedByInfo}
-						<div class="invite-url">${invite.inviteUrl}</div>
+					<div class="invite-primary">
+						<span class="invite-code">${invite.code}</span>
+						<div class="invite-status">
+							<span class="badge ${statusBadgeClass}">${statusText}</span>
+						</div>
+						<div class="invite-meta-grid">
+							<div class="invite-meta-item">
+								<div class="invite-meta-label">created by</div>
+								<div class="invite-meta-value">${invite.createdBy}</div>
+							</div>
+							<div class="invite-meta-item">
+								<div class="invite-meta-label">created</div>
+								<div class="invite-meta-value">${createdDate}</div>
+							</div>
+							<div class="invite-meta-item">
+								<div class="invite-meta-label">expires</div>
+								<div class="invite-meta-value">${expiryInfo}</div>
+							</div>
+							<div class="invite-meta-item">
+								<div class="invite-meta-label">link</div>
+								<div class="invite-meta-value invite-url">${invite.inviteUrl}</div>
+							</div>
+						</div>
+						<div class="invite-extra">
+							${noteInfo}
+							${messageInfo}
+							${roleInfo}
+							${usedByInfo}
+						</div>
 					</div>
 					<div class="invite-actions-btns">
 						<button class="btn-copy" data-invite-id="${invite.id}" data-invite-url="${invite.inviteUrl}" ${isActive ? "" : "disabled"}>copy link</button>

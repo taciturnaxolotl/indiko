@@ -145,15 +145,12 @@ function displayClients(clients: Client[]) {
 						<div class="client-name">${client.name}</div>
 						<div class="client-id">${client.clientId}</div>
 						${client.description ? `<div class="client-description">${client.description}</div>` : ""}
-						<div class="client-badges">
-							<span class="badge ${client.isPreregistered ? "badge-preregistered" : "badge-auto"}">
-								${client.isPreregistered ? "pre-registered" : "auto-registered"}
-							</span>
-							<span class="badge badge-auto">first seen ${firstSeenDate}</span>
-							<span class="badge badge-auto">last used ${lastUsedDate}</span>
-						</div>
+						<div class="client-meta">first seen ${firstSeenDate} • last used ${lastUsedDate}</div>
 					</div>
-					<div class="client-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+					<div class="client-actions">
+						<span class="badge ${client.isPreregistered ? "badge-preregistered" : "badge-auto"}">
+							${client.isPreregistered ? "pre-registered" : "auto-registered"}
+						</span>
 						${
 							client.isPreregistered
 								? `
@@ -255,16 +252,16 @@ window.toggleClient = async (clientId: string) => {
 								return `
 								<div class="user-item">
 									<div class="user-info">
-										<div class="user-name"><a href="/u/${user.username}" onclick="event.stopPropagation();" style="color: var(--lavender); text-decoration: none;">${user.name}</a> (<a href="/u/${user.username}" onclick="event.stopPropagation();" style="color: var(--old-rose); text-decoration: none;">@${user.username}</a>)</div>
+										<div class="user-name"><a href="/u/${user.username}" onclick="event.stopPropagation();" style="color: var(--paper); text-decoration: none;">${user.name}</a> (<a href="/u/${user.username}" onclick="event.stopPropagation();" style="color: var(--paper-dim); text-decoration: none;">@${user.username}</a>)</div>
 										${
 											data.client.isPreregistered &&
 											data.client.availableRoles !== null
 												? `
 											<div class="user-role-input">
-												<label style="color: var(--old-rose); font-size: 0.75rem;">ROLE${data.client.availableRoles.length > 0 ? "" : " (OPTIONAL)"}:</label>
+												<label style="color: var(--paper-dim); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05rem;">ROLE${data.client.availableRoles.length > 0 ? "" : " (OPTIONAL)"}</label>
 												${
 													data.client.availableRoles.length > 0
-														? `<select data-username="${user.username}" data-client-id="${clientId}" style="padding: 0.5rem; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--old-rose); color: var(--lavender); font-family: inherit; font-size: 0.875rem;">
+														? `<select data-username="${user.username}" data-client-id="${clientId}" style="padding: var(--space-2); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--paper-dim); color: var(--paper); font-family: inherit; font-size: var(--text-sm);">
 														<option value="">No role</option>
 														${data.client.availableRoles
 															.map(
@@ -281,9 +278,7 @@ window.toggleClient = async (clientId: string) => {
 										`
 												: ""
 										}
-										<div class="user-meta">
-											Granted ${grantedDate} • Last used ${lastUsedDate} • Scopes: ${user.scopes.join(", ")}
-										</div>
+										<div class="user-meta">granted ${grantedDate} • last used ${lastUsedDate} • scopes: ${user.scopes.join(", ")}</div>
 									</div>
 									<button class="revoke-btn" onclick="event.stopPropagation(); revokeUserPermission('${clientId}', '${user.username}', event)">revoke</button>
 								</div>

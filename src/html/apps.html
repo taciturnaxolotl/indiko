@@ -35,48 +35,52 @@
     }
 
     header {
-      margin-bottom: 3rem;
+      margin-bottom: var(--space-6);
     }
 
     h1 {
-      font-size: 2.5rem;
-      margin-bottom: 0.5rem;
+      font-size: var(--text-2xl);
+      margin-bottom: var(--space-1);
     }
 
     .subtitle {
       color: var(--paper-dim);
-      font-size: 1.125rem;
+      font-size: var(--text-md);
       font-weight: 300;
     }
 
     .apps-list {
       display: flex;
       flex-direction: column;
-      gap: 1rem;
+      gap: var(--space-2);
+    }
+
+    .app-card {
+      padding: var(--space-3) var(--space-4);
     }
 
     .app-head {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 1rem;
-      margin-bottom: 1rem;
+      gap: var(--space-3);
+      margin-bottom: var(--space-2);
     }
 
     .app-name {
-      font-size: var(--text-lg);
+      font-size: var(--text-md);
       font-weight: 600;
       color: var(--paper);
     }
 
     .app-meta {
-      font-size: var(--text-sm);
+      font-size: var(--text-xs);
       color: var(--paper-dim);
-      margin-top: 0.25rem;
+      margin-top: var(--space-1);
     }
 
     .scopes {
-      margin-top: 0.5rem;
+      margin-top: var(--space-2);
     }
 
     .scope-title {
@@ -84,17 +88,17 @@
       color: var(--paper-dim);
       text-transform: uppercase;
       letter-spacing: 0.05rem;
-      margin-bottom: 0.5rem;
+      margin-bottom: var(--space-2);
     }
 
     .scope-list {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.5rem;
+      gap: var(--space-2);
     }
 
     .scope-badge {
-      padding: 0.25rem 0.75rem;
+      padding: var(--space-1) var(--space-2);
       font-size: var(--text-xs);
       font-weight: 600;
       text-transform: uppercase;
@@ -105,12 +109,12 @@
     }
 
     .revoke-btn {
-      padding: 0.5rem 1rem;
-      background: transparent;
-      color: var(--accent-deep);
-      border: 2px solid var(--accent-deep);
+      padding: var(--space-2) var(--space-3);
+      background: rgba(160, 70, 104, 0.2);
+      color: var(--paper);
+      border: 1px solid var(--accent-deep);
       font-family: var(--font);
-      font-size: var(--text-sm);
+      font-size: var(--text-xs);
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05rem;
@@ -120,8 +124,7 @@
     }
 
     .revoke-btn:hover:not(:disabled) {
-      background: var(--accent-deep);
-      color: var(--paper);
+      background: rgba(160, 70, 104, 0.3);
     }
 
     .revoke-btn:disabled {
@@ -134,7 +137,7 @@
     .error {
       color: var(--paper-dim);
       font-size: var(--text-sm);
-      padding: 1rem 0;
+      padding: var(--space-4) 0;
     }
 
   </style>
