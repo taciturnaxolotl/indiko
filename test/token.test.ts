@@ -246,3 +246,93 @@ describe("token endpoint: refresh_token grant", () => {
 		expect((await res.json()).error_description).toContain("client_id");
 	});
 });
+
+describe("token endpoint: refresh family detection (RFC 9700)", () => {
+	async function issueTokens(userId: number) {
+		seedApp();
+		const code = seedAuthCode(userId);
+		const res = await token(tokenReq(exchangeBody(code)));
+		return (await res.json()) as {
+			access_token: string;
+			refresh_token: string;
+		};
+	}
+
+	async function refresh(refreshToken: string) {
+		return token(
+			tokenReq({
+				grant_type: "refresh_token",
+				refresh_token: refreshToken,
+				client_id: CLIENT_ID,
+			}),
+		);
+	}
+
+	test("rotation keeps tokens in the same family", async () => {
+		const userId = createUser({});
+		const issued = await issueTokens(userId);
+
+		const res = await refresh(issued.refresh_token);
+		expect(res.status).toBe(200);
+		const rotated = await res.json();
+
+		const families = db
+			.query(
+				"SELECT DISTINCT family FROM tokens WHERE client_id = ? AND family IS NOT NULL",
+			)
+			.all(CLIENT_ID) as Array<{ family: string }>;
+		expect(families.length).toBe(1);
+
+		// Old row marked rotated, new row active in the same family
+		const oldRow = db
+			.query("SELECT rotated, family FROM tokens WHERE refresh_token = ?")
+			.get(issued.refresh_token) as { rotated: number; family: string };
+		expect(oldRow.rotated).toBe(1);
+
+		const newRow = db
+			.query("SELECT rotated, family FROM tokens WHERE refresh_token = ?")
+			.get(rotated.refresh_token) as { rotated: number; family: string };
+		expect(newRow.rotated).toBe(0);
+		expect(newRow.family).toBe(oldRow.family);
+	});
+
+	test("reusing an old refresh token revokes the whole family", async () => {
+		const userId = createUser({});
+		const issued = await issueTokens(userId);
+
+		// Rotate once: issued.refresh_token is now stale
+		const first = await refresh(issued.refresh_token);
+		expect(first.status).toBe(200);
+		const rotated = await first.json();
+
+		// Replay the stale token — reuse detected, family revoked
+		const replay = await refresh(issued.refresh_token);
+		expect(replay.status).toBe(400);
+		expect((await replay.json()).error).toBe("invalid_grant");
+
+		// The newest token is now also dead (family revoked)
+		const afterRevoke = await refresh(rotated.refresh_token);
+		expect(afterRevoke.status).toBe(400);
+
+		const rows = db
+			.query(
+				"SELECT revoked FROM tokens WHERE client_id = ? AND revoked = 1",
+			)
+			.all(CLIENT_ID) as Array<{ revoked: number }>;
+		expect(rows.length).toBeGreaterThan(0);
+	});
+
+	test("legit client unaffected: new token still works after normal rotation", async () => {
+		const userId = createUser({});
+		const issued = await issueTokens(userId);
+
+		const first = await refresh(issued.refresh_token);
+		const rotated1 = await first.json();
+
+		// Rotate again with the newest token — should succeed
+		const second = await refresh(rotated1.refresh_token);
+		expect(second.status).toBe(200);
+		const rotated2 = await second.json();
+		expect(rotated2.refresh_token).not.toBe(rotated1.refresh_token);
+	});
+});

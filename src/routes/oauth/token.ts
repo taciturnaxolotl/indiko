@@ -75,7 +75,7 @@ async function handleRefreshTokenGrant(
 
 	const tokenData = db
 		.query(
-			"SELECT id, user_id, client_id, scope, refresh_expires_at, revoked FROM tokens WHERE refresh_token = ?",
+			"SELECT id, user_id, client_id, scope, refresh_expires_at, revoked, rotated, family FROM tokens WHERE refresh_token = ?",
 		)
 		.get(refresh_token) as
 		| {
@@ -85,11 +85,30 @@ async function handleRefreshTokenGrant(
 				scope: string;
 				refresh_expires_at: number;
 				revoked: number;
+				rotated: number;
+				family: string | null;
 		  }
 		| undefined;
 
 	if (!tokenData || tokenData.revoked === 1) {
 		return oauthError(400, "invalid_grant", "Invalid refresh token");
+	}
+
+	// RFC 9700 §4.14.2: presenting an already-rotated refresh token means the
+	// token leaked (either the attacker or the legit client is replaying a stale
+	// one, and we can't tell which). Revoke the whole family to stop the attack.
+	if (tokenData.rotated === 1) {
+		if (tokenData.family) {
+			db.query("UPDATE tokens SET revoked = 1 WHERE family = ?").run(
+				tokenData.family,
+			);
+		} else {
+			db.query("UPDATE tokens SET revoked = 1 WHERE id = ?").run(tokenData.id);
+		}
+		console.warn(
+			`[token] refresh token reuse detected — family ${tokenData.family ?? tokenData.id} revoked (possible token leak)`,
+		);
+		return oauthError(400, "invalid_grant", "Refresh token was already used");
 	}
 
 	const now = Math.floor(Date.now() / 1000);
@@ -101,20 +120,28 @@ async function handleRefreshTokenGrant(
 		return oauthError(400, "invalid_grant", "client_id mismatch");
 	}
 
-	// Rotate both tokens to prevent replay attacks
+	// Rotate: issue a new row in the same family, mark this one rotated.
 	const newAccessToken = generateToken();
 	const expiresAt = now + ACCESS_TOKEN_TTL;
 	const newRefreshToken = generateToken();
 	const refreshExpiresAt = now + REFRESH_TOKEN_TTL;
+	const family = tokenData.family ?? crypto.randomUUID();
 
 	db.query(
-		"UPDATE tokens SET token = ?, expires_at = ?, refresh_token = ?, refresh_expires_at = ? WHERE id = ?",
+		"UPDATE tokens SET rotated = 1 WHERE id = ?",
+	).run(tokenData.id);
+
+	db.query(
+		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		newAccessToken,
+		tokenData.user_id,
+		tokenData.client_id,
+		tokenData.scope,
 		expiresAt,
 		newRefreshToken,
 		refreshExpiresAt,
-		tokenData.id,
+		family,
 	);
 
 	const user = db
@@ -270,7 +297,7 @@ async function handleDeviceCodeGrant(
 	const refreshExpiresAt = now + REFRESH_TOKEN_TTL;
 
 	db.query(
-		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		accessToken,
 		deviceCode.user_id,
@@ -279,6 +306,7 @@ async function handleDeviceCodeGrant(
 		expiresAt,
 		refreshToken,
 		refreshExpiresAt,
+		crypto.randomUUID(),
 	);
 
 	const profile: Record<string, string> = {};
@@ -508,7 +536,7 @@ async function handleAuthorizationCodeGrant(
 	const refreshExpiresAt = now + REFRESH_TOKEN_TTL;
 
 	db.query(
-		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		accessToken,
 		authcode.user_id,
@@ -517,6 +545,7 @@ async function handleAuthorizationCodeGrant(
 		expiresAt,
 		refreshToken,
 		refreshExpiresAt,
+		crypto.randomUUID(),
 	);
 
 	const response: Record<string, unknown> = {
@@ -529,6 +558,10 @@ async function handleAuthorizationCodeGrant(
 		scope: scopes.join(" "),
 		iss: origin,
 	};
+
+	if (refreshToken) {
+		response.refresh_token = refreshToken;
+	}
 
 	if (permission?.role) {
 		response.role = permission.role;
