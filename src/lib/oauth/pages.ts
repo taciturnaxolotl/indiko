@@ -321,6 +321,19 @@ const CONSENT_STYLES = `
 		color: var(--old-rose);
 	}
 	.who strong { color: var(--lavender); font-weight: 600; }
+	.me-identity {
+		margin-top: 1rem;
+		padding: 0.75rem 1rem;
+		background: rgba(12, 23, 19, 0.4);
+		border: 1px solid var(--old-rose);
+		font-size: 0.8125rem;
+		color: var(--old-rose);
+		text-align: center;
+	}
+	.me-identity code {
+		color: var(--berry-crush);
+		font-size: 0.8125rem;
+	}
 `;
 
 export interface ConsentPageOptions {
@@ -374,6 +387,7 @@ export function consentPage(opts: ConsentPageOptions): Response {
     </div>
 
     <p class="request-text">wants to access your account</p>
+    ${opts.me ? `<div class="me-identity">requesting identity <code>${escapeHtml(opts.me)}</code></div>` : ""}
 
     <div class="scopes">
       <div class="scope-title">requested permissions</div>

@@ -81,6 +81,20 @@ describe("consentPage", () => {
 		expect(html).toContain('name="nonce" value="n-1"');
 	});
 
+	test("displays me parameter when present", async () => {
+		const html = await consentPage({
+			...base,
+			me: "https://kieran.example/",
+		}).text();
+		expect(html).toContain("requesting identity");
+		expect(html).toContain("https://kieran.example/");
+	});
+
+	test("omits me display when not provided", async () => {
+		const html = await consentPage(base).text();
+		expect(html).not.toContain("requesting identity");
+	});
+
 	test("includes clickjacking protection headers", () => {
 		const res = consentPage(base);
 		expect(res.headers.get("X-Frame-Options")).toBe("DENY");

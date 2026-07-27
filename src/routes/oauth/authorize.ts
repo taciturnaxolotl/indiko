@@ -38,17 +38,19 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		clientId = canonicalizeURL(rawClientId);
 		redirectUri = canonicalizeURL(rawRedirectUri);
 	} catch {
+		const details: Array<{ label: string; value: string; isCode?: boolean }> = [
+			{
+				label: "Provided redirect_uri:",
+				value: rawRedirectUri,
+				isCode: true,
+			},
+		];
+		if (me) details.push({ label: "Requested identity (me):", value: me, isCode: true });
 		return errorPage({
 			title: "Invalid Redirect URI",
 			message:
 				"The OAuth authorization request failed because the provided redirect_uri is not a valid URL.",
-			details: [
-				{
-					label: "Provided redirect_uri:",
-					value: rawRedirectUri,
-					isCode: true,
-				},
-			],
+			details,
 			hint: "The redirect URI must be a valid, absolute URL (e.g., https://example.com/callback).",
 		});
 	}
@@ -57,14 +59,16 @@ export async function authorizeGet(req: Request): Promise<Response> {
 	const appResult = await ensureApp(clientId, redirectUri);
 
 	if (appResult.error) {
+		const details: Array<{ label: string; value: string; isCode?: boolean }> = [
+			{ label: "Error:", value: appResult.error },
+			{ label: "Provided client_id:", value: clientId, isCode: true },
+		];
+		if (me) details.push({ label: "Requested identity (me):", value: me, isCode: true });
 		return errorPage({
 			title: "Invalid Client ID",
 			message:
 				"The OAuth authorization request failed because the provided client_id is not valid.",
-			details: [
-				{ label: "Error:", value: appResult.error },
-				{ label: "Provided client_id:", value: clientId, isCode: true },
-			],
+			details,
 			hint: "For auto-registration, the client_id must be a valid URL (e.g., https://example.com). Non-URL client IDs (like <code>ikc_xxxxx</code>) must be pre-registered by an administrator.",
 		});
 	}
@@ -81,17 +85,19 @@ export async function authorizeGet(req: Request): Promise<Response> {
 	const allowedRedirects = JSON.parse(app.redirect_uris) as string[];
 	if (!allowedRedirects.includes(redirectUri)) {
 		const appName = app.name || clientId;
+		const details: Array<{ label: string; value: string; isCode?: boolean }> = [
+			{
+				label: "Requested redirect_uri:",
+				value: redirectUri,
+				isCode: true,
+			},
+		];
+		if (me) details.push({ label: "Requested identity (me):", value: me, isCode: true });
 		return errorPage({
 			title: "Unauthorized Redirect URI",
 			message:
 				"The OAuth authorization request failed because the provided redirect_uri is not registered for this client application.",
-			details: [
-				{
-					label: "Requested redirect_uri:",
-					value: redirectUri,
-					isCode: true,
-				},
-			],
+			details,
 			hint: `The redirect_uri must exactly match a registered URI for <strong>${appName}</strong>. If you are the application developer, please ensure your redirect_uri matches the one registered with this authorization server.`,
 		});
 	}
