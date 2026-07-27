@@ -595,6 +595,7 @@
 						<li><a href="#tokens-introspect" style="font-size: 0.9rem;">introspection</a></li>
 						<li><a href="#tokens-revoke" style="font-size: 0.9rem;">revocation</a></li>
 						<li><a href="#tokens-userinfo" style="font-size: 0.9rem;">userinfo</a></li>
+						<li><a href="#tokens-device" style="font-size: 0.9rem;">device flow</a></li>
 					</ul>
 				</li>
 				<li><a href="#scopes">scopes</a></li>
@@ -819,6 +820,16 @@
 						<td><code>/userinfo</code></td>
 						<td>GET</td>
 						<td>Get user profile data with bearer token</td>
+					</tr>
+					<tr>
+						<td><code>/auth/device</code></td>
+						<td>POST</td>
+						<td>Request device and user codes (RFC 8628)</td>
+					</tr>
+					<tr>
+						<td><code>/device</code></td>
+						<td>GET</td>
+						<td>User verification page (enter code, approve/deny)</td>
 					</tr>
 					<tr>
 						<td><code>/u/:username</code></td>
@@ -1089,6 +1100,93 @@
 			<div class="info-box">
 				<strong>Note:</strong>
 				The response only includes data for scopes granted to the token. A token with only <code>profile</code> scope will not include email.
+			</div>
+
+			<h3 id="tokens-device">device flow (RFC 8628)</h3>
+			<p>
+				For CLI tools and headless devices that can't open a browser. The device displays a code, the user approves it on another device, and the device polls for tokens.
+			</p>
+
+			<p><strong>Step 1:</strong> Device requests codes:</p>
+			<pre><code><span class="http-method">POST</span> <span class="http-url" id="deviceAuthUrl">http://localhost:3000/auth/device</span>
+<span class="http-header">Content-Type</span>: application/x-www-form-urlencoded
+
+<span class="http-param">client_id</span>=https://myapp.example.com
+&<span class="http-param">scope</span>=profile email</code></pre>
+
+			<p>Response:</p>
+			<pre><code>{
+  <span class="json-key">"device_code"</span>: <span class="json-string">"GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS"</span>,
+  <span class="json-key">"user_code"</span>: <span class="json-string">"WDJB-MJHT"</span>,
+  <span class="json-key">"verification_uri"</span>: <span class="json-string">"http://localhost:3000/device"</span>,
+  <span class="json-key">"verification_uri_complete"</span>: <span class="json-string">"http://localhost:3000/device?code=WDJB-MJHT"</span>,
+  <span class="json-key">"expires_in"</span>: <span class="json-number">600</span>,
+  <span class="json-key">"interval"</span>: <span class="json-number">5</span>
+}</code></pre>
+
+			<p><strong>Step 2:</strong> Show the user the <code>user_code</code> and <code>verification_uri</code>. The user visits the URL on their phone or laptop, enters the code, and approves.</p>
+
+			<p><strong>Step 3:</strong> Device polls the token endpoint:</p>
+			<pre><code><span class="http-method">POST</span> <span class="http-url" id="deviceTokenUrl">http://localhost:3000/auth/token</span>
+<span class="http-header">Content-Type</span>: application/x-www-form-urlencoded
+
+<span class="http-param">grant_type</span>=urn:ietf:params:oauth:grant-type:device_code
+&<span class="http-param">device_code</span>=GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS
+&<span class="http-param">client_id</span>=https://myapp.example.com</code></pre>
+
+			<p>Polling responses:</p>
+			<table>
+				<thead>
+					<tr>
+						<th>Error</th>
+						<th>Meaning</th>
+						<th>Action</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td><code>authorization_pending</code></td>
+						<td>User hasn't acted yet</td>
+						<td>Keep polling at <code>interval</code></td>
+					</tr>
+					<tr>
+						<td><code>slow_down</code></td>
+						<td>Polling too fast</td>
+						<td>Increase interval by 5s</td>
+					</tr>
+					<tr>
+						<td><code>access_denied</code></td>
+						<td>User denied the request</td>
+						<td>Stop polling</td>
+					</tr>
+					<tr>
+						<td><code>expired_token</code></td>
+						<td>Code expired (10 min TTL)</td>
+						<td>Stop polling, restart</td>
+					</tr>
+				</tbody>
+			</table>
+
+			<p>Success response (same as authorization_code grant):</p>
+			<pre><code>{
+  <span class="json-key">"access_token"</span>: <span class="json-string">"..."</span>,
+  <span class="json-key">"token_type"</span>: <span class="json-string">"Bearer"</span>,
+  <span class="json-key">"expires_in"</span>: <span class="json-number">3600</span>,
+  <span class="json-key">"refresh_token"</span>: <span class="json-string">"..."</span>,
+  <span class="json-key">"me"</span>: <span class="json-string">"http://localhost:3000/u/username"</span>,
+  <span class="json-key">"scope"</span>: <span class="json-string">"profile email"</span>,
+  <span class="json-key">"iss"</span>: <span class="json-string">"http://localhost:3000"</span>
+}</code></pre>
+
+			<div class="info-box">
+				<strong>Notes:</strong>
+				<ul style="margin-top: 0.5rem; margin-bottom: 0;">
+					<li>Codes expire after 10 minutes</li>
+					<li>The device code is single-use — deleted after successful token exchange</li>
+					<li>No PKCE required (the device code itself is high-entropy proof)</li>
+					<li>User codes use unambiguous characters (no 0/O, 1/l/I confusion)</li>
+					<li>The <code>verification_uri_complete</code> can be shown as a QR code</li>
+				</ul>
 			</div>
 		</section>
 

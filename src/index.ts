@@ -43,6 +43,8 @@ import {
 	updateClient,
 } from "./routes/clients";
 import { authorizeGet, authorizePost } from "./routes/oauth/authorize";
+import { deviceAuthorization } from "./routes/oauth/device";
+import { deviceGet, devicePost } from "./routes/oauth/device-verify";
 import { clientMetadata, indieauthMetadata } from "./routes/oauth/discovery";
 import {
 	createInvite,
@@ -251,6 +253,15 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 			if (req.method === "POST") return await authorizePost(req);
 			return new Response("Method not allowed", { status: 405 });
 		},
+		"/auth/device": async (req: Request) => {
+			if (req.method === "POST") return await deviceAuthorization(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/device": async (req: Request) => {
+			if (req.method === "GET") return deviceGet(req);
+			if (req.method === "POST") return await devicePost(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
 		"/auth/token": async (req: Request) => {
 			if (req.method === "POST") return await token(req);
 			return new Response("Method not allowed", { status: 405 });
@@ -350,16 +361,20 @@ const cleanupJob = setInterval(() => {
 	const tokensDeleted = db
 		.query("DELETE FROM tokens WHERE expires_at < ? OR revoked = 1")
 		.run(now);
+	const deviceCodesDeleted = db
+		.query("DELETE FROM device_codes WHERE expires_at < ?")
+		.run(now);
 
 	const total =
 		sessionsDeleted.changes +
 		challengesDeleted.changes +
 		authcodesDeleted.changes +
-		tokensDeleted.changes;
+		tokensDeleted.changes +
+		deviceCodesDeleted.changes;
 
 	if (total > 0) {
 		console.log(
-			`[Cleanup] Removed ${total} expired records (sessions: ${sessionsDeleted.changes}, challenges: ${challengesDeleted.changes}, authcodes: ${authcodesDeleted.changes}, tokens: ${tokensDeleted.changes})`,
+			`[Cleanup] Removed ${total} expired records (sessions: ${sessionsDeleted.changes}, challenges: ${challengesDeleted.changes}, authcodes: ${authcodesDeleted.changes}, tokens: ${tokensDeleted.changes}, device_codes: ${deviceCodesDeleted.changes})`,
 		);
 	}
 }, 3600000); // 1 hour in milliseconds

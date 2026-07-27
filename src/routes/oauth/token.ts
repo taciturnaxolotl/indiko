@@ -30,16 +30,23 @@ export async function token(req: Request): Promise<Response> {
 
 		const { grant_type } = body;
 
-		if (grant_type !== "authorization_code" && grant_type !== "refresh_token") {
+		if (
+			grant_type !== "authorization_code" &&
+			grant_type !== "refresh_token" &&
+			grant_type !== "urn:ietf:params:oauth:grant-type:device_code"
+		) {
 			return oauthError(
 				400,
 				"unsupported_grant_type",
-				"Only authorization_code and refresh_token grant types are supported",
+				"Supported grant types: authorization_code, refresh_token, urn:ietf:params:oauth:grant-type:device_code",
 			);
 		}
 
 		if (grant_type === "refresh_token") {
 			return handleRefreshTokenGrant(body);
+		}
+		if (grant_type === "urn:ietf:params:oauth:grant-type:device_code") {
+			return handleDeviceCodeGrant(body);
 		}
 		return await handleAuthorizationCodeGrant(body);
 	} catch (error) {
@@ -130,6 +137,168 @@ async function handleRefreshTokenGrant(
 			refresh_token: newRefreshToken,
 			me: meValue,
 			scope: tokenData.scope,
+			iss: origin,
+		},
+		{ headers: NO_STORE_HEADERS },
+	);
+}
+
+// RFC 8628 §3.4: Device Access Token Request (polling)
+async function handleDeviceCodeGrant(
+	body: Record<string, string>,
+): Promise<Response> {
+	const { device_code, client_id: rawClientId } = body;
+
+	if (!device_code) {
+		return oauthError(
+			400,
+			"invalid_request",
+			"device_code parameter is required",
+		);
+	}
+
+	let clientId: string | undefined;
+	try {
+		clientId = rawClientId ? canonicalizeURL(rawClientId) : undefined;
+	} catch {
+		return oauthError(400, "invalid_request", "Invalid client_id URL format");
+	}
+
+	const deviceCode = db
+		.query(
+			"SELECT id, client_id, scope, expires_at, interval, last_polled_at, status, user_id FROM device_codes WHERE device_code = ?",
+		)
+		.get(device_code) as
+		| {
+				id: number;
+				client_id: string;
+				scope: string;
+				expires_at: number;
+				interval: number;
+				last_polled_at: number | null;
+				status: string;
+				user_id: number | null;
+		  }
+		| undefined;
+
+	if (!deviceCode) {
+		return oauthError(400, "invalid_grant", "Invalid device_code");
+	}
+
+	const now = Math.floor(Date.now() / 1000);
+
+	if (deviceCode.expires_at < now) {
+		return oauthError(400, "expired_token", "The device_code has expired");
+	}
+
+	if (clientId && deviceCode.client_id !== clientId) {
+		return oauthError(400, "invalid_grant", "client_id mismatch");
+	}
+
+	// Rate limiting: enforce minimum poll interval (RFC 8628 §3.5)
+	if (deviceCode.last_polled_at) {
+		const elapsed = now - deviceCode.last_polled_at;
+		if (elapsed < deviceCode.interval) {
+			// Increase the interval as penalty (RFC 8628 §3.5 slow_down)
+			const newInterval = deviceCode.interval + 5;
+			db.query(
+				"UPDATE device_codes SET interval = ?, last_polled_at = ? WHERE id = ?",
+			).run(newInterval, now, deviceCode.id);
+
+			return oauthError(
+				400,
+				"slow_down",
+				"Polling too frequently. Increase interval.",
+			);
+		}
+	}
+
+	// Update last poll time
+	db.query("UPDATE device_codes SET last_polled_at = ? WHERE id = ?").run(
+		now,
+		deviceCode.id,
+	);
+
+	if (deviceCode.status === "denied") {
+		return oauthError(
+			400,
+			"access_denied",
+			"The user denied the authorization request",
+		);
+	}
+
+	if (deviceCode.status === "pending") {
+		return oauthError(
+			400,
+			"authorization_pending",
+			"The user has not yet completed the authorization",
+		);
+	}
+
+	// Status is "approved" — issue tokens
+	if (!deviceCode.user_id) {
+		return oauthError(500, "server_error", "Approved code missing user_id");
+	}
+
+	// Clean up the device code — single use after approval
+	db.query("DELETE FROM device_codes WHERE id = ?").run(deviceCode.id);
+
+	const user = db
+		.query("SELECT username, name, email, photo, url FROM users WHERE id = ?")
+		.get(deviceCode.user_id) as
+		| {
+				username: string;
+				name: string;
+				email: string | null;
+				photo: string | null;
+				url: string | null;
+		  }
+		| undefined;
+
+	if (!user) {
+		return oauthError(500, "server_error", "User not found");
+	}
+
+	const scopes = deviceCode.scope.split(" ").filter(Boolean);
+	const origin = process.env.ORIGIN || "http://localhost:3000";
+	const meValue = user.url || `${origin}/u/${user.username}`;
+
+	const accessToken = generateToken();
+	const expiresAt = now + ACCESS_TOKEN_TTL;
+	const refreshToken = generateToken();
+	const refreshExpiresAt = now + REFRESH_TOKEN_TTL;
+
+	db.query(
+		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+	).run(
+		accessToken,
+		deviceCode.user_id,
+		deviceCode.client_id,
+		deviceCode.scope,
+		expiresAt,
+		refreshToken,
+		refreshExpiresAt,
+	);
+
+	const profile: Record<string, string> = {};
+	if (scopes.includes("profile")) {
+		profile.name = user.name;
+		if (user.photo) profile.photo = user.photo;
+		if (user.url) profile.url = user.url;
+	}
+	if (scopes.includes("email") && user.email) {
+		profile.email = user.email;
+	}
+
+	return Response.json(
+		{
+			access_token: accessToken,
+			token_type: "Bearer",
+			expires_in: ACCESS_TOKEN_TTL,
+			refresh_token: refreshToken,
+			me: meValue,
+			profile,
+			scope: deviceCode.scope,
 			iss: origin,
 		},
 		{ headers: NO_STORE_HEADERS },

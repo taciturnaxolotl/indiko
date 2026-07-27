@@ -45,7 +45,12 @@ export async function authorizeGet(req: Request): Promise<Response> {
 				isCode: true,
 			},
 		];
-		if (me) details.push({ label: "Requested identity (me):", value: me, isCode: true });
+		if (me)
+			details.push({
+				label: "Requested identity (me):",
+				value: me,
+				isCode: true,
+			});
 		return errorPage({
 			title: "Invalid Redirect URI",
 			message:
@@ -63,7 +68,12 @@ export async function authorizeGet(req: Request): Promise<Response> {
 			{ label: "Error:", value: appResult.error },
 			{ label: "Provided client_id:", value: clientId, isCode: true },
 		];
-		if (me) details.push({ label: "Requested identity (me):", value: me, isCode: true });
+		if (me)
+			details.push({
+				label: "Requested identity (me):",
+				value: me,
+				isCode: true,
+			});
 		return errorPage({
 			title: "Invalid Client ID",
 			message:
@@ -92,7 +102,12 @@ export async function authorizeGet(req: Request): Promise<Response> {
 				isCode: true,
 			},
 		];
-		if (me) details.push({ label: "Requested identity (me):", value: me, isCode: true });
+		if (me)
+			details.push({
+				label: "Requested identity (me):",
+				value: me,
+				isCode: true,
+			});
 		return errorPage({
 			title: "Unauthorized Redirect URI",
 			message:

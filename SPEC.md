@@ -159,6 +159,22 @@ challenge:{challenge} -> {
 // TTL: 5 minutes
 ```
 
+### Device Codes (RFC 8628)
+```
+device_code:{device_code} -> {
+  user_code: string,          // e.g. "WDJB-MJHT"
+  client_id: string,
+  scope: string,
+  expires_at: timestamp,      // 10 minutes
+  interval: number,           // poll interval in seconds (default 5)
+  last_polled_at: timestamp,
+  status: "pending" | "approved" | "denied",
+  user_id?: number            // set on approval
+}
+// TTL: 10 minutes
+// Single-use: deleted after successful token exchange
+```
+
 ## Supported Scopes
 
 - `profile` - Name, photo, URL
@@ -334,6 +350,69 @@ Get current user profile with bearer token
   "website": "https://kierank.dev"
 }
 ```
+
+#### `POST /auth/device` (RFC 8628)
+Device Authorization Request for CLI tools and headless devices
+
+**Body:**
+```
+client_id=https://myapp.example.com&scope=profile email
+```
+
+**Response:**
+```json
+{
+  "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS",
+  "user_code": "WDJB-MJHT",
+  "verification_uri": "https://indiko.yourdomain.com/device",
+  "verification_uri_complete": "https://indiko.yourdomain.com/device?code=WDJB-MJHT",
+  "expires_in": 600,
+  "interval": 5
+}
+```
+
+#### `GET /device`
+User-facing verification page (requires session)
+
+**Query Parameters:**
+- `code` (optional) - Pre-fill the user code
+
+**Flow:**
+1. If no session, redirect to `/login`
+2. Show code input form (or confirmation if code provided)
+3. On submit, show app name + scopes with Allow/Deny buttons
+
+#### `POST /device`
+User approves or denies the device authorization
+
+**Body:**
+- `code` (required) - The user code
+- `action` (required) - "allow" | "deny"
+
+#### Device Code Polling (Token Endpoint)
+The device polls `POST /auth/token` with grant type `urn:ietf:params:oauth:grant-type:device_code`
+
+**Body:**
+```
+grant_type=urn:ietf:params:oauth:grant-type:device_code
+&device_code=GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS
+&client_id=https://myapp.example.com
+```
+
+**Polling Responses:**
+
+| Error | Meaning |
+|-------|---------|
+| `authorization_pending` | User hasn't acted yet; keep polling |
+| `slow_down` | Polling too fast; interval increased by 5s |
+| `access_denied` | User denied the request; stop polling |
+| `expired_token` | Code expired (10 min TTL); restart |
+
+**Notes:**
+- No PKCE required (device code is high-entropy proof)
+- Device code is single-use; deleted after successful exchange
+- User codes use unambiguous consonants (no vowels, no 0/O, 1/l/I)
+- Rate limited via `interval` + `last_polled_at` tracking
 
 ### User Profile & Settings
 

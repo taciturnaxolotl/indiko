@@ -145,7 +145,11 @@ export function getDiscoveryDocument(origin: string) {
 		jwks_uri: `${origin}/jwks`,
 		scopes_supported: ["openid", "profile", "email"],
 		response_types_supported: ["code"],
-		grant_types_supported: ["authorization_code", "refresh_token"],
+		grant_types_supported: [
+			"authorization_code",
+			"refresh_token",
+			"urn:ietf:params:oauth:grant-type:device_code",
+		],
 		subject_types_supported: ["public"],
 		id_token_signing_alg_values_supported: ["RS256"],
 		token_endpoint_auth_methods_supported: ["none", "client_secret_post"],

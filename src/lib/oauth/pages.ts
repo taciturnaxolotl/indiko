@@ -9,7 +9,7 @@ export function escapeHtml(value: string): string {
 		.replaceAll("'", "&#39;");
 }
 
-const BASE_STYLES = `
+export const BASE_STYLES = `
 	:root {
 		--mahogany: #26242b;
 		--lavender: #d9d0de;
@@ -110,7 +110,7 @@ const BASE_STYLES = `
 `;
 
 // RFC 9700 §4.16: prevent clickjacking on the authorization endpoint
-const FRAME_DENY_HEADERS = {
+export const FRAME_DENY_HEADERS = {
 	"X-Frame-Options": "DENY",
 	"Content-Security-Policy": "frame-ancestors 'none'",
 };

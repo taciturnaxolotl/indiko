@@ -111,11 +111,16 @@ export function indieauthMetadata(): Response {
 		code_challenge_methods_supported: ["S256"],
 		scopes_supported: ["profile", "email"],
 		response_types_supported: ["code"],
-		grant_types_supported: ["authorization_code", "refresh_token"],
+		grant_types_supported: [
+			"authorization_code",
+			"refresh_token",
+			"urn:ietf:params:oauth:grant-type:device_code",
+		],
 		token_endpoint_auth_methods_supported: ["none", "client_secret_post"],
 		service_documentation: `${origin}/docs`,
 		client_id_metadata_document_supported: true,
 		authorization_response_iss_parameter_supported: true,
+		device_authorization_endpoint: `${origin}/auth/device`,
 	};
 
 	return Response.json(metadata, {
