@@ -192,6 +192,22 @@
       <i-button id="addPasskeyBtn"><button type="button">add new passkey</button></i-button>
     </i-card>
 
+    <!-- Passkey naming modal -->
+    <div id="passkeyNameModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center;">
+      <div style="background:var(--ink); border:2px solid var(--paper-dim); padding:var(--space-6); max-width:25rem; width:90%;">
+        <h3 style="font-size:var(--text-xl); font-weight:600; color:var(--paper); margin-bottom:var(--space-4);">name your passkey</h3>
+        <div class="form-group">
+          <label for="passkeyName">passkey name</label>
+          <input type="text" id="passkeyName" placeholder="e.g., iPhone, Work Laptop" autocomplete="off" />
+          <div class="form-help">A friendly name to identify this device</div>
+        </div>
+        <div style="display:flex; gap:var(--space-3); margin-top:var(--space-4);">
+          <button type="button" id="passkeyNameCancel" style="flex:1; background:rgba(188,141,160,0.2); color:var(--paper); border:none; cursor:pointer; font-family:inherit; font-size:var(--text-sm); font-weight:600; padding:var(--space-3);">cancel</button>
+          <button type="button" id="passkeyNameConfirm" style="flex:1; background:var(--accent); color:var(--paper); border:none; cursor:pointer; font-family:inherit; font-size:var(--text-sm); font-weight:600; padding:var(--space-3);">save</button>
+        </div>
+      </div>
+    </div>
+
     <i-card>
       <h2 class="card-title">profile settings</h2>
       <form id="profileForm">

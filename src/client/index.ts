@@ -420,6 +420,51 @@ async function onPasskeyRemove(e: CustomEvent<{ id: string }>) {
 	}
 }
 
+// Passkey naming modal — returns a promise that resolves with the name (or empty string on cancel)
+function promptPasskeyName(): Promise<string> {
+	return new Promise((resolve) => {
+		const modal = document.getElementById("passkeyNameModal") as HTMLElement;
+		const input = document.getElementById("passkeyName") as HTMLInputElement;
+		const confirmBtn = document.getElementById(
+			"passkeyNameConfirm",
+		) as HTMLButtonElement;
+		const cancelBtn = document.getElementById(
+			"passkeyNameCancel",
+		) as HTMLButtonElement;
+
+		input.value = "";
+		modal.style.display = "flex";
+		input.focus();
+
+		function cleanup() {
+			modal.style.display = "none";
+			confirmBtn.removeEventListener("click", onConfirm);
+			cancelBtn.removeEventListener("click", onCancel);
+			input.removeEventListener("keydown", onKeydown);
+		}
+
+		function onConfirm() {
+			const val = input.value.trim();
+			cleanup();
+			resolve(val);
+		}
+
+		function onCancel() {
+			cleanup();
+			resolve("");
+		}
+
+		function onKeydown(e: KeyboardEvent) {
+			if (e.key === "Enter") onConfirm();
+			if (e.key === "Escape") onCancel();
+		}
+
+		confirmBtn.addEventListener("click", onConfirm);
+		cancelBtn.addEventListener("click", onCancel);
+		input.addEventListener("keydown", onKeydown);
+	});
+}
+
 // Add passkey button handler
 async function onAddPasskey() {
 	addPasskeyNativeBtn.disabled = true;
@@ -448,10 +493,8 @@ async function onAddPasskey() {
 
 		addPasskeyNativeBtn.textContent = "verifying...";
 
-		// Ask for a name
-		const name = prompt(
-			"Give this passkey a name (e.g., 'iPhone', 'Work Laptop'):",
-		);
+		// Ask for a name via modal
+		const name = await promptPasskeyName();
 
 		// Verify registration
 		const verifyRes = await fetch("/api/passkeys/add/verify", {
