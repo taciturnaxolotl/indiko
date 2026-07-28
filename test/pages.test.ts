@@ -49,6 +49,7 @@ describe("consentPage", () => {
 		codeChallenge: "challenge",
 		me: null,
 		nonce: null,
+		csrfToken: "test-csrf-token",
 	};
 
 	test("escapes app metadata (stored-XSS guard)", async () => {

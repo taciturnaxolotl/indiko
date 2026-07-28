@@ -4,7 +4,7 @@ import {
 	escapeHtml,
 	FRAME_DENY_HEADERS,
 } from "../../lib/oauth/pages";
-import { getUserFromCookie } from "../../lib/session";
+import { getCsrfToken, getUserFromCookie } from "../../lib/session";
 
 const DEVICE_STYLES = `
 	body { padding: 2rem 1rem; }
@@ -285,6 +285,7 @@ export function deviceGet(req: Request): Response {
 		</div>
 		<p>make sure you initiated this on your device. only approve if you recognize the request.</p>
 		<form method="POST" action="/device">
+			<input type="hidden" name="csrf_token" value="${escapeHtml(getCsrfToken(req) || "")}" />
 			<input type="hidden" name="code" value="${escapeHtml(code)}" />
 			<div class="buttons">
 				<button type="submit" name="action" value="deny" class="deny">deny</button>
@@ -310,6 +311,13 @@ export async function devicePost(req: Request): Promise<Response> {
 
 	if (!code || !action) {
 		return new Response("Missing parameters", { status: 400 });
+	}
+
+	// Validate CSRF token from form field against cookie
+	const formCsrf = formData.get("csrf_token") as string;
+	const cookieCsrf = getCsrfToken(req);
+	if (!formCsrf || !cookieCsrf || formCsrf !== cookieCsrf) {
+		return new Response("CSRF token mismatch", { status: 403 });
 	}
 
 	if (isRateLimited(user.userId)) {

@@ -87,6 +87,50 @@ function isPrivateIP(ip: string): boolean {
 		return isPrivateIP(dotted);
 	}
 
+	// NAT64 (RFC 6052): 64:ff9b::/96 embeds an IPv4 address in the last 32 bits
+	const nat64Match = ipv6.match(/^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+	if (nat64Match?.[1] && nat64Match[2]) {
+		const hi = Number.parseInt(nat64Match[1], 16);
+		const lo = Number.parseInt(nat64Match[2], 16);
+		const dotted = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+		return isPrivateIP(dotted);
+	}
+
+	// 6to4 (RFC 3056): 2002::/16 embeds an IPv4 address in bits 16-48
+	if (ipv6.startsWith("2002:")) {
+		const parts = ipv6.split(":");
+		if (parts.length >= 3) {
+			const hiStr = parts[1];
+			const loStr = parts[2];
+			if (hiStr && loStr) {
+				const hi = Number.parseInt(hiStr, 16);
+				const lo = Number.parseInt(loStr, 16);
+				if (!Number.isNaN(hi) && !Number.isNaN(lo)) {
+					const dotted = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+					return isPrivateIP(dotted);
+				}
+			}
+		}
+		return true; // Can't parse — block to be safe
+	}
+
+	// Teredo (RFC 4380): 2001:0000::/32 — block the whole prefix
+	if (ipv6.startsWith("2001:0:") || ipv6.startsWith("2001:0000:")) {
+		return true;
+	}
+
+	// Documentation range (RFC 3849) — non-routable
+	if (ipv6.startsWith("2001:db8:")) return true;
+
+	// Site-local (deprecated, RFC 3879) fec0::/10
+	if (ipv6.startsWith("fec")) return true;
+
+	// Multicast ff00::/8
+	if (ipv6.startsWith("ff")) return true;
+
+	// Discard-only 100::/64
+	if (ipv6.startsWith("100::")) return true;
+
 	return false;
 }
 

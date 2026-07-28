@@ -3,7 +3,7 @@ import { db } from "../../db";
 import { ensureApp } from "../../lib/oauth/client-metadata";
 import { consentPage, errorPage, escapeHtml } from "../../lib/oauth/pages";
 import { canonicalizeURL } from "../../lib/oauth/urls";
-import { getUserFromCookie } from "../../lib/session";
+import { getCsrfToken, getUserFromCookie } from "../../lib/session";
 import { token } from "./token";
 
 const AUTH_CODE_TTL = 60; // seconds
@@ -215,6 +215,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 
 	// Show consent screen
 	return showConsentScreen(
+		req,
 		user,
 		clientId,
 		redirectUri,
@@ -227,6 +228,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 }
 
 function showConsentScreen(
+	req: Request,
 	user: { username: string },
 	clientId: string,
 	redirectUri: string,
@@ -276,6 +278,7 @@ function showConsentScreen(
 		codeChallenge,
 		me,
 		nonce,
+		csrfToken: getCsrfToken(req) || "",
 	});
 }
 
@@ -315,6 +318,13 @@ export async function authorizePost(req: Request): Promise<Response> {
 
 	if (!user) {
 		return new Response("Unauthorized", { status: 401 });
+	}
+
+	// Validate CSRF token from the form field against the cookie
+	const formCsrf = body.csrf_token;
+	const cookieCsrf = getCsrfToken(req);
+	if (!formCsrf || !cookieCsrf || formCsrf !== cookieCsrf) {
+		return new Response("CSRF token mismatch", { status: 403 });
 	}
 
 	const action = body.action;

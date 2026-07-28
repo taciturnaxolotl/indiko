@@ -34,13 +34,14 @@ function validParams(overrides: Record<string, string> = {}) {
 }
 
 function consentPost(body: Record<string, string>, cookie: string): Request {
+	const csrfToken = "test-csrf";
 	return new Request("http://localhost/auth/authorize", {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/x-www-form-urlencoded",
-			Cookie: `indiko_session=${cookie}`,
+			Cookie: `indiko_session=${cookie}; indiko_csrf=${csrfToken}`,
 		},
-		body: new URLSearchParams(body).toString(),
+		body: new URLSearchParams({ ...body, csrf_token: csrfToken }).toString(),
 	});
 }
 

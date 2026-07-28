@@ -340,6 +340,7 @@ export interface ConsentPageOptions {
 	codeChallenge: string;
 	me: string | null;
 	nonce: string | null;
+	csrfToken: string;
 }
 
 const SCOPE_DESCRIPTIONS: Record<string, string> = {
@@ -387,6 +388,7 @@ export function consentPage(opts: ConsentPageOptions): Response {
     </div>
 
     <form method="POST" action="/auth/authorize">
+      <input type="hidden" name="csrf_token" value="${escapeHtml(opts.csrfToken)}" />
       <input type="hidden" name="client_id" value="${escapeHtml(opts.clientId)}" />
       <input type="hidden" name="redirect_uri" value="${escapeHtml(opts.redirectUri)}" />
       <input type="hidden" name="state" value="${escapeHtml(opts.state)}" />

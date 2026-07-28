@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { db } from "../../db";
+import { getClientIp } from "../../lib/client-ip";
 import { NO_STORE_HEADERS, oauthError } from "../../lib/oauth/errors";
 import { hashSecret } from "../../lib/secrets";
 
@@ -70,10 +71,7 @@ function isValidRedirectUri(uri: string): boolean {
 // Registers a confidential client (opaque client_id + client_secret).
 // Rate-limited per IP to prevent DB flooding.
 export async function registerClient(req: Request): Promise<Response> {
-	const clientIp =
-		req.headers.get("cf-connecting-ip") ||
-		req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-		"unknown";
+	const clientIp = getClientIp(req);
 
 	if (isRegisterRateLimited(clientIp)) {
 		return oauthError(

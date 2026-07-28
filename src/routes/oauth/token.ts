@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { db } from "../../db";
+import { getClientIp } from "../../lib/client-ip";
 import {
 	NO_STORE_HEADERS,
 	oauthError,
@@ -38,10 +39,7 @@ function generateToken(): string {
 
 // POST /auth/token - Exchange authorization code or refresh token
 export async function token(req: Request): Promise<Response> {
-	const clientIp =
-		req.headers.get("cf-connecting-ip") ||
-		req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-		"unknown";
+	const clientIp = getClientIp(req);
 
 	if (isTokenRateLimited(clientIp)) {
 		return oauthError(
@@ -101,6 +99,10 @@ async function handleRefreshTokenGrant(
 		);
 	}
 
+	if (!body.client_id) {
+		return oauthError(400, "invalid_request", "client_id is required");
+	}
+
 	const client_id = body.client_id
 		? canonicalizeURL(body.client_id)
 		: undefined;
@@ -150,6 +152,15 @@ async function handleRefreshTokenGrant(
 
 	if (tokenData.client_id !== client_id) {
 		return oauthError(400, "invalid_grant", "client_id mismatch");
+	}
+
+	// RFC 6749 §6: confidential clients must authenticate on refresh
+	const credentialError = verifyClientCredentials(
+		client_id,
+		body.client_secret,
+	);
+	if (credentialError) {
+		return credentialError;
 	}
 
 	// Rotate: issue a new row in the same family, mark this one rotated.

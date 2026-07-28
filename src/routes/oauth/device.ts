@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { db } from "../../db";
+import { getClientIp } from "../../lib/client-ip";
 import { ensureApp } from "../../lib/oauth/client-metadata";
 import {
 	NO_STORE_HEADERS,
@@ -10,6 +11,25 @@ import { canonicalizeURL } from "../../lib/oauth/urls";
 
 const DEVICE_CODE_TTL = 600; // 10 minutes
 const POLL_INTERVAL = 5; // seconds
+
+// Rate limiting for device authorization — unauthenticated endpoint
+// that inserts DB rows.
+const DEVICE_WINDOW_MS = 60 * 1000; // 1 minute
+const DEVICE_MAX = 10; // max requests per window per IP
+const deviceAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function isDeviceRateLimited(ip: string): boolean {
+	if (process.env.NODE_ENV === "test") return false;
+
+	const now = Date.now();
+	const entry = deviceAttempts.get(ip);
+	if (!entry || now > entry.resetAt) {
+		deviceAttempts.set(ip, { count: 1, resetAt: now + DEVICE_WINDOW_MS });
+		return false;
+	}
+	entry.count++;
+	return entry.count > DEVICE_MAX;
+}
 
 // Generate a human-typeable user code per RFC 8628 §6.1 recommendations.
 // Uses unambiguous consonants (no vowels to avoid accidental words,
@@ -30,6 +50,15 @@ function generateUserCode(): string {
 
 // POST /auth/device - RFC 8628 Device Authorization Request
 export async function deviceAuthorization(req: Request): Promise<Response> {
+	const clientIp = getClientIp(req);
+	if (isDeviceRateLimited(clientIp)) {
+		return oauthError(
+			429,
+			"invalid_request",
+			"Too many requests. Please try again later.",
+		);
+	}
+
 	try {
 		const body = await parseBody(req);
 		if (!body) {

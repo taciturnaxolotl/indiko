@@ -105,12 +105,29 @@ import {
 	console.log(`[Startup] Environment validated (${nodeEnv} mode)`);
 })();
 
+import { SECURITY_HEADERS } from "./lib/security-headers";
+
+// Wrap HTML imports to add security headers. Bun's HTML imports become
+// static handlers in the routes object — wrapping them in functions lets
+// us attach headers.
+function withHeaders(html: unknown): () => Response {
+	return () => {
+		// Bun HTML imports are Response-like objects; clone and add headers
+		const res = html as Response;
+		const newRes = new Response(res.body, {
+			status: res.status,
+			headers: { ...Object.fromEntries(res.headers.entries()), ...SECURITY_HEADERS },
+		});
+		return newRes;
+	};
+}
+
 const server = Bun.serve({
 	port: env.PORT ? Number.parseInt(env.PORT, 10) : 3000,
 	routes: {
 		"/favicon.svg": Bun.file("./public/favicon.svg"),
 		"/logo.svg": Bun.file("./public/logo.svg"),
-		"/": indexHTML,
+		"/": withHeaders(indexHTML),
 		"/health": () => {
 			try {
 				// Verify database is accessible
@@ -126,11 +143,11 @@ const server = Bun.serve({
 				);
 			}
 		},
-		"/admin": adminHTML,
-		"/admin/invites": adminInvitesHTML,
+		"/admin": withHeaders(adminHTML),
+		"/admin/invites": withHeaders(adminInvitesHTML),
 		"/admin/apps": () => Response.redirect("/admin/clients", 302),
-		"/admin/clients": adminClientsHTML,
-		"/login": loginHTML,
+		"/admin/clients": withHeaders(adminClientsHTML),
+		"/login": withHeaders(loginHTML),
 		"/docs": docsPage,
 		"/docs.md": docsMarkdown,
 		"/docs.css": Bun.file("./public/docs.css"),
@@ -138,7 +155,7 @@ const server = Bun.serve({
 		"/styles.css": Bun.file("./src/styles.css"),
 		"/ds/tokens.css": Bun.file("./src/client/ds/tokens.css"),
 		"/ds/components.css": Bun.file("./src/client/ds/components.css"),
-		"/apps": appsHTML,
+		"/apps": withHeaders(appsHTML),
 		// Well-known endpoints
 		"/.well-known/security.txt": () => {
 			const expiryDate = new Date();

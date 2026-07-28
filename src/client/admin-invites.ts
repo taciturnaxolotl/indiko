@@ -83,10 +83,10 @@ async function loadAppsForInvite() {
 					name: string;
 					roles: string[];
 				}) => {
-					const roleOptions =
+				const roleOptions =
 						app.roles.length > 0
 							? app.roles
-									.map((role) => `<option value="${role}">${role}</option>`)
+									.map((role) => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`)
 									.join("")
 							: '<option value="" disabled>No roles defined yet</option>';
 
@@ -95,8 +95,8 @@ async function loadAppsForInvite() {
 					return `
 				<div class="app-role-item">
 					<label>
-						<input type="checkbox" name="appRole" value="${app.id}" data-client-id="${app.clientId}">
-						<span>${displayName}</span>
+						<input type="checkbox" name="appRole" value="${app.id}" data-client-id="${escapeHtml(app.clientId)}">
+						<span>${escapeHtml(displayName)}</span>
 					</label>
 					<select class="role-select" data-app-id="${app.id}" disabled>
 						<option value="">Select role...</option>

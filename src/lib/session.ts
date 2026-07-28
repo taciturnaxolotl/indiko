@@ -143,6 +143,11 @@ function readCsrfCookie(req: Request): string | null {
 	return match?.[1] ?? null;
 }
 
+/** Read the CSRF token from the request's cookie (for embedding in forms). */
+export function getCsrfToken(req: Request): string | null {
+	return readCsrfCookie(req);
+}
+
 /**
  * Validate the CSRF token on a mutating request. The token from the
  * X-CSRF-Token header must match the indiko_csrf cookie.
@@ -160,5 +165,18 @@ export function validateCsrf(req: Request): Response | null {
 		return Response.json({ error: "CSRF token mismatch" }, { status: 403 });
 	}
 
+	return null;
+}
+
+/**
+ * Validate CSRF from a form field (for plain HTML form POSTs without JS).
+ * The form field "csrf_token" must match the indiko_csrf cookie.
+ */
+export function validateCsrfForm(formToken: string | null): Response | null {
+	if (!formToken) {
+		return Response.json({ error: "CSRF token missing" }, { status: 403 });
+	}
+	// Note: the caller must compare this against the cookie value.
+	// This function only checks presence; the caller does the comparison.
 	return null;
 }

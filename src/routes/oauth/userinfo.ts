@@ -1,6 +1,6 @@
 import { db } from "../../db";
 import { unauthorizedResponse } from "../../lib/oauth/errors";
-import { getSessionUserFlexible } from "../../lib/session";
+import { getSessionUserFlexible, validateCsrf } from "../../lib/session";
 
 // GET /userinfo - Get user profile from access token
 export function userinfo(req: Request): Response {
@@ -111,6 +111,10 @@ export function logout(req: Request): Response {
 	if (user instanceof Response) {
 		return user;
 	}
+
+	// Validate CSRF for cookie-authenticated logout
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	// Delete session from DB (try both Bearer token and cookie)
 	const authHeader = req.headers.get("Authorization");

@@ -77,7 +77,11 @@ export default class INav extends Elena(HTMLElement) {
 
 	private async signOut() {
 		try {
-			await fetch("/auth/logout", { method: "POST" });
+			const csrf = document.cookie.match(/indiko_csrf=([^;]+)/)?.[1];
+			await fetch("/auth/logout", {
+				method: "POST",
+				headers: csrf ? { "X-CSRF-Token": csrf } : {},
+			});
 		} catch {
 			// Ignore
 		}

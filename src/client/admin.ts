@@ -80,12 +80,12 @@ async function loadUsers() {
 						<div class="user-meta">
 							<span class="user-meta-item">${user.credentialCount} passkey${user.credentialCount !== 1 ? "s" : ""}</span>
 							<span class="user-meta-item">joined ${createdDate}</span>
-							${user.email ? `<span class="user-meta-item">${user.email}</span>` : ""}
+							${user.email ? `<span class="user-meta-item">${escapeHtml(user.email)}</span>` : ""}
 						</div>
 					</div>
 					<div class="user-badges">
-						<span class="user-badge badge-status ${user.status}">${user.status}</span>
-						<span class="user-badge badge-role">${user.role}</span>
+						<span class="user-badge badge-status ${escapeHtml(user.status)}">${escapeHtml(user.status)}</span>
+						<span class="user-badge badge-role">${escapeHtml(user.role)}</span>
 					</div>
 					<div class="user-actions">
 						${

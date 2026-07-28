@@ -46,6 +46,16 @@ export async function registerOptions(req: Request): Promise<Response> {
 			return Response.json({ error: "Username required" }, { status: 400 });
 		}
 
+		if (
+			username.length > 128 ||
+			!/^[A-Za-z0-9._@-]+$/.test(username)
+		) {
+			return Response.json(
+				{ error: "Invalid username format" },
+				{ status: 400 },
+			);
+		}
+
 		// Check if username already exists
 		const existingUser = db
 			.query("SELECT id FROM users WHERE username = ?")
@@ -170,6 +180,16 @@ export async function registerVerify(req: Request): Promise<Response> {
 		if (!username || !response) {
 			return Response.json(
 				{ error: "Username and response required" },
+				{ status: 400 },
+			);
+		}
+
+		if (
+			username.length > 128 ||
+			!/^[A-Za-z0-9._@-]+$/.test(username)
+		) {
+			return Response.json(
+				{ error: "Invalid username format" },
 				{ status: 400 },
 			);
 		}

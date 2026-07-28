@@ -169,6 +169,9 @@ export async function updateOrphanedAccounts(
 			newStatus,
 			user.id,
 		);
+		// Revoke sessions and OAuth tokens so suspension takes effect immediately
+		db.query("DELETE FROM sessions WHERE user_id = ?").run(user.id);
+		db.query("UPDATE tokens SET revoked = 1 WHERE user_id = ?").run(user.id);
 		console.log(`   Updated: ${user.username}`);
 	}
 
