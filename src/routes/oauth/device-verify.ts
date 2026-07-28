@@ -138,6 +138,35 @@ function normalizeUserCode(input: string): string {
 	return input.toUpperCase().replace(/[^A-Z]/g, "");
 }
 
+// Rate limiting for device code verification (RFC 8628 §5.2).
+// Track failed lookups per user; lock out after MAX_FAILURES within WINDOW.
+const MAX_FAILURES = 10;
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const failedAttempts = new Map<number, { count: number; firstAt: number }>();
+
+function isRateLimited(userId: number): boolean {
+	const entry = failedAttempts.get(userId);
+	if (!entry) return false;
+	if (Date.now() - entry.firstAt > WINDOW_MS) {
+		failedAttempts.delete(userId);
+		return false;
+	}
+	return entry.count >= MAX_FAILURES;
+}
+
+function recordFailure(userId: number): void {
+	const entry = failedAttempts.get(userId);
+	if (!entry || Date.now() - entry.firstAt > WINDOW_MS) {
+		failedAttempts.set(userId, { count: 1, firstAt: Date.now() });
+	} else {
+		entry.count++;
+	}
+}
+
+function clearFailures(userId: number): void {
+	failedAttempts.delete(userId);
+}
+
 function lookupDeviceCode(userCode: string) {
 	const normalized = normalizeUserCode(userCode);
 	// Try with and without the dash
@@ -202,14 +231,25 @@ export function deviceGet(req: Request): Response {
 		return devicePage("authorize device", inputHtml);
 	}
 
+	if (isRateLimited(user.userId)) {
+		return devicePage(
+			"authorize device",
+			`<div class="error-msg">Too many failed attempts. Please wait before trying again.</div>`,
+			429,
+		);
+	}
+
 	const deviceCode = lookupDeviceCode(code);
 
 	if (!deviceCode) {
+		recordFailure(user.userId);
 		return devicePage(
 			"authorize device",
 			`<div class="error-msg">Invalid code. Check the code on your device and try again.</div>${inputHtml}`,
 		);
 	}
+
+	clearFailures(user.userId);
 
 	const now = Math.floor(Date.now() / 1000);
 	if (deviceCode.expires_at < now) {
@@ -269,15 +309,26 @@ export async function devicePost(req: Request): Promise<Response> {
 		return new Response("Missing parameters", { status: 400 });
 	}
 
+	if (isRateLimited(user.userId)) {
+		return devicePage(
+			"authorize device",
+			`<div class="error-msg">Too many failed attempts. Please wait before trying again.</div>`,
+			429,
+		);
+	}
+
 	const deviceCode = lookupDeviceCode(code);
 
 	if (!deviceCode) {
+		recordFailure(user.userId);
 		return devicePage(
 			"authorize device",
 			`<div class="error-msg">Invalid code.</div>`,
 			400,
 		);
 	}
+
+	clearFailures(user.userId);
 
 	const now = Math.floor(Date.now() / 1000);
 	if (deviceCode.expires_at < now) {

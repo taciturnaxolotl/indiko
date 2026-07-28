@@ -4,10 +4,13 @@
  * Prevents Server-Side Request Forgery attacks by:
  * 1. Blocking private/internal IP addresses in URLs
  * 2. Blocking local hostnames (.local, .localhost, .internal, etc.)
- * 3. Validating redirect targets
+ * 3. Resolving DNS and validating every returned IP before connecting
+ * 4. Handling redirects manually, validating each hop (URL + DNS)
  *
  * @see https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/
  */
+
+import { resolve4, resolve6 } from "node:dns/promises";
 
 export type SafeFetchResult<T> =
 	| { success: true; data: T }
@@ -69,10 +72,19 @@ function isPrivateIP(ip: string): boolean {
 		return true;
 	}
 
-	// IPv4-mapped IPv6 addresses ::ffff:x.x.x.x
+	// IPv4-mapped IPv6 addresses ::ffff:x.x.x.x (dotted-quad form)
 	const ipv4MappedMatch = ipv6.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
 	if (ipv4MappedMatch?.[1]) {
 		return isPrivateIP(ipv4MappedMatch[1]);
+	}
+
+	// IPv4-mapped IPv6 in hex form (::ffff:a01:101 = ::ffff:10.1.1.1)
+	const hexMappedMatch = ipv6.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+	if (hexMappedMatch?.[1] && hexMappedMatch[2]) {
+		const hi = Number.parseInt(hexMappedMatch[1], 16);
+		const lo = Number.parseInt(hexMappedMatch[2], 16);
+		const dotted = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+		return isPrivateIP(dotted);
 	}
 
 	return false;
@@ -200,9 +212,70 @@ export function validateExternalURL(urlString: string): {
 }
 
 /**
+ * Resolve a hostname and validate every returned IP against the private range
+ * blocklist. Returns an error if any resolved IP is private — we don't try to
+ * pick a "safe" one because the resolver may round-robin.
+ *
+ * Note: there is an inherent TOCTOU gap between this check and the actual
+ * TCP connect (Bun's fetch resolves DNS independently). An attacker with
+ * sub-second DNS TTL switching could theoretically rebind between the two
+ * resolutions. In practice this raises the bar from "one A record" to
+ * "precisely-timed DNS race," and the manual redirect handling ensures
+ * every hop is re-validated.
+ */
+async function resolveAndValidateIPs(hostname: string): Promise<{
+	safe: boolean;
+	error?: string;
+}> {
+	// Literal IPs don't need resolution — validate directly.
+	if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+		return isPrivateIP(hostname)
+			? { safe: false, error: "Cannot fetch from private/reserved IP addresses" }
+			: { safe: true };
+	}
+
+	if (hostname.startsWith("[") && hostname.endsWith("]")) {
+		return isPrivateIP(hostname)
+			? { safe: false, error: "Cannot fetch from private/reserved IP addresses" }
+			: { safe: true };
+	}
+
+	try {
+		const [ipv4s, ipv6s] = await Promise.allSettled([
+			resolve4(hostname),
+			resolve6(hostname),
+		]);
+
+		const addresses: string[] = [];
+		if (ipv4s.status === "fulfilled") addresses.push(...ipv4s.value);
+		if (ipv6s.status === "fulfilled") addresses.push(...ipv6s.value);
+
+		if (addresses.length === 0) {
+			return { safe: false, error: "DNS resolution returned no addresses" };
+		}
+
+		for (const addr of addresses) {
+			if (isPrivateIP(addr)) {
+				return {
+					safe: false,
+					error: `Hostname resolves to private/reserved IP ${addr}`,
+				};
+			}
+		}
+
+		return { safe: true };
+	} catch {
+		return { safe: false, error: "DNS resolution failed" };
+	}
+}
+
+const MAX_REDIRECTS = 5;
+
+/**
  * Perform a fetch with SSRF protection.
  *
- * This validates the URL before fetching and adds additional protections.
+ * Validates the URL, resolves DNS and checks every returned IP, then follows
+ * redirects manually — validating URL + DNS for each hop before connecting.
  */
 export async function safeFetch(
 	url: string,
@@ -211,53 +284,70 @@ export async function safeFetch(
 		headers?: Record<string, string>;
 	} = {},
 ): Promise<SafeFetchResult<Response>> {
-	// Validate URL before fetching
-	const validation = validateExternalURL(url);
-	if (!validation.safe) {
-		return {
-			success: false,
-			error: validation.error || "URL validation failed",
-		};
-	}
-
 	const { timeout = 5000, headers = {} } = options;
 
-	try {
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), timeout);
+	let currentUrl = url;
 
-		const response = await fetch(url, {
-			method: "GET",
-			headers: {
-				Accept: "application/json, text/html",
-				"User-Agent": "Indiko/1.0 (OAuth Client Metadata Fetcher)",
-				...headers,
-			},
-			signal: controller.signal,
-			redirect: "follow",
-		});
-
-		clearTimeout(timeoutId);
-
-		// After redirect, validate the final URL
-		if (response.url && response.url !== url) {
-			const finalValidation = validateExternalURL(response.url);
-			if (!finalValidation.safe) {
-				return {
-					success: false,
-					error: `Redirect to unsafe URL: ${finalValidation.error}`,
-				};
-			}
+	for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+		// Validate URL structure (protocol, credentials, hostname, port)
+		const validation = validateExternalURL(currentUrl);
+		if (!validation.safe) {
+			return {
+				success: false,
+				error: validation.error || "URL validation failed",
+			};
 		}
 
-		return { success: true, data: response };
-	} catch (error) {
-		if (error instanceof Error) {
-			if (error.name === "AbortError") {
-				return { success: false, error: "Request timed out" };
-			}
-			return { success: false, error: `Fetch failed: ${error.message}` };
+		// Resolve DNS and validate every returned IP
+		const parsedUrl = new URL(currentUrl);
+		const dnsValidation = await resolveAndValidateIPs(parsedUrl.hostname);
+		if (!dnsValidation.safe) {
+			return {
+				success: false,
+				error: dnsValidation.error || "DNS validation failed",
+			};
 		}
-		return { success: false, error: "Fetch failed: Unknown error" };
+
+		try {
+			const controller = new AbortController();
+			const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+			const response = await fetch(currentUrl, {
+				method: "GET",
+				headers: {
+					Accept: "application/json, text/html",
+					"User-Agent": "Indiko/1.0 (OAuth Client Metadata Fetcher)",
+					...headers,
+				},
+				signal: controller.signal,
+				redirect: "manual",
+			});
+
+			clearTimeout(timeoutId);
+
+			// Follow redirects manually so each hop gets URL + DNS validation
+			if (
+				response.status >= 300 &&
+				response.status < 400 &&
+				response.headers.get("location")
+			) {
+				const location = response.headers.get("location") as string;
+				// Resolve relative redirects against the current URL
+				currentUrl = new URL(location, currentUrl).toString();
+				continue;
+			}
+
+			return { success: true, data: response };
+		} catch (error) {
+			if (error instanceof Error) {
+				if (error.name === "AbortError") {
+					return { success: false, error: "Request timed out" };
+				}
+				return { success: false, error: `Fetch failed: ${error.message}` };
+			}
+			return { success: false, error: "Fetch failed: Unknown error" };
+		}
 	}
+
+	return { success: false, error: "Too many redirects" };
 }
