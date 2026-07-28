@@ -121,13 +121,33 @@ async function handleRefreshTokenGrant(
 	}
 
 	// Rotate: issue a new row in the same family, mark this one rotated.
+	// The UPDATE must be atomic (WHERE rotated = 0) — otherwise two concurrent
+	// refreshes both win and reuse detection is defeated.
 	const newAccessToken = generateToken();
 	const expiresAt = now + ACCESS_TOKEN_TTL;
 	const newRefreshToken = generateToken();
 	const refreshExpiresAt = now + REFRESH_TOKEN_TTL;
 	const family = tokenData.family ?? crypto.randomUUID();
 
-	db.query("UPDATE tokens SET rotated = 1 WHERE id = ?").run(tokenData.id);
+	const rotateResult = db
+		.query("UPDATE tokens SET rotated = 1 WHERE id = ? AND rotated = 0")
+		.run(tokenData.id);
+
+	if (rotateResult.changes === 0) {
+		// Someone else rotated first — this is a replay of a stale token.
+		// Revoke the whole family per RFC 9700 §4.14.2.
+		if (tokenData.family) {
+			db.query("UPDATE tokens SET revoked = 1 WHERE family = ?").run(
+				tokenData.family,
+			);
+		} else {
+			db.query("UPDATE tokens SET revoked = 1 WHERE id = ?").run(tokenData.id);
+		}
+		console.warn(
+			`[token] refresh token race lost — family ${tokenData.family ?? tokenData.id} revoked`,
+		);
+		return oauthError(400, "invalid_grant", "Refresh token was already used");
+	}
 
 	db.query(
 		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -183,9 +203,19 @@ async function handleDeviceCodeGrant(
 		);
 	}
 
-	let clientId: string | undefined;
+	// RFC 8628 §3.4: client_id is required for public clients polling the
+	// token endpoint. Without it the device_code isn't bound to its client.
+	if (!rawClientId) {
+		return oauthError(
+			400,
+			"invalid_request",
+			"client_id parameter is required",
+		);
+	}
+
+	let clientId: string;
 	try {
-		clientId = rawClientId ? canonicalizeURL(rawClientId) : undefined;
+		clientId = canonicalizeURL(rawClientId);
 	} catch {
 		return oauthError(400, "invalid_request", "Invalid client_id URL format");
 	}
@@ -217,8 +247,15 @@ async function handleDeviceCodeGrant(
 		return oauthError(400, "expired_token", "The device_code has expired");
 	}
 
-	if (clientId && deviceCode.client_id !== clientId) {
+	if (deviceCode.client_id !== clientId) {
 		return oauthError(400, "invalid_grant", "client_id mismatch");
+	}
+
+	// Pre-registered (confidential) clients must authenticate with their
+	// client_secret, same as the authorization_code grant.
+	const credentialError = verifyClientCredentials(clientId, body.client_secret);
+	if (credentialError) {
+		return credentialError;
 	}
 
 	// Rate limiting: enforce minimum poll interval (RFC 8628 §3.5)
@@ -568,18 +605,17 @@ async function handleAuthorizationCodeGrant(
 		response.refresh_token = refreshToken;
 	}
 
-	if (refreshToken) {
-		response.refresh_token = refreshToken;
-	}
-
 	if (permission?.role) {
 		response.role = permission.role;
 	}
 
 	// Generate OIDC id_token if openid scope is requested
 	if (scopes.includes("openid")) {
+		// sub must be stable and unique per OIDC Core §8 — use the canonical
+		// profile URL, not the user-mutable website URL.
+		const stableSub = `${origin}/u/${user.username}`;
 		const idTokenClaims: Record<string, unknown> = {
-			sub: meValue,
+			sub: stableSub,
 			aud: client_id,
 		};
 
@@ -613,6 +649,7 @@ async function handleAuthorizationCodeGrant(
 				picture?: string;
 				website?: string;
 			},
+			accessToken,
 		);
 	}
 

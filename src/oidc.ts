@@ -28,7 +28,7 @@ async function generateAndStoreKey(): Promise<OIDCKey> {
 	const privateKeyPem = await exportKeyToPem(privateKey);
 	const publicKeyPem = await exportKeyToPem(publicKey);
 
-	const kid = `indiko-oidc-key-${Date.now()}`;
+	const kid = `indiko-oidc-key-${crypto.randomUUID()}`;
 
 	db.query(
 		"INSERT INTO oidc_keys (kid, private_key, public_key, is_active) VALUES (?, ?, ?, 1)",
@@ -111,15 +111,28 @@ interface IDTokenClaims {
 	aud: string;
 	nonce?: string;
 	auth_time?: number;
+	at_hash?: string;
 	name?: string;
 	email?: string;
 	picture?: string;
 	website?: string;
 }
 
+// OIDC Core §3.1.3.6: at_hash is the base64url of the left half of the
+// SHA-256 hash of the access token.
+async function computeAtHash(accessToken: string): Promise<string> {
+	const hash = await crypto.subtle.digest(
+		"SHA-256",
+		new TextEncoder().encode(accessToken),
+	);
+	const half = new Uint8Array(hash).slice(0, 16);
+	return Buffer.from(half).toString("base64url");
+}
+
 export async function signIDToken(
 	issuer: string,
 	claims: IDTokenClaims,
+	accessToken?: string,
 ): Promise<string> {
 	const key = await getActiveKey();
 	const privateKey = await importPKCS8(key.private_key, "RS256");
@@ -127,8 +140,13 @@ export async function signIDToken(
 	const now = Math.floor(Date.now() / 1000);
 	const expiresIn = 3600; // 1 hour
 
+	const allClaims = { ...claims };
+	if (accessToken) {
+		allClaims.at_hash = await computeAtHash(accessToken);
+	}
+
 	const builder = new SignJWT({
-		...claims,
+		...allClaims,
 		iss: issuer,
 		iat: now,
 		exp: now + expiresIn,
