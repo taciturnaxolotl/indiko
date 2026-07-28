@@ -72,7 +72,7 @@ function isValidRedirectUri(uri: string): boolean {
 export async function registerClient(req: Request): Promise<Response> {
 	const clientIp =
 		req.headers.get("cf-connecting-ip") ||
-		req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+		req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
 		"unknown";
 
 	if (isRegisterRateLimited(clientIp)) {

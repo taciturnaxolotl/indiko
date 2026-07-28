@@ -40,7 +40,7 @@ function generateToken(): string {
 export async function token(req: Request): Promise<Response> {
 	const clientIp =
 		req.headers.get("cf-connecting-ip") ||
-		req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+		req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
 		"unknown";
 
 	if (isTokenRateLimited(clientIp)) {

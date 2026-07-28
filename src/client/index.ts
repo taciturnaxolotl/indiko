@@ -2,6 +2,7 @@ import { startRegistration } from "@simplewebauthn/browser";
 import "./ds";
 import type IButton from "./ds/button";
 import type IToast from "./ds/toast";
+import { escapeHtml } from "./escape";
 
 const token = localStorage.getItem("indiko_session");
 
@@ -109,7 +110,7 @@ function showToast(message: string, type: "success" | "error" = "success") {
 
 function updateAvatarPreview(photo: string | null, username: string) {
 	if (photo) {
-		avatarPreview.innerHTML = `<img src="${photo}" alt="${username}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" />`;
+		avatarPreview.innerHTML = `<img src="${escapeHtml(photo)}" alt="${escapeHtml(username)}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" />`;
 	} else {
 		const initials = username.substring(0, 2).toUpperCase();
 		avatarPreview.textContent = initials;
@@ -219,7 +220,7 @@ async function loadRecentApps() {
 
 				return `
 				<div class="app-item">
-					<div class="app-name">${app.name}</div>
+					<div class="app-name">${escapeHtml(app.name)}</div>
 					<div class="app-date">${lastUsedDate}</div>
 				</div>
 			`;

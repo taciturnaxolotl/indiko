@@ -24,13 +24,7 @@ function $(id: string): HTMLElement {
 let appsList: HTMLElement;
 let toast: IToast;
 
-function escapeHtml(value: string): string {
-	return value
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;");
-}
+import { escapeHtml } from "./escape";
 
 async function loadApps() {
 	try {

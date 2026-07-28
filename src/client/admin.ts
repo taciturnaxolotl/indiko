@@ -1,4 +1,5 @@
 import "./ds";
+import { escapeHtml } from "./escape";
 
 const token = localStorage.getItem("indiko_session");
 const usersList = document.getElementById("usersList") as HTMLElement;
@@ -79,7 +80,7 @@ async function loadUsers() {
 					).toLocaleDateString();
 					const initials = user.username.substring(0, 2).toUpperCase();
 					const avatarContent = user.photo
-						? `<img src="${user.photo}" alt="${user.username}" />`
+						? `<img src="${escapeHtml(user.photo)}" alt="${escapeHtml(user.username)}" />`
 						: initials;
 					const isSelf = user.id === currentUserId;
 
@@ -87,7 +88,7 @@ async function loadUsers() {
 				<div class="user-card ${user.status === "suspended" ? "user-suspended" : ""}" data-user-id="${user.id}">
 					<div class="user-avatar">${avatarContent}</div>
 					<div class="user-info">
-						<div class="user-name">${user.username}${isSelf ? " (you)" : ""}</div>
+						<div class="user-name">${escapeHtml(user.username)}${isSelf ? " (you)" : ""}</div>
 						<div class="user-meta">
 							<span class="user-meta-item">${user.credentialCount} passkey${user.credentialCount !== 1 ? "s" : ""}</span>
 							<span class="user-meta-item">joined ${createdDate}</span>

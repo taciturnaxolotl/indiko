@@ -157,6 +157,21 @@ function showMessage(
 	}
 }
 
+// Only allow same-origin relative paths — block open redirects to
+// external sites and javascript:/data: URLs.
+function safeReturnUrl(url: string): string {
+	if (!url || url.startsWith("javascript:") || url.startsWith("data:")) {
+		return "/";
+	}
+	try {
+		const parsed = new URL(url, window.location.origin);
+		if (parsed.origin !== window.location.origin) return "/";
+		return parsed.pathname + parsed.search + parsed.hash;
+	} catch {
+		return "/";
+	}
+}
+
 // Login flow
 loginForm.addEventListener("submit", async (e) => {
 	e.preventDefault();
@@ -222,7 +237,7 @@ loginForm.addEventListener("submit", async (e) => {
 
 		// Check for return URL parameter
 		const urlParams = new URLSearchParams(window.location.search);
-		const returnUrl = urlParams.get("return") || "/";
+		const returnUrl = safeReturnUrl(urlParams.get("return") || "/");
 
 		const redirectTimer = setTimeout(() => {
 			window.location.href = returnUrl;
@@ -298,7 +313,9 @@ registerForm.addEventListener("submit", async (e) => {
 
 		// Check for return URL: first sessionStorage (from LDAP flow), then URL param, fallback to /
 		const storedRedirect = sessionStorage.getItem("postRegistrationRedirect");
-		const returnUrl = storedRedirect || urlParams.get("return") || "/";
+		const returnUrl = safeReturnUrl(
+			storedRedirect || urlParams.get("return") || "/",
+		);
 
 		// Clear the stored redirect after use
 		if (storedRedirect) {

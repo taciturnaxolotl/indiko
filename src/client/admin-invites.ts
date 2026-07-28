@@ -1,4 +1,5 @@
 import "./ds";
+import { escapeHtml } from "./escape";
 
 declare global {
 	interface Window {
@@ -314,14 +315,14 @@ async function loadInvites() {
 						? `Expires: ${new Date(invite.expiresAt * 1000).toLocaleString()}`
 						: "No expiry";
 
-					const roleInfo =
+				const roleInfo =
 						invite.appRoles.length > 0
 							? `<div class="invite-meta-item">
 							<div class="invite-meta-label">app roles</div>
 							<div class="invite-roles">${invite.appRoles
 								.map((r) => {
 									const appName = r.name || r.clientId;
-									return `<span class="invite-role">${appName} • ${r.role}</span>`;
+									return `<span class="invite-role">${escapeHtml(appName)} • ${escapeHtml(r.role)}</span>`;
 								})
 								.join("")}</div>
 						</div>`
@@ -331,16 +332,16 @@ async function loadInvites() {
 						invite.usedBy.length > 0
 							? `<div class="invite-meta-item">
 							<div class="invite-meta-label">used by</div>
-							<div class="invite-meta-value">${invite.usedBy.map((u) => `${u.username} (${new Date(u.usedAt * 1000).toLocaleDateString()})`).join(", ")}</div>
+							<div class="invite-meta-value">${invite.usedBy.map((u) => `${escapeHtml(u.username)} (${new Date(u.usedAt * 1000).toLocaleDateString()})`).join(", ")}</div>
 						</div>`
 							: "";
 
 					const noteInfo = invite.note
-						? `<div class="invite-extra-item"><span class="invite-extra-label">Internal note:</span> ${invite.note}</div>`
+						? `<div class="invite-extra-item"><span class="invite-extra-label">Internal note:</span> ${escapeHtml(invite.note)}</div>`
 						: "";
 
 					const messageInfo = invite.message
-						? `<div class="invite-extra-item"><span class="invite-extra-label">Message to invitees:</span> ${invite.message}</div>`
+						? `<div class="invite-extra-item"><span class="invite-extra-label">Message to invitees:</span> ${escapeHtml(invite.message)}</div>`
 						: "";
 
 					const isActive = !invite.isExpired && !invite.isFullyUsed;
@@ -350,14 +351,14 @@ async function loadInvites() {
 					return `
 				<div class="invite-item ${isActive ? "" : "invite-inactive"}">
 					<div class="invite-primary">
-						<span class="invite-code">${invite.code}</span>
+						<span class="invite-code">${escapeHtml(invite.code)}</span>
 						<div class="invite-status">
 							<span class="badge ${statusBadgeClass}">${statusText}</span>
 						</div>
 						<div class="invite-meta-grid">
 							<div class="invite-meta-item">
 								<div class="invite-meta-label">created by</div>
-								<div class="invite-meta-value">${invite.createdBy}</div>
+								<div class="invite-meta-value">${escapeHtml(invite.createdBy)}</div>
 							</div>
 							<div class="invite-meta-item">
 								<div class="invite-meta-label">created</div>
@@ -369,7 +370,7 @@ async function loadInvites() {
 							</div>
 							<div class="invite-meta-item">
 								<div class="invite-meta-label">link</div>
-								<div class="invite-meta-value invite-url">${invite.inviteUrl}</div>
+								<div class="invite-meta-value invite-url">${escapeHtml(invite.inviteUrl)}</div>
 							</div>
 						</div>
 						<div class="invite-extra">
@@ -380,9 +381,9 @@ async function loadInvites() {
 						</div>
 					</div>
 					<div class="invite-actions-btns">
-						<button class="btn-copy" data-invite-id="${invite.id}" data-invite-url="${invite.inviteUrl}" ${isActive ? "" : "disabled"}>copy link</button>
-						<button class="btn-edit" onclick="editInvite(${invite.id})" ${isActive ? "" : "disabled"}>edit</button>
-						<button class="btn-delete" onclick="deleteInvite(${invite.id}, event)">delete</button>
+						<button class="btn-copy" data-invite-id="${invite.id}" data-invite-url="${escapeHtml(invite.inviteUrl)}" ${isActive ? "" : "disabled"}>copy link</button>
+						<button class="btn-edit" data-action="edit" data-invite-id="${invite.id}" ${isActive ? "" : "disabled"}>edit</button>
+						<button class="btn-delete" data-action="delete" data-invite-id="${invite.id}">delete</button>
 					</div>
 				</div>
 			`;
@@ -415,6 +416,23 @@ async function loadInvites() {
 		invitesList.innerHTML = '<div class="error">Failed to load invites</div>';
 	}
 }
+
+// Event delegation for edit/delete invite buttons
+invitesList.addEventListener("click", (e) => {
+	const target = e.target as HTMLElement;
+	const actionEl = target.closest("[data-action]") as HTMLElement;
+	if (!actionEl) return;
+
+	const action = actionEl.dataset.action;
+	const inviteId = Number(actionEl.dataset.inviteId);
+	if (!inviteId) return;
+
+	if (action === "edit") {
+		window.editInvite(inviteId);
+	} else if (action === "delete") {
+		window.deleteInvite(inviteId, e);
+	}
+});
 
 checkAuth();
 

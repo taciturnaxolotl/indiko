@@ -10,13 +10,18 @@ declare global {
 		deleteClient: (clientId: string, event?: Event) => Promise<void>;
 		removeRedirectUri: (btn: HTMLButtonElement) => void;
 		regenerateSecret: (clientId: string, event?: Event) => Promise<void>;
-		revokeUserPermission: (clientId: string, username: string) => Promise<void>;
+		revokeUserPermission: (
+			clientId: string,
+			username: string,
+			event?: Event,
+		) => Promise<void>;
 	}
 }
 const token = localStorage.getItem("indiko_session");
 
 import "./ds";
 import type IToast from "./ds/toast";
+import { escapeHtml } from "./escape";
 
 const clientsList = document.getElementById("clientsList") as HTMLElement;
 const createClientBtn = document.getElementById(
@@ -132,19 +137,19 @@ function displayClients(clients: Client[]) {
 			).toLocaleDateString();
 
 			return `
-			<div class="client-card" data-client-id="${client.clientId}">
-				<div class="client-header" onclick="toggleClient('${client.clientId}')">
+			<div class="client-card" data-client-id="${escapeHtml(client.clientId)}">
+				<div class="client-header" data-action="toggle" data-client-id="${escapeHtml(client.clientId)}">
 					<div class="client-logo">
 						${
 							client.logoUrl
-								? `<img src="${client.logoUrl}" alt="${client.name}" />`
+								? `<img src="${escapeHtml(client.logoUrl)}" alt="${escapeHtml(client.name)}" />`
 								: `<div class="client-logo-placeholder">🔐</div>`
 						}
 					</div>
 					<div class="client-info">
-						<div class="client-name">${client.name}</div>
-						<div class="client-id">${client.clientId}</div>
-						${client.description ? `<div class="client-description">${client.description}</div>` : ""}
+						<div class="client-name">${escapeHtml(client.name)}</div>
+						<div class="client-id">${escapeHtml(client.clientId)}</div>
+						${client.description ? `<div class="client-description">${escapeHtml(client.description)}</div>` : ""}
 						<div class="client-meta">first seen ${firstSeenDate} • last used ${lastUsedDate}</div>
 					</div>
 					<div class="client-actions">
@@ -154,8 +159,8 @@ function displayClients(clients: Client[]) {
 						${
 							client.isPreregistered
 								? `
-							<button class="btn-edit" onclick="event.stopPropagation(); editClient('${client.clientId}')">edit</button>
-							<button class="btn-delete" onclick="event.stopPropagation(); deleteClient('${client.clientId}', event)">delete</button>
+							<button class="btn-edit" data-action="edit" data-client-id="${escapeHtml(client.clientId)}">edit</button>
+							<button class="btn-delete" data-action="delete" data-client-id="${escapeHtml(client.clientId)}">delete</button>
 						`
 								: ""
 						}
@@ -170,6 +175,28 @@ function displayClients(clients: Client[]) {
 		})
 		.join("");
 }
+
+// Event delegation for client cards — avoids inline onclick with string
+// interpolation (XSS vector via attacker-controlled client_id).
+clientsList.addEventListener("click", (e) => {
+	const target = e.target as HTMLElement;
+	const actionEl = target.closest("[data-action]") as HTMLElement;
+	if (!actionEl) return;
+
+	const action = actionEl.dataset.action;
+	const clientId = actionEl.dataset.clientId;
+	if (!clientId) return;
+
+	if (action === "toggle") {
+		window.toggleClient(clientId);
+	} else if (action === "edit") {
+		e.stopPropagation();
+		window.editClient(clientId);
+	} else if (action === "delete") {
+		e.stopPropagation();
+		window.deleteClient(clientId, e);
+	}
+});
 
 window.toggleClient = async (clientId: string) => {
 	const card = document.querySelector(
@@ -222,7 +249,7 @@ window.toggleClient = async (clientId: string) => {
 					<div class="detail-title">client secret</div>
 					<div class="secret-section">
 						<input type="password" value="••••••••••••••••••••••••" readonly style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--old-rose); color: var(--lavender); padding: 0.5rem; font-family: monospace; width: 100%; margin-bottom: 0.5rem;" id="secret-${encodeURIComponent(clientId)}" />
-						<button class="btn-edit" onclick="event.stopPropagation(); regenerateSecret('${clientId}', event)">regenerate secret</button>
+						<button class="btn-edit" data-detail-action="regenerate-secret" data-client-id="${escapeHtml(clientId)}">regenerate secret</button>
 					</div>
 				</div>
 			`
@@ -231,7 +258,7 @@ window.toggleClient = async (clientId: string) => {
 			<div class="detail-section">
 				<div class="detail-title">redirect uris</div>
 				<div class="redirect-uris">
-					${data.client.redirectUris.map((uri: string) => `<div class="redirect-uri">${uri}</div>`).join("")}
+					${data.client.redirectUris.map((uri: string) => `<div class="redirect-uri">${escapeHtml(uri)}</div>`).join("")}
 				</div>
 			</div>
 			<div class="detail-section">
@@ -252,7 +279,7 @@ window.toggleClient = async (clientId: string) => {
 								return `
 								<div class="user-item">
 									<div class="user-info">
-										<div class="user-name"><a href="/u/${user.username}" onclick="event.stopPropagation();" style="color: var(--paper); text-decoration: none;">${user.name}</a> (<a href="/u/${user.username}" onclick="event.stopPropagation();" style="color: var(--paper-dim); text-decoration: none;">@${user.username}</a>)</div>
+										<div class="user-name"><a href="/u/${encodeURIComponent(user.username)}" style="color: var(--paper); text-decoration: none;">${escapeHtml(user.name)}</a> (<a href="/u/${encodeURIComponent(user.username)}" style="color: var(--paper-dim); text-decoration: none;">@${escapeHtml(user.username)}</a>)</div>
 										${
 											data.client.isPreregistered &&
 											data.client.availableRoles !== null
@@ -261,26 +288,26 @@ window.toggleClient = async (clientId: string) => {
 												<label style="color: var(--paper-dim); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05rem;">ROLE${data.client.availableRoles.length > 0 ? "" : " (OPTIONAL)"}</label>
 												${
 													data.client.availableRoles.length > 0
-														? `<select data-username="${user.username}" data-client-id="${clientId}" style="padding: var(--space-2); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--paper-dim); color: var(--paper); font-family: inherit; font-size: var(--text-sm);">
+														? `<select data-username="${escapeHtml(user.username)}" data-client-id="${escapeHtml(clientId)}" style="padding: var(--space-2); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--paper-dim); color: var(--paper); font-family: inherit; font-size: var(--text-sm);">
 														<option value="">No role</option>
 														${data.client.availableRoles
 															.map(
 																(role: string) => `
-															<option value="${role}" ${user.role === role ? "selected" : ""}>${role}</option>
+															<option value="${escapeHtml(role)}" ${user.role === role ? "selected" : ""}>${escapeHtml(role)}</option>
 														`,
 															)
 															.join("")}
 													</select>`
-														: `<input type="text" value="${user.role || ""}" placeholder="e.g. admin, editor, viewer" data-username="${user.username}" data-client-id="${clientId}" />`
+														: `<input type="text" value="${escapeHtml(user.role || "")}" placeholder="e.g. admin, editor, viewer" data-username="${escapeHtml(user.username)}" data-client-id="${escapeHtml(clientId)}" />`
 												}
-												<button onclick="event.stopPropagation(); setUserRole('${clientId}', '${user.username}', this.previousElementSibling.value)">update</button>
+												<button data-detail-action="set-role" data-client-id="${escapeHtml(clientId)}" data-username="${escapeHtml(user.username)}">update</button>
 											</div>
 										`
 												: ""
 										}
-										<div class="user-meta">granted ${grantedDate} • last used ${lastUsedDate} • scopes: ${user.scopes.join(", ")}</div>
+										<div class="user-meta">granted ${grantedDate} • last used ${lastUsedDate} • scopes: ${escapeHtml(user.scopes.join(", "))}</div>
 									</div>
-									<button class="revoke-btn" onclick="event.stopPropagation(); revokeUserPermission('${clientId}', '${user.username}', event)">revoke</button>
+									<button class="revoke-btn" data-detail-action="revoke-user" data-client-id="${escapeHtml(clientId)}" data-username="${escapeHtml(user.username)}">revoke</button>
 								</div>
 							`;
 							})
@@ -296,6 +323,29 @@ window.toggleClient = async (clientId: string) => {
 		detailsDiv.innerHTML = '<div class="error">Failed to load details</div>';
 	}
 };
+
+// Delegate detail-level actions (regenerate secret, set role, revoke user)
+clientsList.addEventListener("click", (e) => {
+	const target = e.target as HTMLElement;
+	const actionEl = target.closest("[data-detail-action]") as HTMLElement;
+	if (!actionEl) return;
+
+	e.stopPropagation();
+	const action = actionEl.dataset.detailAction;
+	const clientId = actionEl.dataset.clientId;
+	const username = actionEl.dataset.username;
+
+	if (action === "regenerate-secret" && clientId) {
+		window.regenerateSecret(clientId, e);
+	} else if (action === "set-role" && clientId && username) {
+		const input = actionEl.previousElementSibling as
+			| HTMLInputElement
+			| HTMLSelectElement;
+		window.setUserRole(clientId, username, input?.value || "");
+	} else if (action === "revoke-user" && clientId && username) {
+		window.revokeUserPermission(clientId, username, e);
+	}
+});
 
 window.setUserRole = async (
 	clientId: string,
