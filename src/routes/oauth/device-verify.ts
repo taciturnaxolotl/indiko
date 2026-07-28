@@ -359,19 +359,38 @@ export async function devicePost(req: Request): Promise<Response> {
 	}
 
 	if (action === "deny") {
-		db.query("UPDATE device_codes SET status = 'denied' WHERE id = ?").run(
-			deviceCode.id,
-		);
+		const result = db
+			.query(
+				"UPDATE device_codes SET status = 'denied' WHERE id = ? AND status = 'pending'",
+			)
+			.run(deviceCode.id);
+		if (result.changes === 0) {
+			return devicePage(
+				"authorize device",
+				`<div class="error-msg">This code has already been used.</div>`,
+				400,
+			);
+		}
 		return devicePage(
 			"device denied",
 			`<div class="success-msg">The device has been denied access. You can close this page.</div>`,
 		);
 	}
 
-	// Approve
-	db.query(
-		"UPDATE device_codes SET status = 'approved', user_id = ? WHERE id = ?",
-	).run(user.userId, deviceCode.id);
+	// Approve — atomic guard prevents two users approving the same code
+	const result = db
+		.query(
+			"UPDATE device_codes SET status = 'approved', user_id = ? WHERE id = ? AND status = 'pending'",
+		)
+		.run(user.userId, deviceCode.id);
+
+	if (result.changes === 0) {
+		return devicePage(
+			"authorize device",
+			`<div class="error-msg">This code has already been used.</div>`,
+			400,
+		);
+	}
 
 	return devicePage(
 		"device authorized",

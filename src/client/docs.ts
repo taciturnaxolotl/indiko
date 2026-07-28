@@ -173,9 +173,12 @@ function initTester() {
 		if (callbackSection) callbackSection.style.display = "block";
 		if (callbackInfo) {
 			callbackInfo.innerHTML = `
-				<p style="margin-bottom: 1rem;"><strong>Authorization Code:</strong><br><code style="word-break: break-all;">${authCode}</code></p>
-				<p><strong>State:</strong> <code>${returnedState}</code> ✓ (verified)</p>
+				<p style="margin-bottom: 1rem;"><strong>Authorization Code:</strong><br><code style="word-break: break-all;"></code></p>
+				<p><strong>State:</strong> <code></code> ✓ (verified)</p>
 			`;
+			const codes = callbackInfo.querySelectorAll("code");
+			if (codes[0]) codes[0].textContent = authCode;
+			if (codes[1]) codes[1].textContent = returnedState;
 		}
 		callbackSection?.scrollIntoView({ behavior: "smooth" });
 	}

@@ -107,18 +107,18 @@ import {
 
 import { SECURITY_HEADERS } from "./lib/security-headers";
 
-// Wrap HTML imports to add security headers. Bun's HTML imports become
-// static handlers in the routes object — wrapping them in functions lets
-// us attach headers.
+// Wrap HTML imports to add security headers. Bun's HTML imports are
+// Response objects with ReadableStream bodies that can only be consumed
+// once. We clone the response before adding headers so the original
+// stream remains available for subsequent requests.
 function withHeaders(html: unknown): () => Response {
 	return () => {
-		// Bun HTML imports are Response-like objects; clone and add headers
 		const res = html as Response;
-		const newRes = new Response(res.body, {
-			status: res.status,
-			headers: { ...Object.fromEntries(res.headers.entries()), ...SECURITY_HEADERS },
-		});
-		return newRes;
+		const cloned = res.clone();
+		for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+			cloned.headers.set(key, value);
+		}
+		return cloned;
 	};
 }
 
@@ -426,10 +426,11 @@ const ldapCleanupJob =
 					).run(now, orphan.id);
 				}
 
-				// Clear orphaned_since for users found back in LDAP
+				// Clear orphaned_since for users found back in LDAP, and restore
+				// their status if the cleanup job suspended/deactivated them.
 				for (const activeUser of result.activeUsers) {
 					db.query(
-						"UPDATE users SET orphaned_since = NULL WHERE id = ? AND orphaned_since IS NOT NULL",
+						"UPDATE users SET orphaned_since = NULL, status = 'active' WHERE id = ? AND orphaned_since IS NOT NULL",
 					).run(activeUser.id);
 				}
 

@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 // Canonicalize URL per IndieAuth spec (only for actual URLs, not internal IDs)
 export function canonicalizeURL(urlString: string): string {
 	// Only canonicalize if it looks like a URL
@@ -178,8 +180,11 @@ export function isLoopbackURL(urlString: string): boolean {
 	}
 }
 
-// Verify PKCE code challenge
+// Verify PKCE code challenge (constant-time comparison)
 export function verifyPKCE(verifier: string, challenge: string): boolean {
 	const digest = new Bun.CryptoHasher("sha256").update(verifier).digest();
-	return Buffer.from(digest).toString("base64url") === challenge;
+	const computed = Buffer.from(digest).toString("base64url");
+	const a = Buffer.from(computed);
+	const b = Buffer.from(challenge);
+	return a.length === b.length && crypto.timingSafeEqual(a, b);
 }

@@ -32,6 +32,8 @@ export function getClientIp(req: Request): string {
 
 	// No proxy trust — we can't get the socket IP from a Request object,
 	// so use a constant key. This means all direct connections share one
-	// rate limit bucket, which is overly restrictive but safe.
+	// rate limit bucket. To avoid a single actor locking out everyone,
+	// rate limiters should use a much higher threshold for this key.
+	// In production, set TRUSTED_PROXY=cloudflare or TRUSTED_PROXY=xff.
 	return "direct";
 }

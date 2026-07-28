@@ -206,13 +206,17 @@ async function handleRefreshTokenGrant(
 	);
 
 	const user = db
-		.query("SELECT username, url FROM users WHERE id = ?")
+		.query("SELECT username, url, status FROM users WHERE id = ?")
 		.get(tokenData.user_id) as
-		| { username: string; url: string | null }
+		| { username: string; url: string | null; status: string }
 		| undefined;
 
 	if (!user) {
 		return oauthError(500, "server_error", "User not found");
+	}
+
+	if (user.status !== "active") {
+		return oauthError(400, "invalid_grant", "User account is not active");
 	}
 
 	const origin = process.env.ORIGIN || "http://localhost:3000";
@@ -350,7 +354,7 @@ async function handleDeviceCodeGrant(
 	db.query("DELETE FROM device_codes WHERE id = ?").run(deviceCode.id);
 
 	const user = db
-		.query("SELECT username, name, email, photo, url FROM users WHERE id = ?")
+		.query("SELECT username, name, email, photo, url, status FROM users WHERE id = ?")
 		.get(deviceCode.user_id) as
 		| {
 				username: string;
@@ -358,11 +362,16 @@ async function handleDeviceCodeGrant(
 				email: string | null;
 				photo: string | null;
 				url: string | null;
+				status: string;
 		  }
 		| undefined;
 
 	if (!user) {
 		return oauthError(500, "server_error", "User not found");
+	}
+
+	if (user.status !== "active") {
+		return oauthError(400, "invalid_grant", "User account is not active");
 	}
 
 	const scopes = deviceCode.scope.split(" ").filter(Boolean);
@@ -508,6 +517,15 @@ async function handleAuthorizationCodeGrant(
 		);
 	}
 
+	// RFC 7636 §4.1: code_verifier must be 43-128 characters
+	if (code_verifier.length < 43 || code_verifier.length > 128) {
+		return oauthError(
+			400,
+			"invalid_request",
+			"code_verifier must be 43-128 characters (RFC 7636 §4.1)",
+		);
+	}
+
 	const authcode = db
 		.query(
 			"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me, nonce, auth_time FROM authcodes WHERE code = ?",
@@ -558,11 +576,19 @@ async function handleAuthorizationCodeGrant(
 		return oauthError(400, "invalid_grant", "Invalid code_verifier");
 	}
 
-	// Mark code as used
-	db.query("UPDATE authcodes SET used = 1 WHERE code = ?").run(code);
+	// Mark code as used — atomic guard prevents double-use race.
+	// Two concurrent exchanges with the same code: the first UPDATE
+	// sets used=1 and returns changes=1; the second gets changes=0.
+	const markResult = db
+		.query("UPDATE authcodes SET used = 1 WHERE code = ? AND used = 0")
+		.run(code);
+
+	if (markResult.changes === 0) {
+		return oauthError(400, "invalid_grant", "Authorization code already used");
+	}
 
 	const user = db
-		.query("SELECT username, name, email, photo, url FROM users WHERE id = ?")
+		.query("SELECT username, name, email, photo, url, status FROM users WHERE id = ?")
 		.get(authcode.user_id) as
 		| {
 				username: string;
@@ -570,11 +596,17 @@ async function handleAuthorizationCodeGrant(
 				email: string | null;
 				photo: string | null;
 				url: string | null;
+				status: string;
 		  }
 		| undefined;
 
 	if (!user) {
 		return oauthError(500, "server_error", "User not found");
+	}
+
+	// Reject token issuance for suspended/inactive users
+	if (user.status !== "active") {
+		return oauthError(400, "invalid_grant", "User account is not active");
 	}
 
 	const scopes = JSON.parse(authcode.scopes) as string[];
