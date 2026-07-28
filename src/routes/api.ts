@@ -433,6 +433,9 @@ export function disableUser(req: Request, userId: string): Response {
 
 	db.query("DELETE FROM sessions WHERE user_id = ?").run(targetUserId);
 
+	// Revoke all OAuth tokens so suspension actually cuts off API access
+	db.query("UPDATE tokens SET revoked = 1 WHERE user_id = ?").run(targetUserId);
+
 	return Response.json({ success: true });
 }
 

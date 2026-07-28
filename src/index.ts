@@ -393,28 +393,57 @@ const ldapCleanupJob =
 				); // 7 days default
 				const now = Math.floor(Date.now() / 1000);
 
-				// Only take action on accounts orphaned longer than grace period
-				if (result.orphaned > 0) {
-					const expiredOrphans = result.orphanedUsers.filter(
-						(user) => now - user.createdAt > gracePeriod,
+				// Don't take any destructive action if there were LDAP errors —
+				// an infrastructure failure must not trigger account deletion.
+				if (result.errors > 0) {
+					console.warn(
+						`[LDAP Cleanup] ${result.errors} LDAP errors encountered — skipping orphan actions this run`,
 					);
+					return;
+				}
+
+				// Mark newly orphaned users (set orphaned_since on first detection)
+				for (const orphan of result.orphanedUsers) {
+					db.query(
+						"UPDATE users SET orphaned_since = ? WHERE id = ? AND orphaned_since IS NULL",
+					).run(now, orphan.id);
+				}
+
+				// Clear orphaned_since for users found back in LDAP
+				for (const activeUser of result.activeUsers) {
+					db.query(
+						"UPDATE users SET orphaned_since = NULL WHERE id = ? AND orphaned_since IS NOT NULL",
+					).run(activeUser.id);
+				}
+
+				// Only take action on accounts orphaned longer than grace period
+				// (measured from first orphan detection, not account creation)
+				if (result.orphaned > 0) {
+					const expiredOrphans = db
+						.query(
+							"SELECT id, username FROM users WHERE provisioned_via_ldap = 1 AND orphaned_since IS NOT NULL AND (? - orphaned_since) > ?",
+						)
+						.all(now, gracePeriod) as Array<{
+						id: number;
+						username: string;
+					}>;
 
 					if (expiredOrphans.length > 0) {
+						const expiredResult = {
+							...result,
+							orphanedUsers: expiredOrphans.map((u) => ({
+								username: u.username,
+								id: u.id,
+								status: "unknown",
+								createdAt: 0,
+							})),
+						};
 						if (action === "suspend") {
-							await updateOrphanedAccounts(
-								{ ...result, orphanedUsers: expiredOrphans },
-								"suspend",
-							);
+							await updateOrphanedAccounts(expiredResult, "suspend");
 						} else if (action === "deactivate") {
-							await updateOrphanedAccounts(
-								{ ...result, orphanedUsers: expiredOrphans },
-								"deactivate",
-							);
+							await updateOrphanedAccounts(expiredResult, "deactivate");
 						} else if (action === "remove") {
-							await updateOrphanedAccounts(
-								{ ...result, orphanedUsers: expiredOrphans },
-								"remove",
-							);
+							await updateOrphanedAccounts(expiredResult, "remove");
 						}
 						console.log(
 							`[LDAP Cleanup] ${action === "remove" ? "Removed" : action === "suspend" ? "Suspended" : "Deactivated"} ${expiredOrphans.length} LDAP orphan accounts (grace period: ${gracePeriod}s)`,

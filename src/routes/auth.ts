@@ -482,9 +482,9 @@ export async function loginOptions(req: Request): Promise<Response> {
 				now - user.last_ldap_verified_at > checkInterval;
 
 			if (shouldCheck) {
-				const existsInLdap = await checkLdapUser(username);
-				if (!existsInLdap) {
-					// User no longer exists in LDAP - suspend the account
+				const ldapResult = await checkLdapUser(username);
+				if (ldapResult === "not_found") {
+					// User authoritatively no longer exists in LDAP — suspend
 					db.query("UPDATE users SET status = 'suspended' WHERE id = ?").run(
 						user.id,
 					);
@@ -493,12 +493,18 @@ export async function loginOptions(req: Request): Promise<Response> {
 						{ status: 401 },
 					);
 				}
-
-				// Update last verification timestamp
-				db.query("UPDATE users SET last_ldap_verified_at = ? WHERE id = ?").run(
-					Math.floor(now / 1000),
-					user.id,
-				);
+				if (ldapResult === "error") {
+					// LDAP infrastructure error — don't suspend, but also don't
+					// update the verification timestamp so we retry next login
+					console.warn(
+						`[auth] LDAP check failed for ${username}, skipping verification`,
+					);
+				} else {
+					// User exists — update last verification timestamp
+					db.query(
+						"UPDATE users SET last_ldap_verified_at = ? WHERE id = ?",
+					).run(Math.floor(now / 1000), user.id);
+				}
 			}
 		}
 
@@ -768,14 +774,13 @@ export async function ldapVerify(req: Request): Promise<Response> {
 			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
-		// Check group membership if configured
+		// Check group membership if configured.
+		// Return the same error as invalid credentials to avoid leaking
+		// whether the username exists in LDAP.
 		if (userDn) {
 			const isInGroup = await checkLdapGroupMembership(username, userDn);
 			if (!isInGroup) {
-				return Response.json(
-					{ error: "User is not a member of the required group" },
-					{ status: 403 },
-				);
+				return Response.json({ error: "Invalid credentials" }, { status: 401 });
 			}
 		}
 

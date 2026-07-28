@@ -96,3 +96,19 @@ export function getUserFromCookie(req: Request): SessionUser | null {
 
 	return validateSession(lookupSession(sessionToken));
 }
+
+/**
+ * Authenticate via Bearer token or indiko_session cookie, whichever is
+ * present. Returns a SessionUser or a 401/403 Response. Use this for
+ * endpoints that serve both API clients and browser pages.
+ */
+export function getSessionUserFlexible(req: Request): SessionUser | Response {
+	const bearerResult = getSessionUser(req);
+	if (!(bearerResult instanceof Response)) return bearerResult;
+
+	// Bearer auth failed — try cookie auth
+	const cookieUser = getUserFromCookie(req);
+	if (cookieUser) return cookieUser;
+
+	return bearerResult; // return the original 401
+}

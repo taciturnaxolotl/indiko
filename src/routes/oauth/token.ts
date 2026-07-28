@@ -13,12 +13,44 @@ import { signIDToken } from "../../oidc";
 const ACCESS_TOKEN_TTL = 3600; // 1 hour
 const REFRESH_TOKEN_TTL = 2592000; // 30 days
 
+// Rate limiting for the token endpoint — per-IP sliding window.
+const TOKEN_WINDOW_MS = 60 * 1000; // 1 minute
+const TOKEN_MAX = 30; // max requests per window per IP
+const tokenAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function isTokenRateLimited(ip: string): boolean {
+	// Skip rate limiting in tests
+	if (process.env.NODE_ENV === "test") return false;
+
+	const now = Date.now();
+	const entry = tokenAttempts.get(ip);
+	if (!entry || now > entry.resetAt) {
+		tokenAttempts.set(ip, { count: 1, resetAt: now + TOKEN_WINDOW_MS });
+		return false;
+	}
+	entry.count++;
+	return entry.count > TOKEN_MAX;
+}
+
 function generateToken(): string {
 	return crypto.randomBytes(32).toString("base64url");
 }
 
 // POST /auth/token - Exchange authorization code or refresh token
 export async function token(req: Request): Promise<Response> {
+	const clientIp =
+		req.headers.get("cf-connecting-ip") ||
+		req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+		"unknown";
+
+	if (isTokenRateLimited(clientIp)) {
+		return oauthError(
+			429,
+			"invalid_request",
+			"Too many requests. Please try again later.",
+		);
+	}
+
 	try {
 		const body = await parseBody(req);
 		if (!body) {

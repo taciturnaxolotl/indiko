@@ -11,6 +11,26 @@ function generateClientSecret(): string {
 	return `iks_${nanoid(43)}`; // indiko secret
 }
 
+// Rate limiting for dynamic registration — unauthenticated endpoint
+// that inserts DB rows, so cap per-IP to prevent flooding.
+const REGISTER_WINDOW_MS = 60 * 1000; // 1 minute
+const REGISTER_MAX = 5; // max registrations per window
+const registerAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function isRegisterRateLimited(ip: string): boolean {
+	// Skip rate limiting in tests
+	if (process.env.NODE_ENV === "test") return false;
+
+	const now = Date.now();
+	const entry = registerAttempts.get(ip);
+	if (!entry || now > entry.resetAt) {
+		registerAttempts.set(ip, { count: 1, resetAt: now + REGISTER_WINDOW_MS });
+		return false;
+	}
+	entry.count++;
+	return entry.count > REGISTER_MAX;
+}
+
 interface RegisterBody {
 	redirect_uris?: unknown;
 	client_name?: unknown;
@@ -32,7 +52,15 @@ function asStringArray(value: unknown): string[] | null {
 function isValidRedirectUri(uri: string): boolean {
 	try {
 		const url = new URL(uri);
-		return url.protocol === "https:" || url.protocol === "http:";
+		// Allow http only for loopback (localhost dev)
+		if (url.protocol === "http:") {
+			return (
+				url.hostname === "localhost" ||
+				url.hostname === "127.0.0.1" ||
+				url.hostname === "[::1]"
+			);
+		}
+		return url.protocol === "https:";
 	} catch {
 		return false;
 	}
@@ -40,8 +68,21 @@ function isValidRedirectUri(uri: string): boolean {
 
 // POST /oauth/register — RFC 7591 Dynamic Client Registration.
 // Registers a confidential client (opaque client_id + client_secret).
-// No auth required per RFC 7591; rate limiting is out of scope here.
+// Rate-limited per IP to prevent DB flooding.
 export async function registerClient(req: Request): Promise<Response> {
+	const clientIp =
+		req.headers.get("cf-connecting-ip") ||
+		req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+		"unknown";
+
+	if (isRegisterRateLimited(clientIp)) {
+		return oauthError(
+			429,
+			"invalid_client_metadata",
+			"Too many registration requests. Please try again later.",
+		);
+	}
+
 	let body: RegisterBody;
 	try {
 		body = (await req.json()) as RegisterBody;
@@ -55,6 +96,14 @@ export async function registerClient(req: Request): Promise<Response> {
 			400,
 			"invalid_redirect_uri",
 			"redirect_uris must be a non-empty array of URIs",
+		);
+	}
+
+	if (redirectUris.length > 10) {
+		return oauthError(
+			400,
+			"invalid_redirect_uri",
+			"redirect_uris must contain at most 10 URIs",
 		);
 	}
 

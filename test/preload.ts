@@ -6,3 +6,4 @@
 // have opened the real data/indiko.db. A preload runs first, guaranteeing
 // src/db sees :memory: on its very first evaluation.
 process.env.DATABASE_URL = ":memory:";
+process.env.NODE_ENV = "test";

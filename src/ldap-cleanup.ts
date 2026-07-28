@@ -19,9 +19,17 @@ interface AuditResult {
 		status: string;
 		createdAt: number;
 	}>;
+	activeUsers: Array<{
+		username: string;
+		id: number;
+	}>;
 }
 
-export async function checkLdapUser(username: string): Promise<boolean> {
+export type LdapCheckResult = "exists" | "not_found" | "error";
+
+export async function checkLdapUser(
+	username: string,
+): Promise<LdapCheckResult> {
 	try {
 		const user = await authenticate({
 			ldapOpts: {
@@ -34,10 +42,22 @@ export async function checkLdapUser(username: string): Promise<boolean> {
 			username: username,
 			verifyUserExists: true,
 		});
-		return !!user;
-	} catch (_error) {
-		// User not found or invalid credentials (expected for non-existence check)
-		return false;
+		return user ? "exists" : "not_found";
+	} catch (error) {
+		// Distinguish "user not found" from infrastructure errors (network,
+		// bind failure, timeout). Only an authoritative not-found should
+		// count as orphaned — an LDAP outage must not trigger account
+		// suspension/deletion.
+		const message = error instanceof Error ? error.message : String(error);
+		if (
+			message.includes("not found") ||
+			message.includes("No such object") ||
+			message.includes("Invalid Credentials")
+		) {
+			return "not_found";
+		}
+		console.error(`[ldap] Error checking user ${username}:`, error);
+		return "error";
 	}
 }
 
@@ -93,6 +113,7 @@ export async function getLdapAccounts(): Promise<AuditResult> {
 		orphaned: 0,
 		errors: 0,
 		orphanedUsers: [],
+		activeUsers: [],
 	};
 
 	console.log(`Found ${result.total} LDAP-provisioned accounts\n`);
@@ -101,28 +122,27 @@ export async function getLdapAccounts(): Promise<AuditResult> {
 	for (const user of ldapUsers) {
 		process.stdout.write(`Checking ${user.username}... `);
 
-		try {
-			const existsInLdap = await checkLdapUser(user.username);
+		const checkResult = await checkLdapUser(user.username);
 
-			if (existsInLdap) {
-				console.log("✅ Found in LDAP");
-				result.active++;
-			} else {
-				console.log("❌ NOT FOUND in LDAP");
-				result.orphaned++;
-				result.orphanedUsers.push({
-					username: user.username,
-					id: user.id,
-					status: user.status,
-					createdAt: user.created_at,
-				});
-			}
-		} catch (error) {
-			console.log("⚠️ Error checking LDAP");
+		if (checkResult === "exists") {
+			console.log("✅ Found in LDAP");
+			result.active++;
+			result.activeUsers.push({
+				username: user.username,
+				id: user.id,
+			});
+		} else if (checkResult === "not_found") {
+			console.log("❌ NOT FOUND in LDAP");
+			result.orphaned++;
+			result.orphanedUsers.push({
+				username: user.username,
+				id: user.id,
+				status: user.status,
+				createdAt: user.created_at,
+			});
+		} else {
+			console.log("⚠️ Error checking LDAP (skipping)");
 			result.errors++;
-			console.error(
-				`   Error: ${error instanceof Error ? error.message : String(error)}`,
-			);
 		}
 	}
 

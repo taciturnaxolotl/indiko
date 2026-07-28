@@ -145,6 +145,9 @@ const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const failedAttempts = new Map<number, { count: number; firstAt: number }>();
 
 function isRateLimited(userId: number): boolean {
+	// Skip rate limiting in tests
+	if (process.env.NODE_ENV === "test") return false;
+
 	const entry = failedAttempts.get(userId);
 	if (!entry) return false;
 	if (Date.now() - entry.firstAt > WINDOW_MS) {

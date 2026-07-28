@@ -18,7 +18,7 @@ export function userinfo(req: Request): Response {
 
 		const tokenData = db
 			.query(
-				"SELECT t.user_id, t.scope, t.expires_at, t.revoked, u.name, u.email, u.photo, u.url, u.username FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
+				"SELECT t.user_id, t.scope, t.expires_at, t.revoked, u.name, u.email, u.photo, u.url, u.username, u.status FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
 			)
 			.get(tokenValue) as
 			| {
@@ -31,10 +31,20 @@ export function userinfo(req: Request): Response {
 					photo: string | null;
 					url: string | null;
 					username: string;
+					status: string;
 			  }
 			| undefined;
 
 		if (!tokenData || tokenData.revoked === 1) {
+			return unauthorizedResponse(
+				"invalid_token",
+				"Invalid or revoked access token",
+			);
+		}
+
+		// Defense in depth: reject tokens for suspended users even if the
+		// token row itself wasn't revoked
+		if (tokenData.status !== "active") {
 			return unauthorizedResponse(
 				"invalid_token",
 				"Invalid or revoked access token",
