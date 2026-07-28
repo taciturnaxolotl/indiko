@@ -119,7 +119,11 @@ async function initConditionalUI() {
 		const verifyRes = await fetch("/auth/login/verify", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ response: authResponse, conditional: true }),
+			body: JSON.stringify({
+				response: authResponse,
+				conditional: true,
+				challenge: options.challenge,
+			}),
 		});
 
 		if (!verifyRes.ok) {
@@ -199,7 +203,11 @@ loginForm.addEventListener("submit", async (e) => {
 		const verifyRes = await fetch("/auth/login/verify", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ username, response: authResponse }),
+			body: JSON.stringify({
+				username,
+				response: authResponse,
+				challenge: options.challenge,
+			}),
 		});
 
 		if (!verifyRes.ok) {

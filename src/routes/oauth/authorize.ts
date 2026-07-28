@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { db } from "../../db";
 import { ensureApp } from "../../lib/oauth/client-metadata";
-import { consentPage, errorPage } from "../../lib/oauth/pages";
+import { consentPage, errorPage, escapeHtml } from "../../lib/oauth/pages";
 import { canonicalizeURL } from "../../lib/oauth/urls";
 import { getUserFromCookie } from "../../lib/session";
 import { token } from "./token";
@@ -113,7 +113,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 			message:
 				"The OAuth authorization request failed because the provided redirect_uri is not registered for this client application.",
 			details,
-			hint: `The redirect_uri must exactly match a registered URI for <strong>${appName}</strong>. If you are the application developer, please ensure your redirect_uri matches the one registered with this authorization server.`,
+			hint: `The redirect_uri must exactly match a registered URI for <strong>${escapeHtml(appName)}</strong>. If you are the application developer, please ensure your redirect_uri matches the one registered with this authorization server.`,
 		});
 	}
 
@@ -205,9 +205,11 @@ export async function authorizeGet(req: Request): Promise<Response> {
 			).run(Math.floor(Date.now() / 1000), user.userId, clientId);
 
 			const origin = process.env.ORIGIN || "http://localhost:3000";
-			return Response.redirect(
-				`${redirectUri}?code=${code}&state=${state}&iss=${encodeURIComponent(origin)}`,
-			);
+			const autoApproveUrl = new URL(redirectUri);
+			autoApproveUrl.searchParams.set("code", code);
+			autoApproveUrl.searchParams.set("state", state);
+			autoApproveUrl.searchParams.set("iss", origin);
+			return Response.redirect(autoApproveUrl.toString(), 302);
 		}
 	}
 
@@ -338,11 +340,31 @@ export async function authorizePost(req: Request): Promise<Response> {
 		});
 	}
 
+	// Re-validate redirect_uri against the app's registered set — the consent
+	// form POSTs attacker-controllable hidden fields, so we must not trust the
+	// submitted redirect_uri without checking it against the registered list.
+	const app = db
+		.query("SELECT redirect_uris FROM apps WHERE client_id = ?")
+		.get(clientId) as { redirect_uris: string } | undefined;
+
+	if (!app) {
+		return new Response("Invalid client_id", { status: 400 });
+	}
+
+	const allowedRedirects = JSON.parse(app.redirect_uris) as string[];
+	if (!allowedRedirects.includes(redirectUri)) {
+		return new Response("redirect_uri not registered for this client", {
+			status: 400,
+		});
+	}
+
 	if (action === "deny") {
 		const origin = process.env.ORIGIN || "http://localhost:3000";
-		return Response.redirect(
-			`${redirectUri}?error=access_denied&state=${state}&iss=${encodeURIComponent(origin)}`,
-		);
+		const denyUrl = new URL(redirectUri);
+		denyUrl.searchParams.set("error", "access_denied");
+		denyUrl.searchParams.set("state", state);
+		denyUrl.searchParams.set("iss", origin);
+		return Response.redirect(denyUrl.toString(), 302);
 	}
 
 	// Get the scopes the user actually approved (from checkboxes)
@@ -407,7 +429,9 @@ export async function authorizePost(req: Request): Promise<Response> {
 	);
 
 	const origin = process.env.ORIGIN || "http://localhost:3000";
-	return Response.redirect(
-		`${redirectUri}?code=${code}&state=${state}&iss=${encodeURIComponent(origin)}`,
-	);
+	const successUrl = new URL(redirectUri);
+	successUrl.searchParams.set("code", code);
+	successUrl.searchParams.set("state", state);
+	successUrl.searchParams.set("iss", origin);
+	return Response.redirect(successUrl.toString(), 302);
 }

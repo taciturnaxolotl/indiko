@@ -16,6 +16,15 @@ import { checkLdapGroupMembership, checkLdapUser } from "../ldap-cleanup";
 
 const RP_NAME = "Indiko";
 
+// Thrown inside the registration transaction when the invite is exhausted so
+// the whole registration rolls back.
+class InviteExhaustedError extends Error {
+	constructor() {
+		super("Invite code fully used");
+		this.name = "InviteExhaustedError";
+	}
+}
+
 export function canRegister(_req: Request): Response {
 	const userCount = db.query("SELECT COUNT(*) as count FROM users").get() as {
 		count: number;
@@ -208,6 +217,12 @@ export async function registerVerify(req: Request): Promise<Response> {
 			return Response.json({ error: "Challenge expired" }, { status: 400 });
 		}
 
+		// Burn the challenge immediately — it must not be reusable regardless
+		// of whether verification succeeds or fails.
+		db.query("DELETE FROM challenges WHERE challenge = ?").run(
+			challenge.challenge,
+		);
+
 		// Check if this is bootstrap (first user)
 		const userCount = db.query("SELECT COUNT(*) as count FROM users").get() as {
 			count: number;
@@ -285,93 +300,101 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 		const { credential } = verification.registrationInfo;
 
-		// Check if this user is being provisioned via LDAP
-		let isLdapProvisioned = false;
-		if (inviteId) {
-			const invite = db
-				.query("SELECT ldap_username FROM invites WHERE id = ?")
-				.get(inviteId) as { ldap_username: string | null } | undefined;
-			isLdapProvisioned =
-				invite?.ldap_username !== null && invite?.ldap_username !== undefined;
-		}
+		// Consume the invite and create user/credential/session in one
+		// transaction. If the invite is exhausted the whole registration rolls
+		// back — no orphaned accounts or sessions.
+		const usedAt = Math.floor(Date.now() / 1000);
+		let userId = 0;
+		let userIsAdmin = false;
 
-		let userId: number;
-		let userIsAdmin: boolean;
+		try {
+			db.transaction(() => {
+				// Atomically consume the invite first — before any user rows exist.
+				if (inviteId) {
+					const result = db
+						.query(
+							"UPDATE invites SET current_uses = current_uses + 1 WHERE id = ? AND current_uses < max_uses",
+						)
+						.run(inviteId);
 
-		if (isPasskeyReset && existingUser) {
-			// Passkey reset: use existing user, just add credential
-			userId = existingUser.id;
-			userIsAdmin = existingUser.is_admin === 1;
-		} else {
-			// Create new user (bootstrap is always admin, invited users are regular users)
-			const insertUser = db.query(
-				"INSERT INTO users (username, name, is_admin, tier, role, provisioned_via_ldap) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-			);
-			const user = insertUser.get(
-				username,
-				username,
-				isBootstrap ? 1 : 0,
-				isBootstrap ? "admin" : "user",
-				isBootstrap ? "admin" : "user",
-				isLdapProvisioned ? 1 : 0,
-			) as { id: number };
-			userId = user.id;
-			userIsAdmin = isBootstrap;
-		}
+					if (result.changes === 0) {
+						throw new InviteExhaustedError();
+					}
+				}
 
-		// Store credential
-		// credential.id is a Uint8Array, convert to Buffer for storage
-		db.query(
-			"INSERT INTO credentials (user_id, credential_id, public_key, counter, name) VALUES (?, ?, ?, ?, ?)",
-		).run(
-			userId,
-			Buffer.from(credential.id),
-			Buffer.from(credential.publicKey),
-			credential.counter,
-			isPasskeyReset ? "Reset Passkey" : "Primary Passkey",
-		);
+				// Check if this user is being provisioned via LDAP
+				let isLdapProvisioned = false;
+				if (inviteId) {
+					const invite = db
+						.query("SELECT ldap_username FROM invites WHERE id = ?")
+						.get(inviteId) as { ldap_username: string | null } | undefined;
+					isLdapProvisioned =
+						invite?.ldap_username !== null &&
+						invite?.ldap_username !== undefined;
+				}
 
-		// Mark invite as used if applicable
-		if (inviteId) {
-			const usedAt = Math.floor(Date.now() / 1000);
+				if (isPasskeyReset && existingUser) {
+					// Passkey reset: use existing user, just add credential
+					userId = existingUser.id;
+					userIsAdmin = existingUser.is_admin === 1;
+				} else {
+					// Create new user (bootstrap is always admin, invited users are regular users)
+					const insertUser = db.query(
+						"INSERT INTO users (username, name, is_admin, tier, role, provisioned_via_ldap) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+					);
+					const user = insertUser.get(
+						username,
+						username,
+						isBootstrap ? 1 : 0,
+						isBootstrap ? "admin" : "user",
+						isBootstrap ? "admin" : "user",
+						isLdapProvisioned ? 1 : 0,
+					) as { id: number };
+					userId = user.id;
+					userIsAdmin = isBootstrap;
+				}
 
-			// Atomically increment invite usage counter while checking max_uses limit
-			const result = db
-				.query(
-					"UPDATE invites SET current_uses = current_uses + 1 WHERE id = ? AND current_uses < max_uses",
-				)
-				.run(inviteId);
+				// Store credential
+				// credential.id is a Uint8Array, convert to Buffer for storage
+				db.query(
+					"INSERT INTO credentials (user_id, credential_id, public_key, counter, name) VALUES (?, ?, ?, ?, ?)",
+				).run(
+					userId,
+					Buffer.from(credential.id),
+					Buffer.from(credential.publicKey),
+					credential.counter,
+					isPasskeyReset ? "Reset Passkey" : "Primary Passkey",
+				);
 
-			// Check if update was successful (0 rows affected means invite was already fully used)
-			if (result.changes === 0) {
+				if (inviteId) {
+					// Record this invite use
+					db.query(
+						"INSERT INTO invite_uses (invite_id, user_id, used_at) VALUES (?, ?, ?)",
+					).run(inviteId, userId, usedAt);
+
+					// Assign app roles to the new user (skip for passkey reset - they already have roles)
+					if (inviteRoles.length > 0 && !isPasskeyReset) {
+						const insertPermission = db.query(
+							"INSERT INTO permissions (user_id, app_id, role) VALUES (?, ?, ?)",
+						);
+						for (const { app_id, role } of inviteRoles) {
+							insertPermission.run(userId, app_id, role);
+						}
+					}
+				}
+			})();
+		} catch (err) {
+			if (err instanceof InviteExhaustedError) {
 				return Response.json(
 					{ error: "Invite code fully used" },
 					{ status: 403 },
 				);
 			}
-
-			// Record this invite use
-			db.query(
-				"INSERT INTO invite_uses (invite_id, user_id, used_at) VALUES (?, ?, ?)",
-			).run(inviteId, userId, usedAt);
-
-			// Assign app roles to the new user (skip for passkey reset - they already have roles)
-			if (inviteRoles.length > 0 && !isPasskeyReset) {
-				const insertPermission = db.query(
-					"INSERT INTO permissions (user_id, app_id, role) VALUES (?, ?, ?)",
-				);
-				for (const { app_id, role } of inviteRoles) {
-					insertPermission.run(userId, app_id, role);
-				}
-			}
+			throw err;
 		}
 
-		// Delete challenge
-		db.query("DELETE FROM challenges WHERE challenge = ?").run(
-			challenge.challenge,
-		);
-
-		// Create session
+		// Create session (outside the transaction — if this fails the account
+		// still exists and the user can log in again)
 		const token = crypto.randomUUID();
 		const expiresAt = Math.floor(Date.now() / 1000) + 86400; // 24 hours
 		db.query(
@@ -516,10 +539,16 @@ export async function loginOptions(req: Request): Promise<Response> {
 export async function loginVerify(req: Request): Promise<Response> {
 	try {
 		const body = await req.json();
-		const { username, response, conditional } = body as {
+		const {
+			username,
+			response,
+			conditional,
+			challenge: clientChallenge,
+		} = body as {
 			username?: string;
 			response: AuthenticationResponseJSON;
 			conditional?: boolean;
+			challenge?: string;
 		};
 
 		if (!response) {
@@ -528,6 +557,10 @@ export async function loginVerify(req: Request): Promise<Response> {
 
 		if (!conditional && !username) {
 			return Response.json({ error: "Username required" }, { status: 400 });
+		}
+
+		if (!clientChallenge) {
+			return Response.json({ error: "Challenge required" }, { status: 400 });
 		}
 
 		// Look up credential by ID to discover the username
@@ -570,14 +603,15 @@ export async function loginVerify(req: Request): Promise<Response> {
 		const user = { id: credentialWithUser.user_id };
 		const resolvedUsername = credentialWithUser.username;
 
-		// Verify challenge exists and is valid
-		// Conditional UI stores challenge with empty username; normal flow uses the actual username
+		// Verify challenge exists and is valid — look up by the challenge value
+		// the client used (returned in the verify body), not "latest row wins".
+		// This prevents cross-session challenge confusion and login DoS.
 		const challengeUsername = conditional ? "" : resolvedUsername;
 		const challenge = db
 			.query(
-				"SELECT challenge, expires_at FROM challenges WHERE username = ? AND type = 'authentication' ORDER BY created_at DESC LIMIT 1",
+				"SELECT challenge, expires_at FROM challenges WHERE challenge = ? AND username = ? AND type = 'authentication'",
 			)
-			.get(challengeUsername) as
+			.get(clientChallenge, challengeUsername) as
 			| { challenge: string; expires_at: number }
 			| undefined;
 
@@ -589,6 +623,12 @@ export async function loginVerify(req: Request): Promise<Response> {
 		if (challenge.expires_at < now) {
 			return Response.json({ error: "Challenge expired" }, { status: 400 });
 		}
+
+		// Burn the challenge immediately — it must not be reusable regardless
+		// of whether verification succeeds or fails.
+		db.query("DELETE FROM challenges WHERE challenge = ?").run(
+			challenge.challenge,
+		);
 
 		// Verify authentication response
 		let verification: VerifiedAuthenticationResponse;
@@ -613,18 +653,23 @@ export async function loginVerify(req: Request): Promise<Response> {
 			return Response.json({ error: "Verification failed" }, { status: 400 });
 		}
 
+		// Reject cloned authenticators: counter must advance. Authenticators
+		// that don't support counters always report 0; skip the check then.
+		const newCounter = verification.authenticationInfo.newCounter;
+		if (credential.counter > 0 && newCounter <= credential.counter) {
+			console.warn(
+				`[auth] counter regression for credential ${credential.credential_id.toString()} — possible cloned passkey (stored=${credential.counter}, got=${newCounter})`,
+			);
+			return Response.json({ error: "Verification failed" }, { status: 400 });
+		}
+
 		// Update credential counter
 		db.query(
 			"UPDATE credentials SET counter = ? WHERE user_id = ? AND credential_id = ?",
 		).run(
-			verification.authenticationInfo.newCounter,
+			newCounter,
 			user.id,
 			credential.credential_id,
-		);
-
-		// Delete challenge
-		db.query("DELETE FROM challenges WHERE challenge = ?").run(
-			challenge.challenge,
 		);
 
 		// Create session
