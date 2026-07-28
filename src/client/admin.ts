@@ -1,26 +1,17 @@
 import "./ds";
 import { escapeHtml } from "./escape";
+import { apiFetch } from "./api";
 
-const token = localStorage.getItem("indiko_session");
 const usersList = document.getElementById("usersList") as HTMLElement;
 let currentUserId: number;
 
 // Check auth and display user
 async function checkAuth() {
-	if (!token) {
-		window.location.href = "/login";
-		return;
-	}
-
 	try {
-		const response = await fetch("/api/hello", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/hello", {
 		});
 
 		if (response.status === 401 || response.status === 403) {
-			localStorage.removeItem("indiko_session");
 			window.location.href = "/login";
 			return;
 		}
@@ -44,10 +35,7 @@ async function checkAuth() {
 
 async function loadUsers() {
 	try {
-		const response = await fetch("/api/users", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/users", {
 		});
 
 		if (!response.ok) {
@@ -151,10 +139,9 @@ async function handleUserAction(e: Event) {
 				endpoint = `/api/admin/users/${userId}/enable`;
 			}
 
-			const response = await fetch(endpoint, {
+			const response = await apiFetch(endpoint, {
 				method,
 				headers: {
-					Authorization: `Bearer ${token}`,
 				},
 			});
 

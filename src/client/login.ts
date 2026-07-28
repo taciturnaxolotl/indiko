@@ -132,8 +132,7 @@ async function initConditionalUI() {
 			return;
 		}
 
-		const { token } = await verifyRes.json();
-		localStorage.setItem("indiko_session", token);
+		await verifyRes.json();
 		showMessage("Login successful!", "success");
 		setTimeout(() => {
 			window.location.href = "/";
@@ -230,8 +229,7 @@ loginForm.addEventListener("submit", async (e) => {
 			throw new Error(error.error || "Authentication failed");
 		}
 
-		const { token } = await verifyRes.json();
-		localStorage.setItem("indiko_session", token);
+		await verifyRes.json();
 
 		showMessage("Login successful!", "success");
 
@@ -306,8 +304,7 @@ registerForm.addEventListener("submit", async (e) => {
 			throw new Error(error.error || "Registration failed");
 		}
 
-		const { token } = await verifyRes.json();
-		localStorage.setItem("indiko_session", token);
+		await verifyRes.json();
 
 		showMessage("Registration successful!", "success");
 

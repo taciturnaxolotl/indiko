@@ -24,13 +24,8 @@ export default class INav extends Elena(HTMLElement) {
 	private session: SessionInfo | null = null;
 
 	override async firstUpdated() {
-		const token = localStorage.getItem("indiko_session");
-		if (!token) return;
-
 		try {
-			const res = await fetch("/api/hello", {
-				headers: { Authorization: `Bearer ${token}` },
-			});
+			const res = await fetch("/api/hello");
 			if (!res.ok) return;
 			const data = await res.json();
 			this.session = { username: data.username, isAdmin: !!data.isAdmin };
@@ -81,16 +76,11 @@ export default class INav extends Elena(HTMLElement) {
 	}
 
 	private async signOut() {
-		const token = localStorage.getItem("indiko_session");
 		try {
-			await fetch("/auth/logout", {
-				method: "POST",
-				headers: { Authorization: `Bearer ${token}` },
-			});
+			await fetch("/auth/logout", { method: "POST" });
 		} catch {
 			// Ignore
 		}
-		localStorage.removeItem("indiko_session");
 		window.location.href = "/login";
 	}
 }

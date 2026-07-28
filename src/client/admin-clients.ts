@@ -17,11 +17,11 @@ declare global {
 		) => Promise<void>;
 	}
 }
-const token = localStorage.getItem("indiko_session");
 
 import "./ds";
 import type IToast from "./ds/toast";
 import { escapeHtml } from "./escape";
+import { apiFetch } from "./api";
 
 const clientsList = document.getElementById("clientsList") as HTMLElement;
 const createClientBtn = document.getElementById(
@@ -45,20 +45,11 @@ function showToast(message: string, type: "success" | "error" = "success") {
 }
 
 async function checkAuth() {
-	if (!token) {
-		window.location.href = "/login";
-		return;
-	}
-
 	try {
-		const response = await fetch("/api/hello", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/hello", {
 		});
 
 		if (response.status === 401 || response.status === 403) {
-			localStorage.removeItem("indiko_session");
 			window.location.href = "/login";
 			return;
 		}
@@ -102,10 +93,7 @@ interface ClientUser {
 
 async function loadClients() {
 	try {
-		const response = await fetch("/api/admin/clients", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/admin/clients", {
 		});
 
 		if (!response.ok) {
@@ -226,11 +214,10 @@ window.toggleClient = async (clientId: string) => {
 	}
 
 	try {
-		const response = await fetch(
+		const response = await apiFetch(
 			`/api/admin/clients/${encodeURIComponent(clientId)}`,
 			{
 				headers: {
-					Authorization: `Bearer ${token}`,
 				},
 			},
 		);
@@ -353,12 +340,11 @@ window.setUserRole = async (
 	role: string,
 ) => {
 	try {
-		const response = await fetch(
+		const response = await apiFetch(
 			`/api/admin/clients/${encodeURIComponent(clientId)}/users/${encodeURIComponent(username)}/role`,
 			{
 				method: "POST",
 				headers: {
-					Authorization: `Bearer ${token}`,
 					"Content-Type": "application/json",
 				},
 				body: JSON.stringify({ role: role || null }),
@@ -378,11 +364,10 @@ window.setUserRole = async (
 
 window.editClient = async (clientId: string) => {
 	try {
-		const response = await fetch(
+		const response = await apiFetch(
 			`/api/admin/clients/${encodeURIComponent(clientId)}`,
 			{
 				headers: {
-					Authorization: `Bearer ${token}`,
 				},
 			},
 		);
@@ -437,12 +422,11 @@ window.deleteClient = async (clientId: string, event?: Event) => {
 		btn.textContent = "deleting...";
 
 		try {
-			const response = await fetch(
+			const response = await apiFetch(
 				`/api/admin/clients/${encodeURIComponent(clientId)}`,
 				{
 					method: "DELETE",
 					headers: {
-						Authorization: `Bearer ${token}`,
 					},
 				},
 			);
@@ -571,10 +555,9 @@ clientForm.addEventListener("submit", async (e) => {
 	const method = isEdit ? "PUT" : "POST";
 
 	try {
-		const response = await fetch(url, {
+		const response = await apiFetch(url, {
 			method,
 			headers: {
-				Authorization: `Bearer ${token}`,
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({
@@ -639,12 +622,11 @@ window.regenerateSecret = async (clientId: string, event?: Event) => {
 		btn.textContent = "regenerating...";
 
 		try {
-			const response = await fetch(
+			const response = await apiFetch(
 				`/api/admin/clients/${encodeURIComponent(clientId)}/secret`,
 				{
 					method: "POST",
 					headers: {
-						Authorization: `Bearer ${token}`,
 					},
 				},
 			);
@@ -714,12 +696,11 @@ window.revokeUserPermission = async (
 		btn.textContent = "revoking...";
 
 		try {
-			const response = await fetch(
+			const response = await apiFetch(
 				`/api/admin/apps/${encodeURIComponent(clientId)}/users/${encodeURIComponent(username)}`,
 				{
 					method: "DELETE",
 					headers: {
-						Authorization: `Bearer ${token}`,
 					},
 				},
 			);

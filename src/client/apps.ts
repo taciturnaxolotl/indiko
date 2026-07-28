@@ -1,11 +1,6 @@
 import "./ds";
+import { apiFetch } from "./api";
 import type IToast from "./ds/toast";
-
-const token = localStorage.getItem("indiko_session");
-
-if (!token) {
-	window.location.href = "/login";
-}
 
 interface App {
 	clientId: string;
@@ -28,12 +23,9 @@ import { escapeHtml } from "./escape";
 
 async function loadApps() {
 	try {
-		const response = await fetch("/api/apps", {
-			headers: { Authorization: `Bearer ${token}` },
-		});
+		const response = await apiFetch("/api/apps");
 
 		if (response.status === 401 || response.status === 403) {
-			localStorage.removeItem("indiko_session");
 			window.location.href = "/login";
 			return;
 		}
@@ -105,10 +97,10 @@ async function handleRevoke(btn: HTMLButtonElement) {
 	btn.textContent = "revoking...";
 
 	try {
-		const response = await fetch(`/api/apps/${encodeURIComponent(clientId)}`, {
-			method: "DELETE",
-			headers: { Authorization: `Bearer ${token}` },
-		});
+		const response = await apiFetch(
+			`/api/apps/${encodeURIComponent(clientId)}`,
+			{ method: "DELETE" },
+		);
 
 		if (!response.ok) throw new Error("Failed to revoke app");
 

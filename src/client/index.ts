@@ -3,8 +3,8 @@ import "./ds";
 import type IButton from "./ds/button";
 import type IToast from "./ds/toast";
 import { escapeHtml } from "./escape";
+import { apiFetch } from "./api";
 
-const token = localStorage.getItem("indiko_session");
 
 let welcome!: HTMLElement;
 let subtitle!: HTMLElement;
@@ -26,9 +26,6 @@ let dangerZone!: HTMLElement;
 
 let isAdmin = false;
 
-if (!token) {
-	window.location.href = "/login";
-}
 
 function $(id: string): HTMLElement {
 	const el = document.getElementById(id);
@@ -119,20 +116,11 @@ function updateAvatarPreview(photo: string | null, username: string) {
 
 // Check auth and display user
 async function checkAuth() {
-	if (!token) {
-		window.location.href = "/login";
-		return;
-	}
-
 	try {
-		const response = await fetch("/api/hello", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/hello", {
 		});
 
 		if (response.status === 401 || response.status === 403) {
-			localStorage.removeItem("indiko_session");
 			window.location.href = "/login";
 			return;
 		}
@@ -154,10 +142,7 @@ async function checkAuth() {
 
 async function loadProfile() {
 	try {
-		const response = await fetch("/api/profile", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/profile", {
 		});
 
 		if (!response.ok) {
@@ -193,10 +178,7 @@ async function loadProfile() {
 
 async function loadRecentApps() {
 	try {
-		const response = await fetch("/api/apps", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/apps", {
 		});
 
 		if (!response.ok) {
@@ -245,10 +227,9 @@ async function onProfileSubmit(e: SubmitEvent) {
 	saveBtn.textContent = "saving...";
 
 	try {
-		const response = await fetch("/api/profile", {
+		const response = await apiFetch("/api/profile", {
 			method: "PUT",
 			headers: {
-				Authorization: `Bearer ${token}`,
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({
@@ -300,11 +281,8 @@ async function onDeleteAccount() {
 	deleteAccountBtn.textContent = "deleting...";
 
 	try {
-		const response = await fetch("/api/profile", {
-			method: "DELETE",
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/profile", {
+			method: "DELETE"
 		});
 
 		if (!response.ok) {
@@ -313,7 +291,6 @@ async function onDeleteAccount() {
 		}
 
 		// Clear session and redirect
-		localStorage.removeItem("indiko_session");
 		showToast("Account deleted successfully. Redirecting...", "success");
 		setTimeout(() => {
 			window.location.href = "/login";
@@ -327,10 +304,7 @@ async function onDeleteAccount() {
 
 async function loadPasskeys() {
 	try {
-		const response = await fetch("/api/passkeys", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/passkeys", {
 		});
 
 		if (!response.ok) {
@@ -369,10 +343,9 @@ async function onPasskeyRename(e: CustomEvent<{ id: string; name: string }>) {
 	}
 
 	try {
-		const response = await fetch(`/api/passkeys/${id}`, {
+		const response = await apiFetch(`/api/passkeys/${id}`, {
 			method: "PATCH",
 			headers: {
-				Authorization: `Bearer ${token}`,
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({ name }),
@@ -402,11 +375,8 @@ async function onPasskeyRemove(e: CustomEvent<{ id: string }>) {
 	}
 
 	try {
-		const response = await fetch(`/api/passkeys/${id}`, {
-			method: "DELETE",
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch(`/api/passkeys/${id}`, {
+			method: "DELETE"
 		});
 
 		if (!response.ok) {
@@ -473,11 +443,8 @@ async function onAddPasskey() {
 
 	try {
 		// Get registration options
-		const optionsRes = await fetch("/api/passkeys/add/options", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const optionsRes = await apiFetch("/api/passkeys/add/options", {
+			method: "POST"
 		});
 
 		if (!optionsRes.ok) {
@@ -498,10 +465,9 @@ async function onAddPasskey() {
 		const name = await promptPasskeyName();
 
 		// Verify registration
-		const verifyRes = await fetch("/api/passkeys/add/verify", {
+		const verifyRes = await apiFetch("/api/passkeys/add/verify", {
 			method: "POST",
 			headers: {
-				Authorization: `Bearer ${token}`,
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({

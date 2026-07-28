@@ -5,7 +5,7 @@ import {
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import { db } from "../db";
-import { getSessionUserFlexible } from "../lib/session";
+import { getSessionUserFlexible, validateCsrf } from "../lib/session";
 
 const RP_NAME = "Indiko";
 
@@ -31,6 +31,9 @@ export function listPasskeys(req: Request): Response {
 export async function addPasskeyOptions(req: Request): Promise<Response> {
 	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) return user;
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	// Get existing credentials to exclude them
 	const existingCredentials = db
@@ -71,6 +74,9 @@ export async function addPasskeyVerify(req: Request): Promise<Response> {
 	try {
 		const user = getSessionUserFlexible(req);
 		if (user instanceof Response) return user;
+
+		const csrfError = validateCsrf(req);
+		if (csrfError) return csrfError;
 
 		const body = await req.json();
 		const {
@@ -169,6 +175,9 @@ export function deletePasskey(req: Request): Response {
 	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) return user;
 
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
+
 	const url = new URL(req.url);
 	const passkeyId = url.pathname.split("/").pop();
 
@@ -207,6 +216,9 @@ export function deletePasskey(req: Request): Response {
 export async function renamePasskey(req: Request): Promise<Response> {
 	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) return user;
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	const url = new URL(req.url);
 	const passkeyId = url.pathname.split("/").pop();

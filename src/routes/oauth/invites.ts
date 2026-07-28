@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import { db } from "../../db";
-import { getSessionUser } from "../../lib/session";
+import { getSessionUserFlexible, validateCsrf } from "../../lib/session";
 
 function requireAdmin(req: Request): { userId: number } | Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
@@ -32,6 +32,9 @@ export async function createInvite(req: Request): Promise<Response> {
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	const body = (await req.json()) as {
 		maxUses?: number;
@@ -165,6 +168,9 @@ export async function updateInvite(req: Request): Promise<Response> {
 		return user;
 	}
 
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
+
 	const inviteId = parseInviteId(req);
 	if (!inviteId) {
 		return Response.json({ error: "Invalid invite ID" }, { status: 400 });
@@ -216,6 +222,9 @@ export function deleteInvite(req: Request): Response {
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	const inviteId = parseInviteId(req);
 	if (!inviteId) {

@@ -13,6 +13,7 @@ import {
 import { authenticate } from "ldap-authentication";
 import { db } from "../db";
 import { checkLdapGroupMembership, checkLdapUser } from "../ldap-cleanup";
+import { csrfCookieHeader, generateCsrfToken } from "../lib/session";
 
 const RP_NAME = "Indiko";
 
@@ -411,9 +412,13 @@ export async function registerVerify(req: Request): Promise<Response> {
 				isAdmin: userIsAdmin,
 			},
 			{
-				headers: {
-					"Set-Cookie": `indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secureCookie}`,
-				},
+				headers: [
+					[
+						"Set-Cookie",
+						`indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secureCookie}`,
+					],
+					["Set-Cookie", csrfCookieHeader(generateCsrfToken())],
+				],
 			},
 		);
 	} catch (error) {
@@ -694,9 +699,13 @@ export async function loginVerify(req: Request): Promise<Response> {
 				username: resolvedUsername,
 			},
 			{
-				headers: {
-					"Set-Cookie": `indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secureCookie}`,
-				},
+				headers: [
+					[
+						"Set-Cookie",
+						`indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secureCookie}`,
+					],
+					["Set-Cookie", csrfCookieHeader(generateCsrfToken())],
+				],
 			},
 		);
 	} catch (error) {

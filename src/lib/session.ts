@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { db } from "../db";
 
 export interface SessionUser {
@@ -111,4 +112,53 @@ export function getSessionUserFlexible(req: Request): SessionUser | Response {
 	if (cookieUser) return cookieUser;
 
 	return bearerResult; // return the original 401
+}
+
+// --- CSRF protection ---
+//
+// The CSRF token is a random value stored alongside the session. It's set as
+// a non-HttpOnly cookie (indiko_csrf) so client-side JS can read it and send
+// it back as the X-CSRF-Token header on mutating requests. Cross-origin
+// attackers can't read the cookie (same-origin policy) and can't set custom
+// headers cross-origin without a CORS preflight, so this blocks CSRF even
+// though the session cookie is SameSite=Lax.
+
+const CSRF_COOKIE = "indiko_csrf";
+const CSRF_HEADER = "x-csrf-token";
+
+export function generateCsrfToken(): string {
+	return crypto.randomBytes(32).toString("base64url");
+}
+
+export function csrfCookieHeader(token: string): string {
+	const isProduction = process.env.NODE_ENV === "production";
+	const secure = isProduction ? "; Secure" : "";
+	return `${CSRF_COOKIE}=${token}; Path=/; SameSite=Lax${secure}`;
+}
+
+function readCsrfCookie(req: Request): string | null {
+	const cookieHeader = req.headers.get("Cookie");
+	if (!cookieHeader) return null;
+	const match = cookieHeader.match(new RegExp(`${CSRF_COOKIE}=([^;]+)`));
+	return match?.[1] ?? null;
+}
+
+/**
+ * Validate the CSRF token on a mutating request. The token from the
+ * X-CSRF-Token header must match the indiko_csrf cookie.
+ * Returns null if valid, or a 403 Response to send back.
+ */
+export function validateCsrf(req: Request): Response | null {
+	const cookieToken = readCsrfCookie(req);
+	const headerToken = req.headers.get(CSRF_HEADER);
+
+	if (!cookieToken || !headerToken) {
+		return Response.json({ error: "CSRF token missing" }, { status: 403 });
+	}
+
+	if (cookieToken !== headerToken) {
+		return Response.json({ error: "CSRF token mismatch" }, { status: 403 });
+	}
+
+	return null;
 }

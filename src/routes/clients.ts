@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import { db } from "../db";
 import { hashSecret } from "../lib/secrets";
-import { getSessionUser } from "../lib/session";
+import { getSessionUserFlexible, validateCsrf } from "../lib/session";
 
 function generateClientSecret(): string {
 	return `iks_${nanoid(43)}`; // indiko secret
@@ -12,7 +12,7 @@ function generateClientId(): string {
 }
 
 export function listClients(req: Request): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
@@ -86,10 +86,13 @@ export function listClients(req: Request): Response {
 }
 
 export async function createClient(req: Request): Promise<Response> {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
@@ -205,7 +208,7 @@ export async function createClient(req: Request): Promise<Response> {
 }
 
 export function getClient(req: Request, clientId: string): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
@@ -305,10 +308,13 @@ export async function updateClient(
 	req: Request,
 	clientId: string,
 ): Promise<Response> {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
@@ -410,10 +416,13 @@ export async function updateClient(
 }
 
 export function deleteClient(req: Request, clientId: string): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
@@ -437,10 +446,13 @@ export async function setUserRole(
 	clientId: string,
 	username: string,
 ): Promise<Response> {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
@@ -507,10 +519,13 @@ export function regenerateClientSecret(
 	req: Request,
 	clientId: string,
 ): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });

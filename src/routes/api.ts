@@ -1,10 +1,10 @@
 import { db } from "../db";
 import { verifyDomain } from "../lib/oauth/client-metadata";
 import { validateProfileURL } from "../lib/oauth/urls";
-import { getSessionUser } from "../lib/session";
+import { getSessionUserFlexible, validateCsrf } from "../lib/session";
 
 export function hello(req: Request): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
@@ -19,7 +19,7 @@ export function hello(req: Request): Response {
 }
 
 export function listUsers(req: Request): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
@@ -69,7 +69,7 @@ export function listUsers(req: Request): Response {
 }
 
 export async function getProfile(req: Request): Promise<Response> {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
@@ -116,10 +116,13 @@ export async function getProfile(req: Request): Promise<Response> {
 }
 
 export async function updateProfile(req: Request): Promise<Response> {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	try {
 		const body = await req.json();
@@ -174,7 +177,7 @@ export async function updateProfile(req: Request): Promise<Response> {
 }
 
 export function getAuthorizedApps(req: Request): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
@@ -228,10 +231,13 @@ export function getAuthorizedApps(req: Request): Response {
 }
 
 export function revokeApp(req: Request, clientId: string): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	// Delete permission
 	const result = db
@@ -251,7 +257,7 @@ export function revokeApp(req: Request, clientId: string): Response {
 }
 
 export function listAllApps(req: Request): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
@@ -293,7 +299,7 @@ export function listAllApps(req: Request): Response {
 }
 
 export function getAppDetails(req: Request, clientId: string): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
@@ -364,10 +370,13 @@ export function revokeAppForUser(
 	clientId: string,
 	username: string,
 ): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
@@ -397,10 +406,13 @@ export function revokeAppForUser(
 }
 
 export function disableUser(req: Request, userId: string): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
@@ -440,10 +452,13 @@ export function disableUser(req: Request, userId: string): Response {
 }
 
 export function enableUser(req: Request, userId: string): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
@@ -471,10 +486,13 @@ export async function updateUserTier(
 	req: Request,
 	userId: string,
 ): Promise<Response> {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
@@ -529,10 +547,13 @@ export async function updateUserTier(
 }
 
 export function deleteUser(req: Request, userId: string): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	if (!user.isAdmin) {
 		return Response.json({ error: "Admin access required" }, { status: 403 });
@@ -576,10 +597,13 @@ export function deleteUser(req: Request, userId: string): Response {
 }
 
 export function deleteSelfAccount(req: Request): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
+
+	const csrfError = validateCsrf(req);
+	if (csrfError) return csrfError;
 
 	// Prevent admins from deleting their own accounts
 	if (user.isAdmin) {

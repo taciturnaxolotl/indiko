@@ -1,6 +1,6 @@
 import { db } from "../../db";
 import { unauthorizedResponse } from "../../lib/oauth/errors";
-import { getSessionUser } from "../../lib/session";
+import { getSessionUserFlexible } from "../../lib/session";
 
 // GET /userinfo - Get user profile from access token
 export function userinfo(req: Request): Response {
@@ -107,17 +107,40 @@ export function userinfo(req: Request): Response {
 
 // POST /auth/logout - Clear session
 export function logout(req: Request): Response {
-	const user = getSessionUser(req);
+	const user = getSessionUserFlexible(req);
 	if (user instanceof Response) {
 		return user;
 	}
 
+	// Delete session from DB (try both Bearer token and cookie)
 	const authHeader = req.headers.get("Authorization");
 	const tokenValue = authHeader?.substring(7);
-
 	if (tokenValue) {
 		db.query("DELETE FROM sessions WHERE token = ?").run(tokenValue);
 	}
 
-	return Response.json({ success: true });
+	const cookieHeader = req.headers.get("Cookie");
+	const cookieToken = cookieHeader?.match(/indiko_session=([^;]+)/)?.[1];
+	if (cookieToken) {
+		db.query("DELETE FROM sessions WHERE token = ?").run(cookieToken);
+	}
+
+	const isProduction = process.env.NODE_ENV === "production";
+	const secure = isProduction ? "; Secure" : "";
+
+	return Response.json(
+		{ success: true },
+		{
+			headers: [
+				[
+					"Set-Cookie",
+					`indiko_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`,
+				],
+				[
+					"Set-Cookie",
+					`indiko_csrf=; Path=/; SameSite=Lax; Max-Age=0${secure}`,
+				],
+			],
+		},
+	);
 }

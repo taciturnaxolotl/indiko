@@ -1,5 +1,6 @@
 import "./ds";
 import { escapeHtml } from "./escape";
+import { apiFetch } from "./api";
 
 declare global {
 	interface Window {
@@ -11,7 +12,6 @@ declare global {
 		deleteInvite: (inviteId: number, event?: Event) => Promise<void>;
 	}
 }
-const token = localStorage.getItem("indiko_session");
 const invitesList = document.getElementById("invitesList") as HTMLElement;
 const createInviteBtn = document.getElementById(
 	"createInviteBtn",
@@ -19,20 +19,11 @@ const createInviteBtn = document.getElementById(
 
 // Check auth and display user
 async function checkAuth() {
-	if (!token) {
-		window.location.href = "/login";
-		return;
-	}
-
 	try {
-		const response = await fetch("/api/hello", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/hello", {
 		});
 
 		if (response.status === 401 || response.status === 403) {
-			localStorage.removeItem("indiko_session");
 			window.location.href = "/login";
 			return;
 		}
@@ -65,10 +56,7 @@ async function createInvite() {
 
 async function loadAppsForInvite() {
 	try {
-		const response = await fetch("/api/admin/clients", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/admin/clients", {
 		});
 
 		if (!response.ok) {
@@ -199,10 +187,9 @@ async function submitCreateInvite() {
 	submitBtn.textContent = "creating...";
 
 	try {
-		const response = await fetch("/api/invites/create", {
+		const response = await apiFetch("/api/invites/create", {
 			method: "POST",
 			headers: {
-				Authorization: `Bearer ${token}`,
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({
@@ -260,10 +247,7 @@ window.closeCreateInviteModal = closeCreateInviteModal;
 
 async function loadInvites() {
 	try {
-		const response = await fetch("/api/invites", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/invites", {
 		});
 
 		if (!response.ok) {
@@ -464,10 +448,7 @@ let currentEditInviteId: number | null = null;
 // Make editInvite globally available for onclick handler
 window.editInvite = async (inviteId: number) => {
 	try {
-		const response = await fetch("/api/invites", {
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const response = await apiFetch("/api/invites", {
 		});
 
 		if (!response.ok) {
@@ -552,10 +533,9 @@ window.submitEditInvite = async () => {
 	submitBtn.textContent = "saving...";
 
 	try {
-		const response = await fetch(`/api/invites/${currentEditInviteId}`, {
+		const response = await apiFetch(`/api/invites/${currentEditInviteId}`, {
 			method: "PATCH",
 			headers: {
-				Authorization: `Bearer ${token}`,
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({ maxUses, expiresAt, note, message }),
@@ -602,10 +582,9 @@ window.deleteInvite = async (inviteId: number, event?: Event) => {
 		btn.disabled = true;
 
 		try {
-			const response = await fetch(`/api/invites/${inviteId}`, {
+			const response = await apiFetch(`/api/invites/${inviteId}`, {
 				method: "DELETE",
 				headers: {
-					Authorization: `Bearer ${token}`,
 				},
 			});
 
