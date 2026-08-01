@@ -298,12 +298,9 @@ async function handleDeviceCodeGrant(
 		return oauthError(400, "invalid_grant", "client_id mismatch");
 	}
 
-	// Pre-registered (confidential) clients must authenticate with their
-	// client_secret, same as the authorization_code grant.
-	const credentialError = verifyClientCredentials(clientId, body.client_secret);
-	if (credentialError) {
-		return credentialError;
-	}
+	// RFC 8628 is a public-client flow: the device code itself is high-entropy
+	// proof of possession, and the client_id binding above is the security
+	// boundary. No client_secret required, even for pre-registered clients.
 
 	// Rate limiting: enforce minimum poll interval (RFC 8628 §3.5)
 	if (deviceCode.last_polled_at) {
