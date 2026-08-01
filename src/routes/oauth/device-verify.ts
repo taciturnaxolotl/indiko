@@ -12,7 +12,7 @@ const DEVICE_STYLES = `
 		max-width: 30rem;
 		width: 100%;
 		background: rgba(188, 141, 160, 0.05);
-		border: 1px solid var(--old-rose);
+		border: 1px solid var(--paper-dim);
 		padding: 2.5rem;
 	}
 	.code-input {
@@ -25,14 +25,14 @@ const DEVICE_STYLES = `
 		letter-spacing: 0.3rem;
 		text-transform: uppercase;
 		background: rgba(12, 23, 19, 0.6);
-		border: 2px solid var(--old-rose);
-		color: var(--lavender);
+		border: 2px solid var(--paper-dim);
+		color: var(--paper);
 		margin-bottom: 1.5rem;
 		outline: none;
 		transition: border-color 0.2s;
 	}
 	.code-input:focus {
-		border-color: var(--berry-crush);
+		border-color: var(--accent);
 	}
 	.code-input::placeholder {
 		color: rgba(188, 141, 160, 0.3);
@@ -41,18 +41,18 @@ const DEVICE_STYLES = `
 	.app-info {
 		padding: 1.25rem;
 		background: rgba(12, 23, 19, 0.4);
-		border: 1px solid var(--old-rose);
+		border: 1px solid var(--paper-dim);
 		margin-bottom: 1.5rem;
 	}
 	.app-info .name {
 		font-size: 1.125rem;
 		font-weight: 700;
-		color: var(--lavender);
+		color: var(--paper);
 		margin-bottom: 0.25rem;
 	}
 	.app-info .scopes {
 		font-size: 0.875rem;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 	}
 	.app-info .scopes code {
 		font-size: 0.8125rem;
@@ -60,8 +60,8 @@ const DEVICE_STYLES = `
 	.error-msg {
 		padding: 1rem;
 		background: rgba(160, 70, 104, 0.15);
-		border: 1px solid var(--rosewood);
-		color: var(--lavender);
+		border: 1px solid var(--accent-deep);
+		color: var(--paper);
 		margin-bottom: 1.5rem;
 		font-size: 0.875rem;
 	}
@@ -69,7 +69,7 @@ const DEVICE_STYLES = `
 		padding: 1rem;
 		background: rgba(74, 124, 89, 0.15);
 		border: 1px solid #4a7c59;
-		color: var(--lavender);
+		color: var(--paper);
 		margin-bottom: 1.5rem;
 		font-size: 0.875rem;
 	}
@@ -80,28 +80,28 @@ const DEVICE_STYLES = `
 	}
 	.buttons button { flex: 1; }
 	.allow {
-		background: var(--berry-crush);
-		color: var(--lavender);
+		background: var(--accent);
+		color: var(--paper);
 	}
-	.allow::before { border-color: var(--rosewood); }
+	.allow::before { border-color: var(--accent-deep); }
 	.deny {
 		background: transparent;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 	}
-	.deny::before { border-color: var(--old-rose); }
+	.deny::before { border-color: var(--paper-dim); }
 	.who {
 		margin-top: 1.5rem;
 		text-align: center;
 		font-size: 0.8125rem;
-		color: var(--old-rose);
+		color: var(--paper-dim);
 	}
-	.who strong { color: var(--lavender); font-weight: 600; }
+	.who strong { color: var(--paper); font-weight: 600; }
 	.submit-btn {
 		width: 100%;
-		background: var(--berry-crush);
-		color: var(--lavender);
+		background: var(--accent);
+		color: var(--paper);
 	}
-	.submit-btn::before { border-color: var(--rosewood); }
+	.submit-btn::before { border-color: var(--accent-deep); }
 `;
 
 function devicePage(title: string, body: string, status = 200): Response {
