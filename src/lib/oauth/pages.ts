@@ -381,13 +381,13 @@ export function consentPage(opts: ConsentPageOptions): Response {
     <p class="request-text">wants to access your account</p>
     ${opts.me ? `<div class="me-identity">requesting identity <code>${escapeHtml(opts.me)}</code></div>` : ""}
 
-    <div class="scopes">
-      <div class="scope-title">requested permissions</div>
-      <ul class="scope-list">${scopeItems}
-      </ul>
-    </div>
-
     <form method="POST" action="/auth/authorize">
+      <div class="scopes">
+        <div class="scope-title">requested permissions</div>
+        <ul class="scope-list">${scopeItems}
+        </ul>
+      </div>
+
       <input type="hidden" name="csrf_token" value="${escapeHtml(opts.csrfToken)}" />
       <input type="hidden" name="client_id" value="${escapeHtml(opts.clientId)}" />
       <input type="hidden" name="redirect_uri" value="${escapeHtml(opts.redirectUri)}" />
