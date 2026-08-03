@@ -7,6 +7,7 @@ import appsHTML from "./html/apps.html";
 import indexHTML from "./html/index.html";
 import loginHTML from "./html/login.html";
 import { getLdapAccounts, updateOrphanedAccounts } from "./ldap-cleanup";
+import { sweepExpiredRecords } from "./lib/cleanup";
 import { getDiscoveryDocument, getJWKS } from "./oidc";
 import {
 	deleteSelfAccount,
@@ -352,33 +353,17 @@ console.log("[Indiko] running on", env.ORIGIN);
 // Cleanup job: runs every hour to remove expired data
 const cleanupJob = setInterval(() => {
 	const now = Math.floor(Date.now() / 1000);
-
-	const sessionsDeleted = db
-		.query("DELETE FROM sessions WHERE expires_at < ?")
-		.run(now);
-	const challengesDeleted = db
-		.query("DELETE FROM challenges WHERE expires_at < ?")
-		.run(now);
-	const authcodesDeleted = db
-		.query("DELETE FROM authcodes WHERE expires_at < ?")
-		.run(now);
-	const tokensDeleted = db
-		.query("DELETE FROM tokens WHERE expires_at < ? OR revoked = 1")
-		.run(now);
-	const deviceCodesDeleted = db
-		.query("DELETE FROM device_codes WHERE expires_at < ?")
-		.run(now);
-
+	const removed = sweepExpiredRecords(now);
 	const total =
-		sessionsDeleted.changes +
-		challengesDeleted.changes +
-		authcodesDeleted.changes +
-		tokensDeleted.changes +
-		deviceCodesDeleted.changes;
+		removed.sessions +
+		removed.challenges +
+		removed.authcodes +
+		removed.tokens +
+		removed.deviceCodes;
 
 	if (total > 0) {
 		console.log(
-			`[Cleanup] Removed ${total} expired records (sessions: ${sessionsDeleted.changes}, challenges: ${challengesDeleted.changes}, authcodes: ${authcodesDeleted.changes}, tokens: ${tokensDeleted.changes}, device_codes: ${deviceCodesDeleted.changes})`,
+			`[Cleanup] Removed ${total} expired records (sessions: ${removed.sessions}, challenges: ${removed.challenges}, authcodes: ${removed.authcodes}, tokens: ${removed.tokens}, device_codes: ${removed.deviceCodes})`,
 		);
 	}
 }, 3600000); // 1 hour in milliseconds
