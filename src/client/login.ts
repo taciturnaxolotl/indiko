@@ -134,8 +134,13 @@ async function initConditionalUI() {
 
 		await verifyRes.json();
 		showMessage("Login successful!", "success");
+
+		// Respect the return URL so auth flows resume after conditional-UI login
+		const urlParams = new URLSearchParams(window.location.search);
+		const returnUrl = safeReturnUrl(urlParams.get("return") || "/");
+
 		setTimeout(() => {
-			window.location.href = "/";
+			window.location.href = returnUrl;
 		}, 1000);
 	} catch {
 		// User cancelled or browser doesn't support conditional UI — fall back to manual flow
