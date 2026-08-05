@@ -75,7 +75,11 @@ export async function deviceAuthorization(req: Request): Promise<Response> {
 		// RFC 8707 resource indicator (device flow carries it from the start).
 		const resources = validateResources(rawResource ? [rawResource] : []);
 		if (resources === null) {
-			return oauthError(400, "invalid_target", "resource must be an absolute URI without a fragment");
+			return oauthError(
+				400,
+				"invalid_target",
+				"resource must be an absolute URI without a fragment",
+			);
 		}
 		const resourceStored = resourcesToStored(resources);
 

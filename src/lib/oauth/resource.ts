@@ -21,7 +21,8 @@ export function validateResources(values: string[]): string[] | null {
 		} catch {
 			return null;
 		}
-		if ((u.protocol !== "https:" && u.protocol !== "http:") || u.hash) return null;
+		if ((u.protocol !== "https:" && u.protocol !== "http:") || u.hash)
+			return null;
 		const norm = u.origin + u.pathname.replace(/\/+$/, "");
 		if (!out.includes(norm)) out.push(norm);
 	}
@@ -51,7 +52,9 @@ export interface ResourceInfo {
  * an optional `logo_uri`). Best-effort + SSRF-safe: a resource with no PRM, an
  * unreachable one, or a bad logo URL just falls back to its hostname.
  */
-export async function resourceDisplay(resources: string[]): Promise<ResourceInfo[]> {
+export async function resourceDisplay(
+	resources: string[],
+): Promise<ResourceInfo[]> {
 	return Promise.all(resources.map(fetchResourceInfo));
 }
 
@@ -65,11 +68,18 @@ async function fetchResourceInfo(id: string): Promise<ResourceInfo> {
 	const info: ResourceInfo = { id, name: host, host };
 	try {
 		const prmUrl = `${id.replace(/\/+$/, "")}/.well-known/oauth-protected-resource`;
-		const res = await safeFetch(prmUrl, { timeout: 3000, headers: { accept: "application/json" } });
+		const res = await safeFetch(prmUrl, {
+			timeout: 3000,
+			headers: { accept: "application/json" },
+		});
 		if (!res.success) return info;
-		const prm = (await res.data.json()) as { resource_name?: string; logo_uri?: string };
+		const prm = (await res.data.json()) as {
+			resource_name?: string;
+			logo_uri?: string;
+		};
 		if (prm.resource_name) info.name = prm.resource_name;
-		if (prm.logo_uri && validateExternalURL(prm.logo_uri).safe) info.logo = prm.logo_uri;
+		if (prm.logo_uri && validateExternalURL(prm.logo_uri).safe)
+			info.logo = prm.logo_uri;
 	} catch {
 		/* best-effort: hostname fallback already set */
 	}

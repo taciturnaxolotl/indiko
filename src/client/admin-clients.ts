@@ -19,9 +19,9 @@ declare global {
 }
 
 import "./ds";
+import { apiFetch } from "./api";
 import type IToast from "./ds/toast";
 import { escapeHtml } from "./escape";
-import { apiFetch } from "./api";
 
 const clientsList = document.getElementById("clientsList") as HTMLElement;
 const createClientBtn = document.getElementById(
@@ -46,8 +46,7 @@ function showToast(message: string, type: "success" | "error" = "success") {
 
 async function checkAuth() {
 	try {
-		const response = await apiFetch("/api/hello", {
-		});
+		const response = await apiFetch("/api/hello", {});
 
 		if (response.status === 401 || response.status === 403) {
 			window.location.href = "/login";
@@ -93,8 +92,7 @@ interface ClientUser {
 
 async function loadClients() {
 	try {
-		const response = await apiFetch("/api/admin/clients", {
-		});
+		const response = await apiFetch("/api/admin/clients", {});
 
 		if (!response.ok) {
 			throw new Error("Failed to load clients");
@@ -217,8 +215,7 @@ window.toggleClient = async (clientId: string) => {
 		const response = await apiFetch(
 			`/api/admin/clients/${encodeURIComponent(clientId)}`,
 			{
-				headers: {
-				},
+				headers: {},
 			},
 		);
 
@@ -367,8 +364,7 @@ window.editClient = async (clientId: string) => {
 		const response = await apiFetch(
 			`/api/admin/clients/${encodeURIComponent(clientId)}`,
 			{
-				headers: {
-				},
+				headers: {},
 			},
 		);
 
@@ -426,8 +422,7 @@ window.deleteClient = async (clientId: string, event?: Event) => {
 				`/api/admin/clients/${encodeURIComponent(clientId)}`,
 				{
 					method: "DELETE",
-					headers: {
-					},
+					headers: {},
 				},
 			);
 
@@ -626,8 +621,7 @@ window.regenerateSecret = async (clientId: string, event?: Event) => {
 				`/api/admin/clients/${encodeURIComponent(clientId)}/secret`,
 				{
 					method: "POST",
-					headers: {
-					},
+					headers: {},
 				},
 			);
 
@@ -700,8 +694,7 @@ window.revokeUserPermission = async (
 				`/api/admin/apps/${encodeURIComponent(clientId)}/users/${encodeURIComponent(username)}`,
 				{
 					method: "DELETE",
-					headers: {
-					},
+					headers: {},
 				},
 			);
 

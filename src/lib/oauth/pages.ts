@@ -418,7 +418,10 @@ export function consentPage(opts: ConsentPageOptions): Response {
       </div>`
 		: "";
 	const resourceHidden = resources
-		.map((r) => `<input type="hidden" name="resource" value="${escapeHtml(r.id)}" />`)
+		.map(
+			(r) =>
+				`<input type="hidden" name="resource" value="${escapeHtml(r.id)}" />`,
+		)
 		.join("");
 
 	const scopeItems = opts.scopes

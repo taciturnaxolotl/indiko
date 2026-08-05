@@ -1,6 +1,6 @@
 import "./ds";
-import { escapeHtml } from "./escape";
 import { apiFetch } from "./api";
+import { escapeHtml } from "./escape";
 
 const usersList = document.getElementById("usersList") as HTMLElement;
 let currentUserId: number;
@@ -8,8 +8,7 @@ let currentUserId: number;
 // Check auth and display user
 async function checkAuth() {
 	try {
-		const response = await apiFetch("/api/hello", {
-		});
+		const response = await apiFetch("/api/hello", {});
 
 		if (response.status === 401 || response.status === 403) {
 			window.location.href = "/login";
@@ -35,8 +34,7 @@ async function checkAuth() {
 
 async function loadUsers() {
 	try {
-		const response = await apiFetch("/api/users", {
-		});
+		const response = await apiFetch("/api/users", {});
 
 		if (!response.ok) {
 			throw new Error("Failed to load users");
@@ -141,8 +139,7 @@ async function handleUserAction(e: Event) {
 
 			const response = await apiFetch(endpoint, {
 				method,
-				headers: {
-				},
+				headers: {},
 			});
 
 			if (!response.ok) {

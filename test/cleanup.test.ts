@@ -127,7 +127,15 @@ describe("sweepExpiredRecords", () => {
 		).run("sess-dead", userId, now - 10);
 		db.query(
 			"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used) VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-		).run("code-dead", userId, CLIENT_ID, `${CLIENT_ID}callback`, "[]", "c", now - 10);
+		).run(
+			"code-dead",
+			userId,
+			CLIENT_ID,
+			`${CLIENT_ID}callback`,
+			"[]",
+			"c",
+			now - 10,
+		);
 		db.query(
 			"INSERT INTO device_codes (device_code, user_code, client_id, scope, expires_at) VALUES (?, ?, ?, ?, ?)",
 		).run("dc-dead", "UC-DEAD", CLIENT_ID, "profile", now - 10);

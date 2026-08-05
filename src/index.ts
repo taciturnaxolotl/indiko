@@ -106,7 +106,6 @@ import {
 	console.log(`[Startup] Environment validated (${nodeEnv} mode)`);
 })();
 
-
 const server = Bun.serve({
 	port: env.PORT ? Number.parseInt(env.PORT, 10) : 3000,
 	routes: {

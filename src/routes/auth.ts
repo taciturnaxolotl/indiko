@@ -46,10 +46,7 @@ export async function registerOptions(req: Request): Promise<Response> {
 			return Response.json({ error: "Username required" }, { status: 400 });
 		}
 
-		if (
-			username.length > 128 ||
-			!/^[A-Za-z0-9._@-]+$/.test(username)
-		) {
+		if (username.length > 128 || !/^[A-Za-z0-9._@-]+$/.test(username)) {
 			return Response.json(
 				{ error: "Invalid username format" },
 				{ status: 400 },
@@ -184,10 +181,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 			);
 		}
 
-		if (
-			username.length > 128 ||
-			!/^[A-Za-z0-9._@-]+$/.test(username)
-		) {
+		if (username.length > 128 || !/^[A-Za-z0-9._@-]+$/.test(username)) {
 			return Response.json(
 				{ error: "Invalid username format" },
 				{ status: 400 },
@@ -697,11 +691,7 @@ export async function loginVerify(req: Request): Promise<Response> {
 		// Update credential counter
 		db.query(
 			"UPDATE credentials SET counter = ? WHERE user_id = ? AND credential_id = ?",
-		).run(
-			newCounter,
-			user.id,
-			credential.credential_id,
-		);
+		).run(newCounter, user.id, credential.credential_id);
 
 		// Create session
 		const token = crypto.randomUUID();

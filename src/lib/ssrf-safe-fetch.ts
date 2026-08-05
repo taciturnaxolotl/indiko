@@ -79,7 +79,9 @@ function isPrivateIP(ip: string): boolean {
 	}
 
 	// IPv4-mapped IPv6 in hex form (::ffff:a01:101 = ::ffff:10.1.1.1)
-	const hexMappedMatch = ipv6.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+	const hexMappedMatch = ipv6.match(
+		/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i,
+	);
 	if (hexMappedMatch?.[1] && hexMappedMatch[2]) {
 		const hi = Number.parseInt(hexMappedMatch[1], 16);
 		const lo = Number.parseInt(hexMappedMatch[2], 16);
@@ -274,13 +276,19 @@ async function resolveAndValidateIPs(hostname: string): Promise<{
 	// Literal IPs don't need resolution — validate directly.
 	if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
 		return isPrivateIP(hostname)
-			? { safe: false, error: "Cannot fetch from private/reserved IP addresses" }
+			? {
+					safe: false,
+					error: "Cannot fetch from private/reserved IP addresses",
+				}
 			: { safe: true };
 	}
 
 	if (hostname.startsWith("[") && hostname.endsWith("]")) {
 		return isPrivateIP(hostname)
-			? { safe: false, error: "Cannot fetch from private/reserved IP addresses" }
+			? {
+					safe: false,
+					error: "Cannot fetch from private/reserved IP addresses",
+				}
 			: { safe: true };
 	}
 

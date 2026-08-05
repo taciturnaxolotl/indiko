@@ -47,12 +47,48 @@ const now = Math.floor(Date.now() / 1000);
 // tacy is always the admin (index 0). Look up existing users by username
 // so we can seed on top of a live db without --reset.
 const users = [
-	{ username: "tacy", name: "Kieran Klukas", email: "kieran@dunkirk.sh", tier: "admin", status: "active" },
-	{ username: "alice", name: "Alice Carter", email: "alice@example.com", tier: "developer", status: "active" },
-	{ username: "bob", name: "Bob Nguyen", email: "bob@example.com", tier: "user", status: "active" },
-	{ username: "charlie", name: "Charlie Park", email: "charlie@example.com", tier: "user", status: "suspended" },
-	{ username: "dana", name: "Dana Williams", email: "dana@example.com", tier: "developer", status: "active" },
-	{ username: "eve", name: "Eve Martinez", email: null, tier: "user", status: "active" },
+	{
+		username: "tacy",
+		name: "Kieran Klukas",
+		email: "kieran@dunkirk.sh",
+		tier: "admin",
+		status: "active",
+	},
+	{
+		username: "alice",
+		name: "Alice Carter",
+		email: "alice@example.com",
+		tier: "developer",
+		status: "active",
+	},
+	{
+		username: "bob",
+		name: "Bob Nguyen",
+		email: "bob@example.com",
+		tier: "user",
+		status: "active",
+	},
+	{
+		username: "charlie",
+		name: "Charlie Park",
+		email: "charlie@example.com",
+		tier: "user",
+		status: "suspended",
+	},
+	{
+		username: "dana",
+		name: "Dana Williams",
+		email: "dana@example.com",
+		tier: "developer",
+		status: "active",
+	},
+	{
+		username: "eve",
+		name: "Eve Martinez",
+		email: null,
+		tier: "user",
+		status: "active",
+	},
 ];
 
 const userIds: number[] = [];
@@ -85,7 +121,9 @@ for (const u of users) {
 		insertedUsers++;
 	}
 }
-console.log(`${insertedUsers} new users inserted, ${users.length - insertedUsers} existing`);
+console.log(
+	`${insertedUsers} new users inserted, ${users.length - insertedUsers} existing`,
+);
 
 // --- Credentials (fake passkeys) ---
 // Only insert fake creds for newly-created users. Existing users keep their real passkeys.
@@ -128,7 +166,10 @@ if (!existingSession) {
 	console.log("inserted 1 dev session (token: dev-session-tacy)");
 } else {
 	// Refresh expiry on existing session
-	db.query("UPDATE sessions SET expires_at = ? WHERE token = ?").run(now + 86400, sessionToken);
+	db.query("UPDATE sessions SET expires_at = ? WHERE token = ?").run(
+		now + 86400,
+		sessionToken,
+	);
 	console.log("refreshed existing dev session (token: dev-session-tacy)");
 }
 
@@ -355,7 +396,9 @@ let insertedTokens = 0;
 for (const t of tokens) {
 	// Check if this user+client combo already has an active token
 	const existing = db
-		.query("SELECT id FROM tokens WHERE user_id = ? AND client_id = ? AND revoked = 0")
+		.query(
+			"SELECT id FROM tokens WHERE user_id = ? AND client_id = ? AND revoked = 0",
+		)
 		.get(userIds[t.user], t.client) as { id: number } | undefined;
 	if (existing) continue;
 

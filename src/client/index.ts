@@ -1,10 +1,9 @@
 import { startRegistration } from "@simplewebauthn/browser";
 import "./ds";
+import { apiFetch } from "./api";
 import type IButton from "./ds/button";
 import type IToast from "./ds/toast";
 import { escapeHtml } from "./escape";
-import { apiFetch } from "./api";
-
 
 let welcome!: HTMLElement;
 let subtitle!: HTMLElement;
@@ -25,7 +24,6 @@ let addPasskeyNativeBtn!: HTMLButtonElement;
 let dangerZone!: HTMLElement;
 
 let isAdmin = false;
-
 
 function $(id: string): HTMLElement {
 	const el = document.getElementById(id);
@@ -117,8 +115,7 @@ function updateAvatarPreview(photo: string | null, username: string) {
 // Check auth and display user
 async function checkAuth() {
 	try {
-		const response = await apiFetch("/api/hello", {
-		});
+		const response = await apiFetch("/api/hello", {});
 
 		if (response.status === 401 || response.status === 403) {
 			window.location.href = "/login";
@@ -142,8 +139,7 @@ async function checkAuth() {
 
 async function loadProfile() {
 	try {
-		const response = await apiFetch("/api/profile", {
-		});
+		const response = await apiFetch("/api/profile", {});
 
 		if (!response.ok) {
 			throw new Error("Failed to load profile");
@@ -178,8 +174,7 @@ async function loadProfile() {
 
 async function loadRecentApps() {
 	try {
-		const response = await apiFetch("/api/apps", {
-		});
+		const response = await apiFetch("/api/apps", {});
 
 		if (!response.ok) {
 			throw new Error("Failed to load apps");
@@ -282,7 +277,7 @@ async function onDeleteAccount() {
 
 	try {
 		const response = await apiFetch("/api/profile", {
-			method: "DELETE"
+			method: "DELETE",
 		});
 
 		if (!response.ok) {
@@ -304,8 +299,7 @@ async function onDeleteAccount() {
 
 async function loadPasskeys() {
 	try {
-		const response = await apiFetch("/api/passkeys", {
-		});
+		const response = await apiFetch("/api/passkeys", {});
 
 		if (!response.ok) {
 			throw new Error("Failed to load passkeys");
@@ -376,7 +370,7 @@ async function onPasskeyRemove(e: CustomEvent<{ id: string }>) {
 
 	try {
 		const response = await apiFetch(`/api/passkeys/${id}`, {
-			method: "DELETE"
+			method: "DELETE",
 		});
 
 		if (!response.ok) {
@@ -444,7 +438,7 @@ async function onAddPasskey() {
 	try {
 		// Get registration options
 		const optionsRes = await apiFetch("/api/passkeys/add/options", {
-			method: "POST"
+			method: "POST",
 		});
 
 		if (!optionsRes.ok) {

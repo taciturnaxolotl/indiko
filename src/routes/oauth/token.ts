@@ -354,7 +354,9 @@ async function handleDeviceCodeGrant(
 	db.query("DELETE FROM device_codes WHERE id = ?").run(deviceCode.id);
 
 	const user = db
-		.query("SELECT username, name, email, photo, url, status FROM users WHERE id = ?")
+		.query(
+			"SELECT username, name, email, photo, url, status FROM users WHERE id = ?",
+		)
 		.get(deviceCode.user_id) as
 		| {
 				username: string;
@@ -590,7 +592,9 @@ async function handleAuthorizationCodeGrant(
 	}
 
 	const user = db
-		.query("SELECT username, name, email, photo, url, status FROM users WHERE id = ?")
+		.query(
+			"SELECT username, name, email, photo, url, status FROM users WHERE id = ?",
+		)
 		.get(authcode.user_id) as
 		| {
 				username: string;
@@ -788,8 +792,15 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 		// RFC 8707 / 7662: echo the token's audience so a resource server can
 		// confirm the token was minted for it. One resource → a string, several →
 		// an array; omitted entirely when the token is unscoped.
-		const resources = tokenData.resource ? tokenData.resource.split(" ").filter(Boolean) : [];
-		const aud = resources.length === 1 ? resources[0] : resources.length > 1 ? resources : undefined;
+		const resources = tokenData.resource
+			? tokenData.resource.split(" ").filter(Boolean)
+			: [];
+		const aud =
+			resources.length === 1
+				? resources[0]
+				: resources.length > 1
+					? resources
+					: undefined;
 
 		return Response.json({
 			active: true,

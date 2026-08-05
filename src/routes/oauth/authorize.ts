@@ -2,13 +2,13 @@ import crypto from "node:crypto";
 import { db } from "../../db";
 import { ensureApp } from "../../lib/oauth/client-metadata";
 import { consentPage, errorPage, escapeHtml } from "../../lib/oauth/pages";
-import { canonicalizeURL } from "../../lib/oauth/urls";
 import {
-	resourceDisplay,
 	type ResourceInfo,
+	resourceDisplay,
 	resourcesToStored,
 	validateResources,
 } from "../../lib/oauth/resource";
+import { canonicalizeURL } from "../../lib/oauth/urls";
 import { getCsrfToken, getUserFromCookie } from "../../lib/session";
 import { token } from "./token";
 
@@ -288,7 +288,9 @@ async function showConsentScreen(
 
 	// Resolve the requested resources to friendly name + icon (via their PRM) so
 	// the consent screen shows WHAT kloe is being granted access to, not a URL.
-	const resourceInfos: ResourceInfo[] = resources.length ? await resourceDisplay(resources) : [];
+	const resourceInfos: ResourceInfo[] = resources.length
+		? await resourceDisplay(resources)
+		: [];
 
 	return consentPage({
 		username: user.username,
@@ -408,7 +410,9 @@ export async function authorizePost(req: Request): Promise<Response> {
 
 	// Resource indicators carried through the consent form (hidden fields).
 	// Re-validate — the POST body is attacker-controllable.
-	const approvedResources = validateResources(formData.getAll("resource") as string[]);
+	const approvedResources = validateResources(
+		formData.getAll("resource") as string[],
+	);
 	if (approvedResources === null) {
 		return new Response("invalid_target", { status: 400 });
 	}

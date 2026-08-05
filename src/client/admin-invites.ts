@@ -1,6 +1,6 @@
 import "./ds";
-import { escapeHtml } from "./escape";
 import { apiFetch } from "./api";
+import { escapeHtml } from "./escape";
 
 declare global {
 	interface Window {
@@ -20,8 +20,7 @@ const createInviteBtn = document.getElementById(
 // Check auth and display user
 async function checkAuth() {
 	try {
-		const response = await apiFetch("/api/hello", {
-		});
+		const response = await apiFetch("/api/hello", {});
 
 		if (response.status === 401 || response.status === 403) {
 			window.location.href = "/login";
@@ -56,8 +55,7 @@ async function createInvite() {
 
 async function loadAppsForInvite() {
 	try {
-		const response = await apiFetch("/api/admin/clients", {
-		});
+		const response = await apiFetch("/api/admin/clients", {});
 
 		if (!response.ok) {
 			throw new Error("Failed to load apps");
@@ -83,10 +81,13 @@ async function loadAppsForInvite() {
 					name: string;
 					roles: string[];
 				}) => {
-				const roleOptions =
+					const roleOptions =
 						app.roles.length > 0
 							? app.roles
-									.map((role) => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`)
+									.map(
+										(role) =>
+											`<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`,
+									)
 									.join("")
 							: '<option value="" disabled>No roles defined yet</option>';
 
@@ -247,8 +248,7 @@ window.closeCreateInviteModal = closeCreateInviteModal;
 
 async function loadInvites() {
 	try {
-		const response = await apiFetch("/api/invites", {
-		});
+		const response = await apiFetch("/api/invites", {});
 
 		if (!response.ok) {
 			throw new Error("Failed to load invites");
@@ -299,7 +299,7 @@ async function loadInvites() {
 						? `Expires: ${new Date(invite.expiresAt * 1000).toLocaleString()}`
 						: "No expiry";
 
-				const roleInfo =
+					const roleInfo =
 						invite.appRoles.length > 0
 							? `<div class="invite-meta-item">
 							<div class="invite-meta-label">app roles</div>
@@ -448,8 +448,7 @@ let currentEditInviteId: number | null = null;
 // Make editInvite globally available for onclick handler
 window.editInvite = async (inviteId: number) => {
 	try {
-		const response = await apiFetch("/api/invites", {
-		});
+		const response = await apiFetch("/api/invites", {});
 
 		if (!response.ok) {
 			throw new Error("Failed to load invite");
@@ -584,8 +583,7 @@ window.deleteInvite = async (inviteId: number, event?: Event) => {
 		try {
 			const response = await apiFetch(`/api/invites/${inviteId}`, {
 				method: "DELETE",
-				headers: {
-				},
+				headers: {},
 			});
 
 			if (!response.ok) {
