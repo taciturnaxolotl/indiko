@@ -328,11 +328,15 @@ const CONSENT_STYLES = `
 		font-weight: 700;
 	}
 	.scope-list input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.7; }
+	.scope-list label > span { flex: 1; min-width: 0; }
 	.req {
 		font-style: normal;
 		color: var(--paper-dim);
-		font-size: 0.75rem;
-		margin-left: 0.5rem;
+		font-size: 0.6875rem;
+		text-transform: uppercase;
+		letter-spacing: 0.1rem;
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 	.buttons {
 		display: flex;
@@ -428,12 +432,13 @@ export function consentPage(opts: ConsentPageOptions): Response {
 		.map((scope) => {
 			const isProfile = scope === "profile";
 			const description = escapeHtml(SCOPE_DESCRIPTIONS[scope] ?? scope);
-			const required = isProfile ? ' <em class="req">required</em>' : "";
+			const required = isProfile ? '<em class="req">required</em>' : "";
 			return `
           <li>
             <label>
               <input type="checkbox" name="scope" value="${escapeHtml(scope)}" ${isProfile ? "checked disabled" : "checked"} />
-              <span>${description}${required}</span>
+              <span>${description}</span>
+              ${required}
             </label>
           </li>`;
 		})
