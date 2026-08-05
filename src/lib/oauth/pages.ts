@@ -1,5 +1,7 @@
 // Server-rendered HTML pages for the OAuth flow (errors, consent).
 
+import type { ResourceInfo } from "./resource";
+
 export function escapeHtml(value: string): string {
 	return value
 		.replaceAll("&", "&amp;")
@@ -225,13 +227,26 @@ const CONSENT_STYLES = `
 		background: rgba(12, 23, 19, 0.4);
 		border: 1px solid var(--paper-dim);
 	}
-	.scope-title {
+	.scope-title, .resource-title {
 		font-size: 0.75rem;
 		color: var(--paper-dim);
 		text-transform: uppercase;
 		letter-spacing: 0.1rem;
 		margin-bottom: 0.75rem;
 	}
+	.resources { margin-bottom: 1.25rem; }
+	.resource {
+		display: flex; align-items: center; gap: 0.75rem;
+		padding: 0.6rem 0.75rem; border: 1px solid var(--rule, rgba(255,255,255,0.12));
+		border-radius: 0.6rem; margin-bottom: 0.4rem;
+	}
+	.resource-logo {
+		width: 32px; height: 32px; flex: none; display: flex; align-items: center;
+		justify-content: center; font-size: 1.1rem; border-radius: 0.4rem; overflow: hidden;
+	}
+	.resource-logo img { width: 100%; height: 100%; object-fit: cover; }
+	.resource-name { font-weight: 600; font-size: 0.9rem; }
+	.resource-host { font-size: 0.75rem; color: var(--paper-dim); }
 	.scope-list {
 		list-style: none;
 		display: flex;
@@ -340,6 +355,7 @@ export interface ConsentPageOptions {
 	codeChallenge: string;
 	me: string | null;
 	nonce: string | null;
+	resources?: ResourceInfo[];
 	csrfToken: string;
 }
 
@@ -351,6 +367,30 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
 };
 
 export function consentPage(opts: ConsentPageOptions): Response {
+	// RFC 8707: show WHAT the client is being granted access to (name + icon from
+	// the resource's PRM), and carry each resource through the form as a hidden
+	// field so the POST binds the token to the same audience.
+	const resources = opts.resources ?? [];
+	const resourceBlock = resources.length
+		? `<div class="resources">
+        <div class="resource-title">access to</div>
+        ${resources
+					.map(
+						(r) => `<div class="resource">
+          <div class="resource-logo">${r.logo ? `<img src="${escapeHtml(r.logo)}" alt="" />` : "🗄️"}</div>
+          <div class="resource-info">
+            <div class="resource-name">${escapeHtml(r.name)}</div>
+            <div class="resource-host">${escapeHtml(r.host)}</div>
+          </div>
+        </div>`,
+					)
+					.join("")}
+      </div>`
+		: "";
+	const resourceHidden = resources
+		.map((r) => `<input type="hidden" name="resource" value="${escapeHtml(r.id)}" />`)
+		.join("");
+
 	const scopeItems = opts.scopes
 		.map((scope) => {
 			const isProfile = scope === "profile";
@@ -382,12 +422,14 @@ export function consentPage(opts: ConsentPageOptions): Response {
     ${opts.me ? `<div class="me-identity">requesting identity <code>${escapeHtml(opts.me)}</code></div>` : ""}
 
     <form method="POST" action="/auth/authorize">
+      ${resourceBlock}
       <div class="scopes">
         <div class="scope-title">requested permissions</div>
         <ul class="scope-list">${scopeItems}
         </ul>
       </div>
 
+      ${resourceHidden}
       <input type="hidden" name="csrf_token" value="${escapeHtml(opts.csrfToken)}" />
       <input type="hidden" name="client_id" value="${escapeHtml(opts.clientId)}" />
       <input type="hidden" name="redirect_uri" value="${escapeHtml(opts.redirectUri)}" />

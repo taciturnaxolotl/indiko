@@ -3,6 +3,12 @@ import { db } from "../../db";
 import { ensureApp } from "../../lib/oauth/client-metadata";
 import { consentPage, errorPage, escapeHtml } from "../../lib/oauth/pages";
 import { canonicalizeURL } from "../../lib/oauth/urls";
+import {
+	resourceDisplay,
+	type ResourceInfo,
+	resourcesToStored,
+	validateResources,
+} from "../../lib/oauth/resource";
 import { getCsrfToken, getUserFromCookie } from "../../lib/session";
 import { token } from "./token";
 
@@ -22,6 +28,18 @@ export async function authorizeGet(req: Request): Promise<Response> {
 	const scope = params.get("scope") || "profile";
 	const me = params.get("me");
 	const nonce = params.get("nonce"); // OIDC nonce parameter
+
+	// RFC 8707 resource indicators (may repeat). A malformed one is invalid_target.
+	const requestedResources = validateResources(params.getAll("resource"));
+	if (requestedResources === null) {
+		return errorPage({
+			title: "Invalid Resource",
+			message:
+				"The authorization request included a resource parameter that is not an absolute URI (or carries a fragment).",
+			hint: "Each resource must be an absolute https URI with no fragment, e.g. https://api.example.com.",
+		});
+	}
+	const resourceStored = resourcesToStored(requestedResources);
 
 	// Step 1: client_id and redirect_uri must exist (can't redirect without them)
 	if (!rawClientId || !rawRedirectUri) {
@@ -186,7 +204,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 			const expiresAt = now + AUTH_CODE_TTL;
 
 			db.query(
-				"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me, nonce, auth_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me, nonce, auth_time, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			).run(
 				code,
 				user.userId,
@@ -198,6 +216,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 				me,
 				nonce,
 				now, // auth_time - user already authenticated
+				resourceStored,
 			);
 
 			db.query(
@@ -224,10 +243,11 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		requestedScopes,
 		me,
 		nonce,
+		requestedResources,
 	);
 }
 
-function showConsentScreen(
+async function showConsentScreen(
 	req: Request,
 	user: { username: string },
 	clientId: string,
@@ -237,7 +257,8 @@ function showConsentScreen(
 	scopes: string[],
 	me: string | null,
 	nonce: string | null,
-): Response {
+	resources: string[],
+): Promise<Response> {
 	const appData = db
 		.query("SELECT name, logo_url, description FROM apps WHERE client_id = ?")
 		.get(clientId) as
@@ -265,6 +286,10 @@ function showConsentScreen(
 		}
 	}
 
+	// Resolve the requested resources to friendly name + icon (via their PRM) so
+	// the consent screen shows WHAT kloe is being granted access to, not a URL.
+	const resourceInfos: ResourceInfo[] = resources.length ? await resourceDisplay(resources) : [];
+
 	return consentPage({
 		username: user.username,
 		appName,
@@ -278,6 +303,7 @@ function showConsentScreen(
 		codeChallenge,
 		me,
 		nonce,
+		resources: resourceInfos,
 		csrfToken: getCsrfToken(req) || "",
 	});
 }
@@ -380,6 +406,14 @@ export async function authorizePost(req: Request): Promise<Response> {
 	// Get the scopes the user actually approved (from checkboxes)
 	const approvedScopes = formData.getAll("scope") as string[];
 
+	// Resource indicators carried through the consent form (hidden fields).
+	// Re-validate — the POST body is attacker-controllable.
+	const approvedResources = validateResources(formData.getAll("resource") as string[]);
+	if (approvedResources === null) {
+		return new Response("invalid_target", { status: 400 });
+	}
+	const resourceStored = resourcesToStored(approvedResources);
+
 	// Profile scope is always required and included via hidden input
 	if (approvedScopes.length === 0 || !approvedScopes.includes("profile")) {
 		return new Response("Invalid scope selection", { status: 400 });
@@ -390,7 +424,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 	const expiresAt = now + AUTH_CODE_TTL;
 
 	db.query(
-		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me, nonce, auth_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me, nonce, auth_time, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		code,
 		user.userId,
@@ -402,6 +436,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 		me,
 		nonce,
 		now, // auth_time
+		resourceStored,
 	);
 
 	// Store or update permission grant

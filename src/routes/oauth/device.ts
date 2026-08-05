@@ -7,6 +7,7 @@ import {
 	oauthError,
 	parseBody,
 } from "../../lib/oauth/errors";
+import { resourcesToStored, validateResources } from "../../lib/oauth/resource";
 import { canonicalizeURL } from "../../lib/oauth/urls";
 
 const DEVICE_CODE_TTL = 600; // 10 minutes
@@ -69,7 +70,14 @@ export async function deviceAuthorization(req: Request): Promise<Response> {
 			);
 		}
 
-		const { client_id: rawClientId, scope } = body;
+		const { client_id: rawClientId, scope, resource: rawResource } = body;
+
+		// RFC 8707 resource indicator (device flow carries it from the start).
+		const resources = validateResources(rawResource ? [rawResource] : []);
+		if (resources === null) {
+			return oauthError(400, "invalid_target", "resource must be an absolute URI without a fragment");
+		}
+		const resourceStored = resourcesToStored(resources);
 
 		if (!rawClientId) {
 			return oauthError(
@@ -99,7 +107,7 @@ export async function deviceAuthorization(req: Request): Promise<Response> {
 		const expiresAt = now + DEVICE_CODE_TTL;
 
 		db.query(
-			"INSERT INTO device_codes (device_code, user_code, client_id, scope, expires_at, interval) VALUES (?, ?, ?, ?, ?, ?)",
+			"INSERT INTO device_codes (device_code, user_code, client_id, scope, expires_at, interval, resource) VALUES (?, ?, ?, ?, ?, ?, ?)",
 		).run(
 			deviceCode,
 			userCode,
@@ -107,6 +115,7 @@ export async function deviceAuthorization(req: Request): Promise<Response> {
 			scope || "profile",
 			expiresAt,
 			POLL_INTERVAL,
+			resourceStored,
 		);
 
 		const origin = process.env.ORIGIN || "http://localhost:3000";

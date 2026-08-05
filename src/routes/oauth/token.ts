@@ -109,7 +109,7 @@ async function handleRefreshTokenGrant(
 
 	const tokenData = db
 		.query(
-			"SELECT id, user_id, client_id, scope, refresh_expires_at, revoked, rotated, family FROM tokens WHERE refresh_token = ?",
+			"SELECT id, user_id, client_id, scope, refresh_expires_at, revoked, rotated, family, resource FROM tokens WHERE refresh_token = ?",
 		)
 		.get(refresh_token) as
 		| {
@@ -121,6 +121,7 @@ async function handleRefreshTokenGrant(
 				revoked: number;
 				rotated: number;
 				family: string | null;
+				resource: string | null;
 		  }
 		| undefined;
 
@@ -193,7 +194,7 @@ async function handleRefreshTokenGrant(
 	}
 
 	db.query(
-		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		newAccessToken,
 		tokenData.user_id,
@@ -203,6 +204,7 @@ async function handleRefreshTokenGrant(
 		newRefreshToken,
 		refreshExpiresAt,
 		family,
+		tokenData.resource, // RFC 8707: a refreshed token keeps its audience
 	);
 
 	const user = db
@@ -269,7 +271,7 @@ async function handleDeviceCodeGrant(
 
 	const deviceCode = db
 		.query(
-			"SELECT id, client_id, scope, expires_at, interval, last_polled_at, status, user_id FROM device_codes WHERE device_code = ?",
+			"SELECT id, client_id, scope, expires_at, interval, last_polled_at, status, user_id, resource FROM device_codes WHERE device_code = ?",
 		)
 		.get(device_code) as
 		| {
@@ -281,6 +283,7 @@ async function handleDeviceCodeGrant(
 				last_polled_at: number | null;
 				status: string;
 				user_id: number | null;
+				resource: string | null;
 		  }
 		| undefined;
 
@@ -383,7 +386,7 @@ async function handleDeviceCodeGrant(
 	const refreshExpiresAt = issueRefresh ? now + REFRESH_TOKEN_TTL : null;
 
 	db.query(
-		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		accessToken,
 		deviceCode.user_id,
@@ -393,6 +396,7 @@ async function handleDeviceCodeGrant(
 		refreshToken,
 		refreshExpiresAt,
 		crypto.randomUUID(),
+		deviceCode.resource,
 	);
 
 	const profile: Record<string, string> = {};
@@ -525,7 +529,7 @@ async function handleAuthorizationCodeGrant(
 
 	const authcode = db
 		.query(
-			"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me, nonce, auth_time FROM authcodes WHERE code = ?",
+			"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me, nonce, auth_time, resource FROM authcodes WHERE code = ?",
 		)
 		.get(code) as
 		| {
@@ -539,6 +543,7 @@ async function handleAuthorizationCodeGrant(
 				me: string | null;
 				nonce: string | null;
 				auth_time: number | null;
+				resource: string | null;
 		  }
 		| undefined;
 
@@ -651,7 +656,7 @@ async function handleAuthorizationCodeGrant(
 	const refreshExpiresAt = issueRefresh ? now + REFRESH_TOKEN_TTL : null;
 
 	db.query(
-		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		accessToken,
 		authcode.user_id,
@@ -661,6 +666,7 @@ async function handleAuthorizationCodeGrant(
 		refreshToken,
 		refreshExpiresAt,
 		crypto.randomUUID(),
+		authcode.resource, // RFC 8707: bind the token to the requested audience
 	);
 
 	const response: Record<string, unknown> = {
@@ -748,7 +754,7 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 
 		const tokenData = db
 			.query(
-				"SELECT t.user_id, t.client_id, t.scope, t.expires_at, t.revoked, t.created_at, u.username FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
+				"SELECT t.user_id, t.client_id, t.scope, t.expires_at, t.revoked, t.created_at, t.resource, u.username FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
 			)
 			.get(tokenValue) as
 			| {
@@ -758,6 +764,7 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 					expires_at: number;
 					revoked: number;
 					created_at: number;
+					resource: string | null;
 					username: string;
 			  }
 			| undefined;
@@ -778,6 +785,12 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 		const origin = process.env.ORIGIN || "http://localhost:3000";
 		const meValue = user?.url || `${origin}/u/${tokenData.username}`;
 
+		// RFC 8707 / 7662: echo the token's audience so a resource server can
+		// confirm the token was minted for it. One resource → a string, several →
+		// an array; omitted entirely when the token is unscoped.
+		const resources = tokenData.resource ? tokenData.resource.split(" ").filter(Boolean) : [];
+		const aud = resources.length === 1 ? resources[0] : resources.length > 1 ? resources : undefined;
+
 		return Response.json({
 			active: true,
 			sub: meValue,
@@ -787,6 +800,7 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 			exp: tokenData.expires_at,
 			iat: tokenData.created_at,
 			username: tokenData.username,
+			...(aud ? { aud } : {}),
 		});
 	} catch (error) {
 		console.error("Token introspection error:", error);
