@@ -234,19 +234,49 @@ const CONSENT_STYLES = `
 		letter-spacing: 0.1rem;
 		margin-bottom: 0.75rem;
 	}
-	.resources { margin-bottom: 1.25rem; }
+	.resources {
+		margin-bottom: 1.75rem;
+		padding: 1.25rem;
+		background: rgba(12, 23, 19, 0.4);
+		border: 1px solid var(--paper-dim);
+	}
 	.resource {
-		display: flex; align-items: center; gap: 0.75rem;
-		padding: 0.6rem 0.75rem; border: 1px solid var(--rule, rgba(255,255,255,0.12));
-		border-radius: 0.6rem; margin-bottom: 0.4rem;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.625rem;
 	}
+	.resource + .resource { margin-top: 0.25rem; }
 	.resource-logo {
-		width: 32px; height: 32px; flex: none; display: flex; align-items: center;
-		justify-content: center; font-size: 1.1rem; border-radius: 0.4rem; overflow: hidden;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 0.5rem;
+		background: rgba(188, 141, 160, 0.2);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		overflow: hidden;
+		font-size: 1rem;
 	}
-	.resource-logo img { width: 100%; height: 100%; object-fit: cover; }
-	.resource-name { font-weight: 600; font-size: 0.9rem; }
-	.resource-host { font-size: 0.75rem; color: var(--paper-dim); }
+	.resource-logo img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+	.resource-info { flex: 1; min-width: 0; }
+	.resource-name {
+		font-size: 0.9375rem;
+		font-weight: 600;
+		color: var(--paper);
+		line-height: 1.2;
+	}
+	.resource-host {
+		font-size: 0.8125rem;
+		color: var(--paper-dim);
+		font-family: monospace;
+		margin-top: 0.25rem;
+	}
 	.scope-list {
 		list-style: none;
 		display: flex;
