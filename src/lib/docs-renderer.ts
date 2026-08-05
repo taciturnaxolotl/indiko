@@ -162,7 +162,7 @@ export function renderDocs(origin: string): {
 	);
 	html = html.replace(
 		/<p>:::button-code<\/p>/,
-		`<pre><code id="buttonCode"></code></pre>\n<button type="button" id="copyButtonCode" class="copy-btn">copy button code</button>`,
+		`<pre><code id="buttonCode"></code></pre>\n<button type="button" id="copyButtonCode" class="btn-brutal copy-btn">copy button code</button>`,
 	);
 
 	return { title: fm.title, subtitle: fm.subtitle, html, toc };

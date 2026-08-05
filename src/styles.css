@@ -126,111 +126,81 @@ textarea {
 	margin-top: 0.25rem;
 }
 
-/* Buttons */
-button {
+/* Buttons
+ *
+ * The flat baseline is the default. The brutalist treatment (offset shadow +
+ * outset ring) paints *outside* the border box, so it can only be opted into
+ * — via <i-button>, or .btn-brutal for markup that can't use the component.
+ * Applying it to bare `button` made every small utility button in the app
+ * overlap its neighbours.
+ *
+ * The baseline is wrapped in :where() so it weighs 0 — every class rule below
+ * (and in the per-page stylesheets) overrides it without needing to out-specify
+ * a :hover:not(:disabled) chain. The :not() keeps it off <i-button>, which
+ * brings its own scoped styling in components.css. */
+:where(button:not(i-button > button)) {
+	padding: 0.5rem 1rem;
+	background: rgba(188, 141, 160, 0.2);
+	color: var(--lavender);
+	border: 2px solid var(--old-rose);
+	border-radius: 0;
+	font-size: 0.875rem;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: "Space Grotesk", sans-serif;
+	transition: background 0.2s;
+}
+
+:where(button:not(i-button > button):hover:not(:disabled)) {
+	background: rgba(188, 141, 160, 0.3);
+}
+
+:where(button:not(i-button > button):disabled) {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.btn-brutal {
 	position: relative;
 	padding: 1rem 2rem;
 	background: var(--berry-crush);
 	color: var(--lavender);
 	border: 4px solid var(--mahogany);
-	border-radius: 0;
 	font-size: 1rem;
 	font-weight: 700;
-	cursor: pointer;
-	font-family: "Space Grotesk", sans-serif;
 	transition: all 0.15s ease;
 	text-transform: uppercase;
 	letter-spacing: 0.1rem;
 	box-shadow: 6px 6px 0 var(--mahogany);
+	/* room for the ring and the shadow, which both sit outside the box */
+	margin: 4px 10px 10px 4px;
 }
 
-button::before {
+.btn-brutal::before {
 	content: "";
 	position: absolute;
-	top: -4px;
-	left: -4px;
-	right: -4px;
-	bottom: -4px;
+	inset: -4px;
 	background: transparent;
 	border: 4px solid var(--rosewood);
 	pointer-events: none;
 	transition: all 0.15s ease;
 }
 
-button:hover:not(:disabled) {
+.btn-brutal:hover:not(:disabled) {
 	transform: translate(3px, 3px);
 	box-shadow: 3px 3px 0 var(--mahogany);
 }
 
-button:hover:not(:disabled)::before {
-	top: -7px;
-	left: -7px;
-	right: -7px;
-	bottom: -7px;
+.btn-brutal:hover:not(:disabled)::before {
+	inset: -7px;
 }
 
-button:active:not(:disabled) {
+.btn-brutal:active:not(:disabled) {
 	transform: translate(6px, 6px);
 	box-shadow: 0 0 0 var(--mahogany);
 }
 
-button:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
-}
-
-.secondary-btn,
-.button-secondary {
-	background: transparent;
-	color: var(--old-rose);
-	box-shadow: 4px 4px 0 var(--mahogany);
-}
-
-.secondary-btn::before,
-.button-secondary::before {
-	border-color: var(--old-rose);
-}
-
-.secondary-btn:hover:not(:disabled),
-.button-secondary:hover:not(:disabled) {
-	background: rgba(188, 141, 160, 0.1);
-}
-
 /* Small action buttons - clean style with subtle backgrounds */
-.btn-edit,
-.btn-delete,
-.btn-copy,
-.btn-disable,
-.revoke-btn {
-	padding: 0.5rem 1rem;
-	font-family: "Space Grotesk", sans-serif;
-	font-size: 0.875rem;
-	font-weight: 600;
-	cursor: pointer;
-	transition: all 0.2s;
-	text-transform: none;
-	letter-spacing: normal;
-	box-shadow: none;
-	position: static;
-	border: 2px solid transparent;
-}
-
-.btn-edit::before,
-.btn-delete::before,
-.btn-copy::before,
-.btn-disable::before,
-.revoke-btn::before {
-	display: none;
-}
-
-.btn-edit:hover:not(:disabled),
-.btn-delete:hover:not(:disabled),
-.btn-copy:hover:not(:disabled),
-.btn-disable:hover:not(:disabled),
-.revoke-btn:hover:not(:disabled) {
-	transform: none;
-}
-
 .btn-edit {
 	background: rgba(188, 141, 160, 0.2);
 	color: var(--lavender);
