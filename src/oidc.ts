@@ -160,6 +160,7 @@ export function getDiscoveryDocument(origin: string) {
 		issuer: origin,
 		authorization_endpoint: `${origin}/auth/authorize`,
 		token_endpoint: `${origin}/auth/token`,
+		revocation_endpoint: `${origin}/auth/token/revoke`,
 		userinfo_endpoint: `${origin}/userinfo`,
 		jwks_uri: `${origin}/jwks`,
 		scopes_supported: ["openid", "profile", "email", "offline_access"],
