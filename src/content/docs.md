@@ -82,7 +82,7 @@ Alternatively, you can publish redirect URIs as HTML `<link>` tags:
 
 You'll need an invite code to create an account. Once registered:
 
-- Set up your passkey (fingerprint, face ID, or security key)
+- Set up your passkey (fingerprint, face ID, or security key), and add more later from your dashboard
 - Complete your profile (name, photo, website)
 - Authorize apps to access your profile
 - Manage app permissions from your dashboard
@@ -106,6 +106,9 @@ Copy this themed button for your app's login page. It matches Indiko's visual st
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/.well-known/oauth-authorization-server` | GET | IndieAuth server metadata (discovery endpoint) |
+| `/.well-known/openid-configuration` | GET | OIDC discovery document |
+| `/.well-known/oauth-client?client_id=…` | GET | Look up a registered client's metadata |
+| `/jwks` | GET | JSON Web Key Set for ID token verification |
 | `/auth/authorize` | GET | Start OAuth authorization flow |
 | `/auth/authorize` | POST | Submit consent/scope approval |
 | `/auth/token` | POST | Exchange code for access token and refresh token |
@@ -145,10 +148,28 @@ The metadata endpoint returns:
   "issuer": "{{origin}}",
   "authorization_endpoint": "{{origin}}/auth/authorize",
   "token_endpoint": "{{origin}}/auth/token",
+  "introspection_endpoint": "{{origin}}/auth/token/introspect",
+  "revocation_endpoint": "{{origin}}/auth/token/revoke",
+  "userinfo_endpoint": "{{origin}}/userinfo",
+  "jwks_uri": "{{origin}}/jwks",
+  "device_authorization_endpoint": "{{origin}}/auth/device",
+  "registration_endpoint": "{{origin}}/oauth/register",
   "code_challenge_methods_supported": ["S256"],
-  "scopes_supported": ["profile", "email"]
+  "scopes_supported": ["profile", "email", "offline_access"],
+  "response_types_supported": ["code"],
+  "grant_types_supported": [
+    "authorization_code",
+    "refresh_token",
+    "urn:ietf:params:oauth:grant-type:device_code"
+  ],
+  "token_endpoint_auth_methods_supported": ["none", "client_secret_post"],
+  "client_id_metadata_document_supported": true,
+  "authorization_response_iss_parameter_supported": true,
+  "service_documentation": "{{origin}}/docs"
 }
 ```
+
+> **OIDC clients:** `/.well-known/openid-configuration` serves the same server under OIDC discovery, including the `openid` scope and ID token signing algorithms.
 
 ### 1. redirect to authorization endpoint
 
@@ -289,6 +310,8 @@ Active token response:
 }
 ```
 
+An `aud` field also appears when the token was bound to a [resource indicator](#resource-indicators-rfc-8707).
+
 Inactive or expired tokens return:
 
 ```json
@@ -345,7 +368,10 @@ Content-Type: application/x-www-form-urlencoded
 
 client_id=https://myapp.example.com
 &scope=profile email
+&resource=https://api.example.com
 ```
+
+The `resource` parameter is optional and takes a single value here. See [resource indicators](#resource-indicators-rfc-8707).
 
 Response:
 
@@ -403,6 +429,66 @@ Success response (same as authorization_code grant):
 > - No PKCE required (the device code itself is high-entropy proof)
 > - User codes use unambiguous characters (no 0/O, 1/l/I confusion)
 > - The `verification_uri_complete` can be shown as a QR code
+
+## rate limits
+
+Indiko rate limits the endpoints an anonymous caller can reach, per client IP. Over the limit you get `429` with an `invalid_request` (or `invalid_client_metadata`) OAuth error body.
+
+| Endpoint | Limit |
+| --- | --- |
+| `/auth/token` | 30 requests / minute |
+| `/auth/device` | 10 requests / minute |
+| `/oauth/register` | 5 registrations / minute |
+| `/device` code entry | 10 failed code lookups / 15 minutes, per signed-in user |
+
+> **Polling devices:** the device flow `interval` (5s) keeps you well inside the token endpoint limit. Honor `slow_down` and you will never see a `429`.
+
+## resource indicators (RFC 8707)
+
+Scopes say *what* a token may do. A **resource indicator** says *where* it may be used. If your app talks to more than one API, ask for a token per API and each one becomes useless if it leaks to the other.
+
+Pass `resource` on the authorization request. It may repeat:
+
+```http
+GET {{origin}}/auth/authorize?response_type=code
+  &client_id=https://myapp.example.com
+  &redirect_uri=https://myapp.example.com/callback
+  &state=random_state_string
+  &code_challenge=base64url_encoded_challenge
+  &code_challenge_method=S256
+  &scope=profile
+  &resource=https://api.example.com
+  &resource=https://files.example.com
+```
+
+Each value must be an absolute `https` (or `http`) URI with **no fragment**. Indiko normalizes it to origin plus path with any trailing slash removed, so `https://api.example.com/` and `https://api.example.com` are the same audience. Duplicates collapse. A malformed value fails the request with `invalid_target`.
+
+The consent screen names the resources it is about to hand out. Indiko fetches each one's [Protected Resource Metadata](https://www.rfc-editor.org/rfc/rfc9728) at `{resource}/.well-known/oauth-protected-resource` and shows the `resource_name` and `logo_uri` it finds there. This is best-effort: a resource with no metadata just shows as its hostname, and the fetch is SSRF-guarded.
+
+The audience rides along the rest of the way:
+
+- **Authorization code** → the token minted from it carries the audience
+- **Refresh** → a refreshed token keeps the audience of the token it replaced. You cannot widen it later.
+- **Device flow** → pass `resource` on the `POST /auth/device` request (single value), and the polled tokens carry it
+
+To check the audience, introspect the token and read `aud`. One resource comes back as a string, several as an array, and a token with no resource indicator omits the field entirely:
+
+```json
+{
+  "active": true,
+  "sub": "{{origin}}/u/username",
+  "client_id": "https://myapp.example.com",
+  "scope": "profile",
+  "aud": "https://api.example.com",
+  "exp": 1735689600
+}
+```
+
+> **For resource servers:** compare `aud` byte-for-byte against your own resource identifier, using the same normalized form the client sent. If `aud` is absent, the token was issued without an audience and is not scoped to you. Reject it or accept it deliberately, but decide.
+
+> **Consent is per-audience:** Indiko remembers which resources a user approved for your app. Asking for a resource they haven't approved shows the consent screen again, even when the scopes are unchanged. Request the audiences you need up front rather than adding them one at a time.
+
+> **Optional by design:** clients that ignore `resource` behave exactly as before. Adding it is a hardening step, not a migration.
 
 ## scopes
 
