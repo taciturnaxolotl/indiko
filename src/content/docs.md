@@ -97,7 +97,7 @@ Copy this themed button for your app's login page. It matches Indiko's visual st
 
 :::button-code
 
-> **Customization:** Replace `YOUR_OAUTH_URL_HERE` with your authorization URL (see [authorization flow](#authorization) below). You can also change the button text or adjust colors to match your app's theme.
+> **Customization:** Replace `YOUR_OAUTH_URL_HERE` with your authorization URL (see [authorization flow](#authorization-flow) below). You can also change the button text or adjust colors to match your app's theme.
 
 ## API endpoints
 
@@ -119,6 +119,7 @@ Copy this themed button for your app's login page. It matches Indiko's visual st
 | `/device` | GET | User verification page (enter code, approve/deny) |
 | `/oauth/register` | POST | Dynamic client registration (RFC 7591) |
 | `/u/:username` | GET | Public user profile (h-card with discovery links) |
+| `/health` | GET | Liveness check; `503` when the database is unreachable |
 
 ### authentication endpoints
 
@@ -149,13 +150,15 @@ The metadata endpoint returns:
   "authorization_endpoint": "{{origin}}/auth/authorize",
   "token_endpoint": "{{origin}}/auth/token",
   "introspection_endpoint": "{{origin}}/auth/token/introspect",
+  "introspection_endpoint_auth_methods_supported": ["none"],
   "revocation_endpoint": "{{origin}}/auth/token/revoke",
+  "revocation_endpoint_auth_methods_supported": ["none"],
   "userinfo_endpoint": "{{origin}}/userinfo",
   "jwks_uri": "{{origin}}/jwks",
   "device_authorization_endpoint": "{{origin}}/auth/device",
   "registration_endpoint": "{{origin}}/oauth/register",
   "code_challenge_methods_supported": ["S256"],
-  "scopes_supported": ["profile", "email", "offline_access"],
+  "scopes_supported": ["openid", "profile", "email", "offline_access"],
   "response_types_supported": ["code"],
   "grant_types_supported": [
     "authorization_code",
@@ -564,7 +567,7 @@ Apps that an admin registers manually get additional features:
 
 ## dynamic client registration (RFC 7591)
 
-Register a confidential client programmatically instead of asking an admin. Returns an opaque `client_id` and `client_secret` for use with the authorization code flow.
+Register a client programmatically instead of asking an admin. Returns an opaque `client_id`, plus a `client_secret` unless you register as a public client.
 
 ```http
 POST {{origin}}/oauth/register
@@ -589,6 +592,28 @@ Content-Type: application/json
 }
 ```
 
+Response `201 Created`:
+
+```json
+{
+  "client_id": "ikc_abc123...",
+  "client_secret": "iks_xyz789...",
+  "client_id_issued_at": 1735686000,
+  "client_secret_expires_at": 0,
+  "redirect_uris": ["https://myapp.example.com/callback"],
+  "client_name": "My App",
+  "logo_uri": "https://myapp.example.com/logo.png",
+  "token_endpoint_auth_method": "client_secret_post",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "issuer": "{{origin}}"
+}
+```
+
+The response reports what Indiko actually registered, which is not always what you asked for. Read `grant_types` back rather than assuming your request was accepted verbatim. A public client's response omits `client_secret` and `client_secret_expires_at`, and a client with no `authorization_code` grant comes back with `"response_types": []`.
+
+> **Store the secret now:** `client_secret` is returned in plaintext **only once**, in this response. It is stored hashed and never shown again. Use it as `client_secret` in the [token exchange](#4-exchange-code-for-token). If you lose it, an admin must regenerate it.
+
 ### confidential or public?
 
 `token_endpoint_auth_method` decides whether you get a `client_secret` at all. It defaults to `client_secret_post`; pass `"none"` to register a public client and no secret is issued.
@@ -608,22 +633,4 @@ Public clients aren't unprotected. The authorization code flow still requires PK
 
 > **Confidential clients and the device flow:** if you did register with a secret, send it on **both** `POST /auth/device` and every token poll. RFC 8628 applies the same client authentication rules as the token endpoint, so a secret that only shows up at one of the two will be rejected at the other.
 
-Response `201 Created`:
-
-```json
-{
-  "client_id": "ikc_abc123...",
-  "client_secret": "iks_xyz789...",
-  "client_id_issued_at": 1735686000,
-  "client_secret_expires_at": 0,
-  "redirect_uris": ["https://myapp.example.com/callback"],
-  "client_name": "My App",
-  "token_endpoint_auth_method": "client_secret_post",
-  "grant_types": ["authorization_code", "refresh_token"],
-  "response_types": ["code"]
-}
-```
-
-> **Store the secret now:** `client_secret` is returned in plaintext **only once**, in this response. It is stored hashed and never shown again. Use it as `client_secret` in the [token exchange](#4-exchange-code-for-token). If you lose it, an admin must regenerate it.
-
-> **When to use DCR vs auto-registration:** DCR gives you a confidential client with a secret (better for server-side apps that can keep one). Auto-registration (using a URL as your `client_id`) is simpler for public clients and needs no secret.
+> **When to use DCR vs auto-registration:** DCR gives you an opaque `client_id` and lets you choose your grants, your auth method, and whether you hold a secret. Auto-registration (using a URL as your `client_id`) is simpler and needs nothing published beyond the metadata at that URL, but it is always a public authorization-code client.
