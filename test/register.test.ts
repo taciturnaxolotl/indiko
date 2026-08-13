@@ -136,6 +136,43 @@ describe("POST /oauth/register (RFC 7591)", () => {
 		expect(json.grant_types).toEqual(["authorization_code", "refresh_token"]);
 	});
 
+	test("a public client registers with no secret at all", async () => {
+		const res = await registerClient(
+			registerReq({
+				client_name: "my-cli",
+				token_endpoint_auth_method: "none",
+				grant_types: ["urn:ietf:params:oauth:grant-type:device_code"],
+			}),
+		);
+		expect(res.status).toBe(201);
+
+		const json = (await res.json()) as {
+			client_id: string;
+			client_secret?: string;
+			client_secret_expires_at?: number;
+			token_endpoint_auth_method: string;
+		};
+		expect(json.client_secret).toBeUndefined();
+		expect(json.client_secret_expires_at).toBeUndefined();
+		expect(json.token_endpoint_auth_method).toBe("none");
+
+		const app = db
+			.query("SELECT client_secret_hash FROM apps WHERE client_id = ?")
+			.get(json.client_id) as { client_secret_hash: string | null };
+		expect(app.client_secret_hash).toBeNull();
+	});
+
+	test("rejects an unsupported token_endpoint_auth_method", async () => {
+		const res = await registerClient(
+			registerReq({
+				redirect_uris: ["https://x.com/cb"],
+				token_endpoint_auth_method: "client_secret_jwt",
+			}),
+		);
+		expect(res.status).toBe(400);
+		expect((await res.json()).error).toBe("invalid_client_metadata");
+	});
+
 	test("no-store cache header", async () => {
 		const res = await registerClient(
 			registerReq({ redirect_uris: ["https://x.com/cb"] }),

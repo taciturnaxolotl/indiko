@@ -166,9 +166,26 @@ export async function registerClient(req: Request): Promise<Response> {
 		typeof body.client_name === "string" ? body.client_name : null;
 	const logoUri = typeof body.logo_uri === "string" ? body.logo_uri : null;
 
+	// RFC 7591 §2 / RFC 6749 §2.1: a client that cannot keep a secret should say
+	// so and register as public. A CLI shipping one secret in its binary is
+	// public no matter what it claims, and a decorative password is worse than
+	// none — it invites everyone to treat the client as authenticated.
+	const authMethod =
+		body.token_endpoint_auth_method === undefined
+			? "client_secret_post"
+			: body.token_endpoint_auth_method;
+	if (authMethod !== "client_secret_post" && authMethod !== "none") {
+		return oauthError(
+			400,
+			"invalid_client_metadata",
+			"token_endpoint_auth_method must be client_secret_post or none",
+		);
+	}
+	const isConfidential = authMethod === "client_secret_post";
+
 	const clientId = generateClientId();
-	const clientSecret = generateClientSecret();
-	const clientSecretHash = hashSecret(clientSecret);
+	const clientSecret = isConfidential ? generateClientSecret() : null;
+	const clientSecretHash = clientSecret ? hashSecret(clientSecret) : null;
 	const now = Math.floor(Date.now() / 1000);
 
 	db.query(
@@ -191,13 +208,15 @@ export async function registerClient(req: Request): Promise<Response> {
 	return Response.json(
 		{
 			client_id: clientId,
-			client_secret: clientSecret,
+			client_secret: clientSecret ?? undefined,
 			client_id_issued_at: now,
-			client_secret_expires_at: 0, // never expires
+			// RFC 7591 §3.2.1: client_secret_expires_at only applies when a secret
+			// was issued.
+			client_secret_expires_at: clientSecret ? 0 : undefined, // 0 = never
 			redirect_uris: redirectUris,
 			client_name: clientName ?? undefined,
 			logo_uri: logoUri ?? undefined,
-			token_endpoint_auth_method: "client_secret_post",
+			token_endpoint_auth_method: authMethod,
 			grant_types: grantTypes,
 			// RFC 7591 §2: response_types pairs with the authorization_code grant.
 			// A device-only client never gets an authorization response.

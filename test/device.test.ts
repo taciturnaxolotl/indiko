@@ -353,3 +353,37 @@ describe("device flow: confidential client authentication", () => {
 		expect(res.status).toBe(200);
 	});
 });
+
+describe("device flow: public DCR client (token_endpoint_auth_method none)", () => {
+	const PUB_ID = "ikc_publiccli";
+
+	function seedPublicApp() {
+		db.query(
+			"INSERT INTO apps (client_id, redirect_uris, name, is_preregistered, client_secret_hash, grant_types) VALUES (?, ?, ?, 1, NULL, ?)",
+		).run(
+			PUB_ID,
+			JSON.stringify([]),
+			"My CLI",
+			JSON.stringify(["urn:ietf:params:oauth:grant-type:device_code"]),
+		);
+	}
+
+	test("a secretless client is not asked for a secret", async () => {
+		seedPublicApp();
+		const res = await deviceAuthorization(deviceReq({ client_id: PUB_ID }));
+		expect(res.status).toBe(200);
+	});
+
+	test("full device flow works end to end with no credentials", async () => {
+		seedPublicApp();
+		const userId = createUser({ username: "kieran" });
+		const dc = (await (
+			await deviceAuthorization(deviceReq({ client_id: PUB_ID }))
+		).json()) as { device_code: string; user_code: string };
+		approveDeviceCode(dc.user_code, userId);
+
+		const res = await pollToken(dc.device_code, PUB_ID);
+		expect(res.status).toBe(200);
+		expect((await res.json()).access_token).toBeTruthy();
+	});
+});

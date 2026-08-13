@@ -584,9 +584,29 @@ Content-Type: application/json
 ```json
 {
   "client_name": "My CLI",
+  "token_endpoint_auth_method": "none",
   "grant_types": ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"]
 }
 ```
+
+### confidential or public?
+
+`token_endpoint_auth_method` decides whether you get a `client_secret` at all. It defaults to `client_secret_post`; pass `"none"` to register a public client and no secret is issued.
+
+Pick by asking where the secret would live:
+
+| Situation | Register as |
+| --- | --- |
+| Server-side app, secret in its own environment | `client_secret_post` |
+| CLI or desktop app that registers **once per install** and stores its own credentials | `client_secret_post` |
+| CLI shipping one shared secret compiled into the binary | `none` |
+| Anything a user can extract with `strings` | `none` |
+
+A secret distributed to every user isn't a secret, and registering as confidential with one is worse than registering public: it tells Indiko to treat requests as authenticated when they aren't. Per-install dynamic registration is the way to have real credentials in a CLI, since each copy gets its own.
+
+Public clients aren't unprotected. The authorization code flow still requires PKCE from everyone, and the device flow's `device_code` is high-entropy proof of possession on its own.
+
+> **Confidential clients and the device flow:** if you did register with a secret, send it on **both** `POST /auth/device` and every token poll. RFC 8628 applies the same client authentication rules as the token endpoint, so a secret that only shows up at one of the two will be rejected at the other.
 
 Response `201 Created`:
 

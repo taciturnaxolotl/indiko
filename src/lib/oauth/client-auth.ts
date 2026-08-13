@@ -43,18 +43,22 @@ export function verifyClientCredentials(
 	}
 
 	if (app?.is_preregistered !== 1) {
-		return null; // public client, nothing to check
+		return null; // auto-registered URL client, nothing to check
+	}
+
+	// Holding a secret hash is what makes a client confidential. A client that
+	// registered with token_endpoint_auth_method "none" — a CLI that cannot keep
+	// a secret, say — has none to verify and authenticates by other means: PKCE
+	// on the auth-code grant, the device_code itself on the device grant.
+	if (!app.client_secret_hash) {
+		return null;
 	}
 
 	if (!client_secret) {
 		return unauthorizedResponse(
 			"invalid_client",
-			"client_secret is required for pre-registered clients",
+			"client_secret is required for this client",
 		);
-	}
-
-	if (!app.client_secret_hash) {
-		return oauthError(500, "server_error", "Client secret not configured");
 	}
 
 	if (!verifySecret(client_secret, app.client_secret_hash)) {
