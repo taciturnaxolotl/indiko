@@ -6,6 +6,7 @@ import {
 	type ResourceInfo,
 	resourceDisplay,
 	resourcesToStored,
+	storedToResources,
 	validateResources,
 } from "../../lib/oauth/resource";
 import { canonicalizeURL } from "../../lib/oauth/urls";
@@ -186,19 +187,30 @@ export async function authorizeGet(req: Request): Promise<Response> {
 
 	// Check if user has previously granted permission to this app
 	const permission = db
-		.query("SELECT scopes FROM permissions WHERE user_id = ? AND client_id = ?")
-		.get(user.userId, clientId) as { scopes: string } | undefined;
+		.query(
+			"SELECT scopes, resources FROM permissions WHERE user_id = ? AND client_id = ?",
+		)
+		.get(user.userId, clientId) as
+		| { scopes: string; resources: string | null }
+		| undefined;
 
 	const requestedScopes = scope.split(" ").filter(Boolean);
 
-	// Auto-approve when existing permission covers all requested scopes
+	// Auto-approve only when the existing grant covers both the requested scopes
+	// and the requested audiences. A new resource is an escalation the user has
+	// not seen, so it re-prompts even though the scopes are unchanged.
 	if (permission) {
 		const grantedScopes = JSON.parse(permission.scopes) as string[];
 		const hasAllScopes = requestedScopes.every((s) =>
 			grantedScopes.includes(s),
 		);
 
-		if (hasAllScopes) {
+		const grantedResources = storedToResources(permission.resources);
+		const hasAllResources = requestedResources.every((r) =>
+			grantedResources.includes(r),
+		);
+
+		if (hasAllScopes && hasAllResources) {
 			const code = crypto.randomBytes(32).toString("base64url");
 			const now = Math.floor(Date.now() / 1000);
 			const expiresAt = now + AUTH_CODE_TTL;
@@ -445,14 +457,26 @@ export async function authorizePost(req: Request): Promise<Response> {
 
 	// Store or update permission grant
 	const existing = db
-		.query("SELECT id FROM permissions WHERE user_id = ? AND client_id = ?")
-		.get(user.userId, clientId);
+		.query(
+			"SELECT resources FROM permissions WHERE user_id = ? AND client_id = ?",
+		)
+		.get(user.userId, clientId) as { resources: string | null } | undefined;
 
 	if (existing) {
+		// Union the newly approved audiences with the ones already granted, so
+		// approving a second resource doesn't silently drop the first.
+		const merged = resourcesToStored([
+			...new Set([
+				...storedToResources(existing.resources),
+				...approvedResources,
+			]),
+		]);
+
 		db.query(
-			"UPDATE permissions SET scopes = ?, last_used = ? WHERE user_id = ? AND client_id = ?",
+			"UPDATE permissions SET scopes = ?, resources = ?, last_used = ? WHERE user_id = ? AND client_id = ?",
 		).run(
 			JSON.stringify(approvedScopes),
+			merged,
 			Math.floor(Date.now() / 1000),
 			user.userId,
 			clientId,
@@ -463,11 +487,12 @@ export async function authorizePost(req: Request): Promise<Response> {
 			.get(clientId) as { default_role: string | null } | undefined;
 
 		db.query(
-			"INSERT INTO permissions (user_id, client_id, scopes, role) VALUES (?, ?, ?, ?)",
+			"INSERT INTO permissions (user_id, client_id, scopes, resources, role) VALUES (?, ?, ?, ?, ?)",
 		).run(
 			user.userId,
 			clientId,
 			JSON.stringify(approvedScopes),
+			resourceStored,
 			app?.default_role || null,
 		);
 	}

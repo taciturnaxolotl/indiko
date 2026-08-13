@@ -134,3 +134,81 @@ describe("authorize: iss on error responses (RFC 9207)", () => {
 		expect(url.searchParams.get("iss")).toBe(ORIGIN);
 	});
 });
+
+describe("authorize: auto-approval and resource indicators (RFC 8707)", () => {
+	function grant(userId: number, scopes: string[], resources: string | null) {
+		db.query(
+			"INSERT INTO permissions (user_id, client_id, scopes, resources) VALUES (?, ?, ?, ?)",
+		).run(userId, CLIENT_ID, JSON.stringify(scopes), resources);
+	}
+
+	async function authorize(cookie: string, params: Record<string, string>) {
+		return authorizeGet(
+			new Request(authorizeUrl(validParams(params)), {
+				headers: { Cookie: `indiko_session=${cookie}` },
+			}),
+		);
+	}
+
+	test("a resource the user never approved re-prompts instead of auto-approving", async () => {
+		seedApp();
+		const userId = createUser({ username: "kieran" });
+		const cookie = createSession(userId);
+		grant(userId, ["profile"], null);
+
+		const res = await authorize(cookie, {
+			resource: "https://api.example.com",
+		});
+
+		// Consent screen, not a redirect with a code
+		expect(res.status).toBe(200);
+		expect(await res.text()).toContain("api.example.com");
+	});
+
+	test("an already-approved resource still auto-approves", async () => {
+		seedApp();
+		const userId = createUser({ username: "kieran" });
+		const cookie = createSession(userId);
+		grant(userId, ["profile"], "https://api.example.com");
+
+		const res = await authorize(cookie, {
+			resource: "https://api.example.com/",
+		});
+
+		expect(res.status).toBe(302);
+		const url = new URL(res.headers.get("Location") ?? "");
+		expect(url.searchParams.get("code")).toBeTruthy();
+	});
+
+	test("consent records the approved resource so the next request is silent", async () => {
+		seedApp();
+		const userId = createUser({ username: "kieran" });
+		const cookie = createSession(userId);
+
+		const consent = await authorizePost(
+			consentPost(
+				{
+					client_id: CLIENT_ID,
+					redirect_uri: REDIRECT_URI,
+					state: "test-state",
+					code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+					scope: "profile",
+					resource: "https://api.example.com",
+					action: "approve",
+				},
+				cookie,
+			),
+		);
+		expect(consent.status).toBe(302);
+
+		const stored = db
+			.query("SELECT resources FROM permissions WHERE user_id = ?")
+			.get(userId) as { resources: string | null };
+		expect(stored.resources).toBe("https://api.example.com");
+
+		const res = await authorize(cookie, {
+			resource: "https://api.example.com",
+		});
+		expect(res.status).toBe(302);
+	});
+});
