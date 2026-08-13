@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { db } from "../../db";
 import { getClientIp } from "../../lib/client-ip";
+import { SUPPORTED_GRANT_TYPES } from "../../lib/oauth/client-auth";
 import { NO_STORE_HEADERS, oauthError } from "../../lib/oauth/errors";
 import { hashSecret } from "../../lib/secrets";
 
@@ -38,7 +39,13 @@ interface RegisterBody {
 	logo_uri?: unknown;
 	client_uri?: unknown;
 	token_endpoint_auth_method?: unknown;
+	grant_types?: unknown;
 }
+
+// RFC 7591 §2 defaults grant_types to ["authorization_code"]. We add
+// refresh_token so a client that omits the field keeps the behaviour it had
+// before the field was read at all.
+const DEFAULT_GRANT_TYPES = ["authorization_code", "refresh_token"];
 
 function asStringArray(value: unknown): string[] | null {
 	if (!Array.isArray(value)) return null;
@@ -88,12 +95,52 @@ export async function registerClient(req: Request): Promise<Response> {
 		return oauthError(400, "invalid_client_metadata", "Body must be JSON");
 	}
 
-	const redirectUris = asStringArray(body.redirect_uris);
-	if (!redirectUris || redirectUris.length === 0) {
+	let grantTypes = DEFAULT_GRANT_TYPES;
+	if (body.grant_types !== undefined) {
+		const requested = asStringArray(body.grant_types);
+		if (!requested || requested.length === 0) {
+			return oauthError(
+				400,
+				"invalid_client_metadata",
+				"grant_types must be a non-empty array of strings",
+			);
+		}
+		const unsupported = requested.filter(
+			(g) => !SUPPORTED_GRANT_TYPES.includes(g as never),
+		);
+		if (unsupported.length > 0) {
+			return oauthError(
+				400,
+				"invalid_client_metadata",
+				`Unsupported grant_types: ${unsupported.join(", ")}`,
+			);
+		}
+		grantTypes = requested;
+	}
+
+	// RFC 7591 §2: redirect_uris is required for clients using redirect-based
+	// flows. A device-only client has nothing honest to put there, so don't make
+	// it invent a placeholder.
+	const redirectsRequired = grantTypes.includes("authorization_code");
+
+	// A present-but-malformed redirect_uris is still an error, even when the
+	// grant types make it optional. Absent is the only way to skip it.
+	const parsedRedirects =
+		body.redirect_uris === undefined ? [] : asStringArray(body.redirect_uris);
+	if (!parsedRedirects) {
 		return oauthError(
 			400,
 			"invalid_redirect_uri",
-			"redirect_uris must be a non-empty array of URIs",
+			"redirect_uris must be an array of URI strings",
+		);
+	}
+	const redirectUris = parsedRedirects;
+
+	if (redirectsRequired && redirectUris.length === 0) {
+		return oauthError(
+			400,
+			"invalid_redirect_uri",
+			"redirect_uris must be a non-empty array of URIs for the authorization_code grant",
 		);
 	}
 
@@ -125,13 +172,14 @@ export async function registerClient(req: Request): Promise<Response> {
 	const now = Math.floor(Date.now() / 1000);
 
 	db.query(
-		"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, client_secret_hash, first_seen, last_used) VALUES (?, ?, ?, ?, 1, ?, ?, ?)",
+		"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, client_secret_hash, grant_types, first_seen, last_used) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)",
 	).run(
 		clientId,
 		JSON.stringify(redirectUris),
 		clientName,
 		logoUri,
 		clientSecretHash,
+		JSON.stringify(grantTypes),
 		now,
 		now,
 	);
@@ -150,8 +198,10 @@ export async function registerClient(req: Request): Promise<Response> {
 			client_name: clientName ?? undefined,
 			logo_uri: logoUri ?? undefined,
 			token_endpoint_auth_method: "client_secret_post",
-			grant_types: ["authorization_code", "refresh_token"],
-			response_types: ["code"],
+			grant_types: grantTypes,
+			// RFC 7591 §2: response_types pairs with the authorization_code grant.
+			// A device-only client never gets an authorization response.
+			response_types: redirectsRequired ? ["code"] : [],
 			issuer: origin,
 		},
 		{ status: 201, headers: NO_STORE_HEADERS },

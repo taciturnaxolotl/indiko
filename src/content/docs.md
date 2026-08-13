@@ -427,6 +427,7 @@ Success response (same as authorization_code grant):
 > - Codes expire after 10 minutes
 > - The device code is single-use — deleted after successful token exchange
 > - No PKCE required (the device code itself is high-entropy proof)
+> - Confidential clients (anything with a `client_secret`) must send it on **both** `/auth/device` and the token poll
 > - User codes use unambiguous characters (no 0/O, 1/l/I confusion)
 > - The `verification_uri_complete` can be shown as a QR code
 
@@ -573,6 +574,17 @@ Content-Type: application/json
   "redirect_uris": ["https://myapp.example.com/callback"],
   "client_name": "My App",
   "logo_uri": "https://myapp.example.com/logo.png"
+}
+```
+
+`grant_types` is optional and defaults to `["authorization_code", "refresh_token"]`. Supported values are `authorization_code`, `refresh_token`, and `urn:ietf:params:oauth:grant-type:device_code`. Indiko stores what you register and refuses any other grant at the token endpoint, so ask for what you'll actually use.
+
+`redirect_uris` is required only when you register `authorization_code`. A device-only client has nowhere to redirect, so it can leave the field out entirely rather than inventing a placeholder:
+
+```json
+{
+  "client_name": "My CLI",
+  "grant_types": ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"]
 }
 ```
 

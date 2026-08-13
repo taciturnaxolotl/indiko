@@ -1,6 +1,11 @@
 import crypto from "node:crypto";
 import { db } from "../../db";
 import { getClientIp } from "../../lib/client-ip";
+import {
+	DEVICE_GRANT_TYPE,
+	verifyClientCredentials,
+	verifyGrantAllowed,
+} from "../../lib/oauth/client-auth";
 import { ensureApp } from "../../lib/oauth/client-metadata";
 import {
 	NO_STORE_HEADERS,
@@ -97,6 +102,17 @@ export async function deviceAuthorization(req: Request): Promise<Response> {
 		} catch {
 			return oauthError(400, "invalid_request", "Invalid client_id URL format");
 		}
+
+		// RFC 8628 §3.1: the device authorization request carries the same client
+		// authentication requirements as the token endpoint.
+		const credentialError = verifyClientCredentials(
+			clientId,
+			body.client_secret,
+		);
+		if (credentialError) return credentialError;
+
+		const grantError = verifyGrantAllowed(clientId, DEVICE_GRANT_TYPE);
+		if (grantError) return grantError;
 
 		// Auto-register the client if not already known (same as authorization flow).
 		// Device flow has no redirect_uri, so pass a same-origin placeholder.

@@ -75,6 +75,67 @@ describe("POST /oauth/register (RFC 7591)", () => {
 		expect(res.status).toBe(400);
 	});
 
+	test("a device-only client registers with no redirect_uris at all", async () => {
+		const res = await registerClient(
+			registerReq({
+				client_name: "lard",
+				grant_types: [
+					"urn:ietf:params:oauth:grant-type:device_code",
+					"refresh_token",
+				],
+			}),
+		);
+		expect(res.status).toBe(201);
+
+		const json = (await res.json()) as {
+			client_id: string;
+			grant_types: string[];
+			response_types: string[];
+			redirect_uris: string[];
+		};
+		// The response echoes what was registered, not a hardcoded guess
+		expect(json.grant_types).toEqual([
+			"urn:ietf:params:oauth:grant-type:device_code",
+			"refresh_token",
+		]);
+		expect(json.response_types).toEqual([]);
+		expect(json.redirect_uris).toEqual([]);
+
+		const app = db
+			.query("SELECT grant_types FROM apps WHERE client_id = ?")
+			.get(json.client_id) as { grant_types: string };
+		expect(JSON.parse(app.grant_types)).toContain(
+			"urn:ietf:params:oauth:grant-type:device_code",
+		);
+	});
+
+	test("still requires redirect_uris when authorization_code is registered", async () => {
+		const res = await registerClient(
+			registerReq({ grant_types: ["authorization_code"] }),
+		);
+		expect(res.status).toBe(400);
+		expect((await res.json()).error).toBe("invalid_redirect_uri");
+	});
+
+	test("rejects an unsupported grant type", async () => {
+		const res = await registerClient(
+			registerReq({
+				redirect_uris: ["https://x.com/cb"],
+				grant_types: ["password"],
+			}),
+		);
+		expect(res.status).toBe(400);
+		expect((await res.json()).error).toBe("invalid_client_metadata");
+	});
+
+	test("omitting grant_types keeps the previous default", async () => {
+		const res = await registerClient(
+			registerReq({ redirect_uris: ["https://x.com/cb"] }),
+		);
+		const json = (await res.json()) as { grant_types: string[] };
+		expect(json.grant_types).toEqual(["authorization_code", "refresh_token"]);
+	});
+
 	test("no-store cache header", async () => {
 		const res = await registerClient(
 			registerReq({ redirect_uris: ["https://x.com/cb"] }),

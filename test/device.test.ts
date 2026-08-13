@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { hashSecret } from "../src/lib/secrets";
 import { deviceAuthorization } from "../src/routes/oauth/device";
 import { token } from "../src/routes/oauth/token";
 import { createUser, db } from "./helpers/db";
@@ -270,5 +271,85 @@ describe("token endpoint: device_code grant", () => {
 			.query("SELECT interval FROM device_codes WHERE device_code = ?")
 			.get(dc.device_code) as { interval: number };
 		expect(row.interval).toBe(10); // 5 + 5 penalty
+	});
+});
+
+describe("device flow: confidential client authentication", () => {
+	const CONF_ID = "ikc_confidential";
+	const SECRET = "iks_topsecret";
+
+	function seedConfidentialApp(
+		grantTypes: string[] = [
+			"urn:ietf:params:oauth:grant-type:device_code",
+			"refresh_token",
+		],
+	) {
+		db.query(
+			"INSERT INTO apps (client_id, redirect_uris, name, is_preregistered, client_secret_hash, grant_types) VALUES (?, ?, ?, 1, ?, ?)",
+		).run(
+			CONF_ID,
+			JSON.stringify([]),
+			"Confidential Device Client",
+			hashSecret(SECRET),
+			JSON.stringify(grantTypes),
+		);
+	}
+
+	test("device authorization request without the secret is rejected", async () => {
+		seedConfidentialApp();
+		const res = await deviceAuthorization(deviceReq({ client_id: CONF_ID }));
+		expect(res.status).toBe(401);
+		expect((await res.json()).error).toBe("invalid_client");
+	});
+
+	test("device authorization request with the secret succeeds", async () => {
+		seedConfidentialApp();
+		const res = await deviceAuthorization(
+			deviceReq({ client_id: CONF_ID, client_secret: SECRET }),
+		);
+		expect(res.status).toBe(200);
+	});
+
+	test("knowing the client_id is not enough to poll out a token", async () => {
+		seedConfidentialApp();
+		const userId = createUser({ username: "kieran" });
+		const dc = (await (
+			await deviceAuthorization(
+				deviceReq({ client_id: CONF_ID, client_secret: SECRET }),
+			)
+		).json()) as { device_code: string; user_code: string };
+		approveDeviceCode(dc.user_code, userId);
+
+		// The attacker has the device_code and client_id but no secret
+		const res = await token(
+			tokenReq({
+				grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+				device_code: dc.device_code,
+				client_id: CONF_ID,
+			}),
+		);
+		expect(res.status).toBe(401);
+		expect((await res.json()).error).toBe("invalid_client");
+	});
+
+	test("a device-only client cannot use the authorization_code grant", async () => {
+		seedConfidentialApp();
+		const res = await token(
+			tokenReq({
+				grant_type: "authorization_code",
+				code: "whatever",
+				client_id: CONF_ID,
+				client_secret: SECRET,
+				code_verifier: "a".repeat(43),
+			}),
+		);
+		expect(res.status).toBe(400);
+		expect((await res.json()).error).toBe("unauthorized_client");
+	});
+
+	test("public clients still need no secret", async () => {
+		seedApp();
+		const res = await deviceAuthorization(deviceReq({ client_id: CLIENT_ID }));
+		expect(res.status).toBe(200);
 	});
 });

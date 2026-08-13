@@ -2,13 +2,15 @@ import crypto from "node:crypto";
 import { db } from "../../db";
 import { getClientIp } from "../../lib/client-ip";
 import {
+	verifyClientCredentials,
+	verifyGrantAllowed,
+} from "../../lib/oauth/client-auth";
+import {
 	NO_STORE_HEADERS,
 	oauthError,
 	parseBody,
-	unauthorizedResponse,
 } from "../../lib/oauth/errors";
 import { canonicalizeURL, verifyPKCE } from "../../lib/oauth/urls";
-import { verifySecret } from "../../lib/secrets";
 import { signIDToken } from "../../oidc";
 
 const ACCESS_TOKEN_TTL = 3600; // 1 hour
@@ -71,6 +73,15 @@ export async function token(req: Request): Promise<Response> {
 				"unsupported_grant_type",
 				"Supported grant types: authorization_code, refresh_token, urn:ietf:params:oauth:grant-type:device_code",
 			);
+		}
+
+		// RFC 7591 §2: a client may only use the grants it registered for.
+		if (body.client_id) {
+			const grantError = verifyGrantAllowed(
+				canonicalizeURL(body.client_id),
+				grant_type,
+			);
+			if (grantError) return grantError;
 		}
 
 		if (grant_type === "refresh_token") {
@@ -242,7 +253,7 @@ async function handleRefreshTokenGrant(
 async function handleDeviceCodeGrant(
 	body: Record<string, string>,
 ): Promise<Response> {
-	const { device_code, client_id: rawClientId } = body;
+	const { device_code, client_id: rawClientId, client_secret } = body;
 
 	if (!device_code) {
 		return oauthError(
@@ -301,9 +312,13 @@ async function handleDeviceCodeGrant(
 		return oauthError(400, "invalid_grant", "client_id mismatch");
 	}
 
-	// RFC 8628 is a public-client flow: the device code itself is high-entropy
-	// proof of possession, and the client_id binding above is the security
-	// boundary. No client_secret required, even for pre-registered clients.
+	// For a public client the device_code is itself high-entropy proof of
+	// possession and the client_id binding above is the security boundary. A
+	// client issued a secret is confidential on every grant, though: RFC 8628
+	// §3.4 carries RFC 6749 §3.2.1's authentication requirement to device_code
+	// polling, so knowing the client_id must not be enough to collect its token.
+	const credentialError = verifyClientCredentials(clientId, client_secret);
+	if (credentialError) return credentialError;
 
 	// Rate limiting: enforce minimum poll interval (RFC 8628 §3.5)
 	if (deviceCode.last_polled_at) {
@@ -426,51 +441,6 @@ async function handleDeviceCodeGrant(
 	}
 
 	return Response.json(deviceResponse, { headers: NO_STORE_HEADERS });
-}
-
-// Verify pre-registered client credentials; returns a Response on failure
-function verifyClientCredentials(
-	client_id: string | undefined,
-	client_secret: string | undefined,
-): Response | null {
-	// No client_id means we can't look up the app; treat as public/unknown.
-	if (!client_id) {
-		return null;
-	}
-
-	const app = db
-		.query(
-			"SELECT is_preregistered, client_secret_hash FROM apps WHERE client_id = ?",
-		)
-		.get(client_id) as
-		| { is_preregistered: number; client_secret_hash: string | null }
-		| undefined;
-
-	// client_secret sent for an unknown client
-	if (client_secret && !app) {
-		return oauthError(400, "invalid_client", "Unknown client");
-	}
-
-	if (app?.is_preregistered !== 1) {
-		return null; // public client, nothing to check
-	}
-
-	if (!client_secret) {
-		return unauthorizedResponse(
-			"invalid_client",
-			"client_secret is required for pre-registered clients",
-		);
-	}
-
-	if (!app.client_secret_hash) {
-		return oauthError(500, "server_error", "Client secret not configured");
-	}
-
-	if (!verifySecret(client_secret, app.client_secret_hash)) {
-		return unauthorizedResponse("invalid_client", "Invalid client_secret");
-	}
-
-	return null;
 }
 
 async function handleAuthorizationCodeGrant(
