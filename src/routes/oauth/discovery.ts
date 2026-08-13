@@ -109,7 +109,7 @@ export function indieauthMetadata(): Response {
 		userinfo_endpoint: `${origin}/userinfo`,
 		jwks_uri: `${origin}/jwks`,
 		code_challenge_methods_supported: ["S256"],
-		scopes_supported: ["profile", "email", "offline_access"],
+		scopes_supported: ["openid", "profile", "email", "offline_access"],
 		response_types_supported: ["code"],
 		grant_types_supported: [
 			"authorization_code",
