@@ -48,7 +48,7 @@ export default class INav extends Elena(HTMLElement) {
 					<img src="/logo.svg" alt="indiko" />
 				</a>
 				<div class="links">
-					${this.link("/", "dashboard", "dashboard")}
+					${this.link("/dashboard", "dashboard", "dashboard")}
 					${this.link("/apps", "apps", "apps")}
 					${this.link("/docs", "docs", "docs")}
 					${user?.isAdmin ? this.link("/admin", "admin", "admin") : nothing}

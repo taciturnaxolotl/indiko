@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import hljs from "highlight.js/lib/core";
 import css from "highlight.js/lib/languages/css";
@@ -6,6 +6,7 @@ import http from "highlight.js/lib/languages/http";
 import json from "highlight.js/lib/languages/json";
 import xml from "highlight.js/lib/languages/xml";
 import { Marked, type RendererObject, type Tokens } from "marked";
+import { parseFrontmatter } from "./frontmatter";
 
 hljs.registerLanguage("json", json);
 hljs.registerLanguage("http", http);
@@ -20,20 +21,8 @@ interface Frontmatter {
 	subtitle: string;
 }
 
-function parseFrontmatter(raw: string): { fm: Frontmatter; body: string } {
-	const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-	if (!match) {
-		return { fm: { title: "documentation", subtitle: "" }, body: raw };
-	}
-	const fmText = match[1] ?? "";
-	const body = match[2] ?? raw;
-	const fm: Record<string, string> = {};
-	for (const line of fmText.split("\n")) {
-		const idx = line.indexOf(":");
-		if (idx > 0) {
-			fm[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-		}
-	}
+function docsFrontmatter(raw: string): { fm: Frontmatter; body: string } {
+	const { fm, body } = parseFrontmatter(raw);
 	return {
 		fm: {
 			title: fm.title ?? "documentation",
@@ -88,7 +77,7 @@ export function renderDocs(origin: string): {
 	toc: TocEntry[];
 } {
 	const raw = readFileSync(MD_PATH, "utf8");
-	const { fm, body } = parseFrontmatter(raw);
+	const { fm, body } = docsFrontmatter(raw);
 
 	// Substitute server-known values so examples show the real origin
 	const source = body.replaceAll("{{origin}}", origin);
@@ -170,4 +159,8 @@ export function renderDocs(origin: string): {
 
 export function getRawMarkdown(): string {
 	return readFileSync(MD_PATH, "utf8");
+}
+
+export function docsLastModified(): Date {
+	return statSync(MD_PATH).mtime;
 }

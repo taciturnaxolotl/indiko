@@ -37,6 +37,9 @@ src/
 │       ├── profile.ts     # Public profile page (/u/:username) with h-card
 │       └── invites.ts     # Invite CRUD
 ├── lib/               # Shared server-side utilities
+│   ├── accept.ts      # Accept-header negotiation (acceptmarkdown.com)
+│   ├── content-pages.ts # Markdown-backed public pages + JSON-LD/meta shell
+│   ├── frontmatter.ts # Shared `---` frontmatter parser
 │   ├── session.ts     # Session auth (Bearer token and cookie), SessionUser type
 │   ├── ssrf-safe-fetch.ts  # SSRF-safe fetch wrapper (blocks private IPs, validates redirects)
 │   └── oauth/         # OAuth-specific helpers
@@ -62,6 +65,7 @@ src/
 │   ├── admin-invites.ts  # Admin invite management
 │   ├── apps.ts        # Authorized apps page
 │   ├── docs.ts        # Docs page
+│   ├── site.ts        # Public pages, robots.txt, sitemap.xml, llms.txt, 404
 │   └── oauth-test.ts  # OAuth test client
 ├── html/              # HTML templates (Bun bundles them with script imports)
 │   ├── login.html
@@ -137,6 +141,16 @@ test/                  # Tests (bun:test)
 - Add comments with `--` to explain changes
 - When a table needs schema changes that SQLite can't `ALTER` (e.g., adding constraints), create `table_new`, copy data, drop old, rename (see 004, 005 for examples)
 - Test migrations locally before committing
+
+### Public Site Pages
+
+- `/` is a signpost, not a page: signed-out visitors 302 to `/login`, a valid session cookie 302s to `/dashboard` (the bundled dashboard HTML), and a request asking for markdown 302s to `/docs`. It varies on `Accept, Cookie`
+- `/about`, `/contact`, `/privacy` render from `src/content/*.md` through `src/lib/content-pages.ts`
+- Those pages, plus `/docs`, negotiate on `Accept`: `text/markdown` (or `text/plain`) gets the raw markdown, anything unservable gets a 406, and every response sets `Vary: Accept, Accept-Encoding` (see https://acceptmarkdown.com)
+- Unmatched paths hit the `fetch` fallback in `src/index.ts` → `notFound()`, a real 404 with a markdown body listing where to go next
+- `/robots.txt`, `/sitemap.xml`, and `/llms.txt` are generated from the same page list, so adding a content page updates all three
+- AI-crawler policy is Cloudflare's: its managed block appends `Disallow: /` groups for ChatGPT/Claude/GPTBot/etc. The app's robots.txt names no AI user-agents on purpose, so the two files cannot contradict each other
+- `/about` carries the JSON-LD identity graph (`SoftwareApplication`, `Organization` with contactPoint + address, `WebSite`, `WebPage`); the other content pages carry everything but `SoftwareApplication`. `/og.png` is the shared social image
 
 ### Client-Side Code
 - Extract JavaScript from HTML into separate TypeScript modules in `src/client/`

@@ -221,7 +221,7 @@ export function userProfile(req: Request): Response {
     </div>
 
     <div class="back-link">
-      <a href="/">← back to dashboard</a>
+      <a href="/dashboard">← back to dashboard</a>
     </div>
   </div>
 </body>

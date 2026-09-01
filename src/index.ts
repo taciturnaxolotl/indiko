@@ -64,6 +64,16 @@ import {
 	listPasskeys,
 	renamePasskey,
 } from "./routes/passkeys";
+import {
+	aboutPage,
+	contactPage,
+	homePage,
+	llmsTxt,
+	notFound,
+	privacyPage,
+	robotsTxt,
+	sitemapXml,
+} from "./routes/site";
 
 (() => {
 	const required = ["ORIGIN", "RP_ID"];
@@ -111,7 +121,15 @@ const server = Bun.serve({
 	routes: {
 		"/favicon.svg": Bun.file("./public/favicon.svg"),
 		"/logo.svg": Bun.file("./public/logo.svg"),
-		"/": indexHTML,
+		"/": homePage,
+		"/dashboard": indexHTML,
+		"/about": aboutPage,
+		"/contact": contactPage,
+		"/privacy": privacyPage,
+		"/robots.txt": robotsTxt,
+		"/sitemap.xml": sitemapXml,
+		"/llms.txt": llmsTxt,
+		"/og.png": Bun.file("./public/og.png"),
 		"/health": () => {
 			try {
 				// Verify database is accessible
@@ -133,7 +151,7 @@ const server = Bun.serve({
 		"/admin/clients": adminClientsHTML,
 		"/login": loginHTML,
 		"/docs": docsPage,
-		"/docs.md": docsMarkdown,
+		"/docs.md": () => docsMarkdown(),
 		"/docs.css": Bun.file("./public/docs.css"),
 		"/docs.js": docsJs,
 		"/styles.css": Bun.file("./src/styles.css"),
@@ -344,6 +362,9 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 			return new Response("Method not allowed", { status: 405 });
 		},
 	},
+	// Anything the routes above do not claim gets an agent-readable 404
+	// rather than bun's bare default.
+	fetch: notFound,
 	development: process.env.NODE_ENV === "dev",
 });
 

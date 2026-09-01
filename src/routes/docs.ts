@@ -1,5 +1,11 @@
+import { negotiate } from "../lib/accept";
+import { wrapSections } from "../lib/content-pages";
 import { getRawMarkdown, renderDocs } from "../lib/docs-renderer";
 import { escapeHtml } from "../lib/oauth/pages";
+
+// Order matters: it decides the winner when a client accepts several equally.
+const DOCS_OFFERS = ["text/html", "text/markdown", "text/plain"];
+const DOCS_VARY = "Accept, Accept-Encoding";
 
 // Bundle the docs client once at startup so the server-rendered page can
 // reference a real script URL (the other pages get this via bun's html
@@ -14,23 +20,6 @@ export async function docsJs(): Promise<Response> {
 	return new Response(js, {
 		headers: { "Content-Type": "text/javascript; charset=utf-8" },
 	});
-}
-
-// Wrap each top-level (##) section in a .section div for the card styling.
-function wrapSections(html: string): string {
-	// Split on <h2 ...> boundaries, keeping the h2 with its content
-	const parts = html.split(/(?=<h2 )/);
-	return parts
-		.map((part) => {
-			const trimmed = part.trim();
-			if (!trimmed) return "";
-			if (trimmed.startsWith("<h2")) {
-				return `<section class="section">${trimmed}</section>\n`;
-			}
-			// Content before the first h2 (intro), keep as a section too
-			return `<section class="section">${trimmed}</section>\n`;
-		})
-		.join("");
 }
 
 function testerIsland(): string {
@@ -86,17 +75,23 @@ function testerIsland(): string {
 }
 
 export function docsPage(req: Request): Response {
-	// Content negotiation: a client asking for markdown/plain text gets the
-	// raw source instead of the rendered page.
-	const accept = req.headers.get("Accept") ?? "";
-	const wantsMarkdown =
-		accept.includes("text/markdown") ||
-		accept.includes("text/x-markdown") ||
-		(accept.includes("text/plain") && !accept.includes("text/html"));
-
-	if (wantsMarkdown) {
-		return docsMarkdown();
+	// Content negotiation: a client asking for markdown gets the raw source
+	// instead of the rendered page. See https://acceptmarkdown.com.
+	const chosen = negotiate(req.headers.get("Accept"), DOCS_OFFERS);
+	if (!chosen) {
+		return new Response(
+			`Not Acceptable. This URL is available as ${DOCS_OFFERS.join(", ")}.\n`,
+			{
+				status: 406,
+				headers: {
+					"Content-Type": "text/plain; charset=utf-8",
+					Vary: DOCS_VARY,
+				},
+			},
+		);
 	}
+
+	if (chosen !== "text/html") return docsMarkdown(chosen);
 
 	const origin = process.env.ORIGIN || "http://localhost:3000";
 	const { title, subtitle, html, toc } = renderDocs(origin);
@@ -143,7 +138,18 @@ export function docsPage(req: Request): Response {
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>${escapeHtml(title)} • indiko</title>
 	<meta name="description" content="IndieAuth/OAuth 2.0 server documentation and interactive API testing" />
+	<link rel="canonical" href="${origin}/docs" />
+	<link rel="alternate" type="text/markdown" href="${origin}/docs.md" title="indiko documentation as markdown" />
 	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="indiko" />
+	<meta property="og:url" content="${origin}/docs" />
+	<meta property="og:title" content="${escapeHtml(title)} • indiko" />
+	<meta property="og:description" content="IndieAuth/OAuth 2.0 server documentation and interactive API testing" />
+	<meta property="og:image" content="${origin}/og.png" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:image" content="${origin}/og.png" />
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
@@ -164,7 +170,7 @@ export function docsPage(req: Request): Response {
 		</header>
 		${body}
 		<div class="back-link">
-			<a href="/">← back to dashboard</a>
+			<a href="/dashboard">← back to dashboard</a>
 		</div>
 	</div>
 	<script type="module" src="/docs.js"></script>
@@ -172,12 +178,18 @@ export function docsPage(req: Request): Response {
 </html>`;
 
 	return new Response(page, {
-		headers: { "Content-Type": "text/html; charset=utf-8" },
+		headers: {
+			"Content-Type": "text/html; charset=utf-8",
+			Vary: DOCS_VARY,
+		},
 	});
 }
 
-export function docsMarkdown(): Response {
+export function docsMarkdown(contentType = "text/markdown"): Response {
 	return new Response(getRawMarkdown(), {
-		headers: { "Content-Type": "text/markdown; charset=utf-8" },
+		headers: {
+			"Content-Type": `${contentType}; charset=utf-8`,
+			Vary: DOCS_VARY,
+		},
 	});
 }
