@@ -1,6 +1,11 @@
 import { db } from "../../db";
 import { unauthorizedResponse } from "../../lib/oauth/errors";
-import { getSessionUserFlexible, validateCsrf } from "../../lib/session";
+import {
+	clearCsrfCookieHeader,
+	clearSessionCookieHeader,
+	getSessionUserFlexible,
+	validateCsrf,
+} from "../../lib/session";
 
 // GET /userinfo - Get user profile from access token
 export function userinfo(req: Request): Response {
@@ -129,21 +134,12 @@ export function logout(req: Request): Response {
 		db.query("DELETE FROM sessions WHERE token = ?").run(cookieToken);
 	}
 
-	const isProduction = process.env.NODE_ENV === "production";
-	const secure = isProduction ? "; Secure" : "";
-
 	return Response.json(
 		{ success: true },
 		{
 			headers: [
-				[
-					"Set-Cookie",
-					`indiko_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`,
-				],
-				[
-					"Set-Cookie",
-					`indiko_csrf=; Path=/; SameSite=Lax; Max-Age=0${secure}`,
-				],
+				["Set-Cookie", clearSessionCookieHeader()],
+				["Set-Cookie", clearCsrfCookieHeader()],
 			],
 		},
 	);

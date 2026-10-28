@@ -13,9 +13,45 @@ import {
 import { authenticate } from "ldap-authentication";
 import { db } from "../db";
 import { checkLdapGroupMembership, checkLdapUser } from "../ldap-cleanup";
-import { csrfCookieHeader, generateCsrfToken } from "../lib/session";
+import { getClientIp } from "../lib/client-ip";
+import { RateLimiter, rateLimitedResponse } from "../lib/rate-limit";
+import {
+	csrfCookieHeader,
+	csrfTokenFor,
+	sessionCookieHeader,
+} from "../lib/session";
 
 const RP_NAME = "Indiko";
+
+// --- Rate limits ---
+//
+// WebAuthn option/verify endpoints: generous per-IP budget; each call
+// writes a challenge row and (for LDAP users) may hit the directory.
+const passkeyIpLimiter = new RateLimiter({ max: 60, windowMs: 60_000 });
+// LDAP password verification: strict. Each attempt costs the directory an
+// admin bind + search + user bind and is an online password-guessing
+// surface, so budget per target username as well as per source IP.
+const ldapIpLimiter = new RateLimiter({ max: 20, windowMs: 15 * 60_000 });
+const ldapUserLimiter = new RateLimiter({ max: 5, windowMs: 15 * 60_000 });
+
+/** Per-IP limit shared by the passkey option/verify endpoints. */
+function passkeyRateLimit(req: Request): Response | null {
+	const result = passkeyIpLimiter.hit(getClientIp(req));
+	return result.limited ? rateLimitedResponse(result) : null;
+}
+
+/** Set-Cookie headers for a freshly created session. */
+function sessionCookies(token: string): Array<[string, string]> {
+	return [
+		["Set-Cookie", sessionCookieHeader(token)],
+		["Set-Cookie", csrfCookieHeader(csrfTokenFor(token))],
+	];
+}
+
+/** Case-insensitive username equality (LDAP uid matching is caseIgnore). */
+function sameUsername(a: string | null | undefined, b: string): boolean {
+	return typeof a === "string" && a.toLowerCase() === b.toLowerCase();
+}
 
 // Thrown inside the registration transaction when the invite is exhausted so
 // the whole registration rolls back.
@@ -23,6 +59,16 @@ class InviteExhaustedError extends Error {
 	constructor() {
 		super("Invite code fully used");
 		this.name = "InviteExhaustedError";
+	}
+}
+
+// Thrown inside the registration transaction when the state observed before
+// the WebAuthn `await` (bootstrap mode, existing user, credential count) no
+// longer holds — e.g. a concurrent registration beat us to it.
+class RegistrationStateChangedError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "RegistrationStateChangedError";
 	}
 }
 
@@ -39,6 +85,9 @@ export function canRegister(_req: Request): Response {
 
 export async function registerOptions(req: Request): Promise<Response> {
 	try {
+		const limited = passkeyRateLimit(req);
+		if (limited) return limited;
+
 		const body = await req.json();
 		const { username, inviteCode } = body;
 
@@ -53,13 +102,14 @@ export async function registerOptions(req: Request): Promise<Response> {
 			);
 		}
 
-		// Check if username already exists
+		// Check if username already exists (case-insensitively — LDAP uid
+		// matching ignores case, and we never want two accounts for one person)
 		const existingUser = db
-			.query("SELECT id FROM users WHERE username = ?")
+			.query("SELECT id FROM users WHERE lower(username) = lower(?)")
 			.get(username) as { id: number } | undefined;
 
 		// Allow re-registration if user exists but has no credentials (passkey reset case)
-		let _isPasskeyReset = false;
+		let isPasskeyReset = false;
 		if (existingUser) {
 			const credCount = db
 				.query("SELECT COUNT(*) as count FROM credentials WHERE user_id = ?")
@@ -72,7 +122,7 @@ export async function registerOptions(req: Request): Promise<Response> {
 				);
 			}
 			// User exists but has no credentials - this is a passkey reset
-			_isPasskeyReset = true;
+			isPasskeyReset = true;
 		}
 
 		// Check if this is bootstrap (first user)
@@ -119,11 +169,28 @@ export async function registerOptions(req: Request): Promise<Response> {
 
 			// Will check usage limit atomically during update
 
-			// If invite is locked to an LDAP username, enforce it
-			if (invite.ldap_username && invite.ldap_username !== username) {
+			// If invite is locked to a username, enforce it
+			if (
+				invite.ldap_username &&
+				!sameUsername(invite.ldap_username, username)
+			) {
 				return Response.json(
 					{ error: "Username must match LDAP account" },
 					{ status: 400 },
+				);
+			}
+
+			// A passkey reset re-attaches to an existing account (inheriting its
+			// admin flag, roles and grants), so it must only be possible with an
+			// invite issued specifically for that username — never with a
+			// general-purpose invite someone happens to hold.
+			if (isPasskeyReset && !sameUsername(invite.ldap_username, username)) {
+				return Response.json(
+					{
+						error:
+							"This account exists but has no passkeys. Ask an administrator for a reset link issued for this username.",
+					},
+					{ status: 403 },
 				);
 			}
 
@@ -161,6 +228,9 @@ export async function registerOptions(req: Request): Promise<Response> {
 
 export async function registerVerify(req: Request): Promise<Response> {
 	try {
+		const limited = passkeyRateLimit(req);
+		if (limited) return limited;
+
 		const body = await req.json();
 		const {
 			username,
@@ -174,7 +244,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 			inviteCode?: string;
 		};
 
-		if (!username || !response) {
+		if (!username || typeof username !== "string" || !response) {
 			return Response.json(
 				{ error: "Username and response required" },
 				{ status: 400 },
@@ -188,9 +258,9 @@ export async function registerVerify(req: Request): Promise<Response> {
 			);
 		}
 
-		// Check if username already exists
+		// Check if username already exists (case-insensitively)
 		const existingUser = db
-			.query("SELECT id, is_admin FROM users WHERE username = ?")
+			.query("SELECT id, is_admin FROM users WHERE lower(username) = lower(?)")
 			.get(username) as { id: number; is_admin: number } | undefined;
 
 		// Allow re-registration if user exists but has no credentials (passkey reset case)
@@ -279,11 +349,26 @@ export async function registerVerify(req: Request): Promise<Response> {
 				return Response.json({ error: "Invite code expired" }, { status: 403 });
 			}
 
-			// If invite is locked to an LDAP username, enforce it
-			if (invite.ldap_username && invite.ldap_username !== username) {
+			// If invite is locked to a username, enforce it
+			if (
+				invite.ldap_username &&
+				!sameUsername(invite.ldap_username, username)
+			) {
 				return Response.json(
 					{ error: "Username must match LDAP account" },
 					{ status: 400 },
+				);
+			}
+
+			// Passkey reset requires an invite bound to this exact username
+			// (see registerOptions for the rationale).
+			if (isPasskeyReset && !sameUsername(invite.ldap_username, username)) {
+				return Response.json(
+					{
+						error:
+							"This account exists but has no passkeys. Ask an administrator for a reset link issued for this username.",
+					},
+					{ status: 403 },
 				);
 			}
 
@@ -324,6 +409,52 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 		try {
 			db.transaction(() => {
+				// Re-validate everything we observed before the WebAuthn `await`.
+				// A concurrent registration may have created the first user (so we
+				// are no longer bootstrapping and must not mint a second admin), or
+				// created/attached credentials to the account we were about to
+				// reset. Any drift aborts and rolls back.
+				const currentCount = (
+					db.query("SELECT COUNT(*) as count FROM users").get() as {
+						count: number;
+					}
+				).count;
+				if ((currentCount === 0) !== isBootstrap) {
+					throw new RegistrationStateChangedError(
+						"Registration state changed, please try again",
+					);
+				}
+
+				const currentUser = db
+					.query(
+						"SELECT id, is_admin FROM users WHERE lower(username) = lower(?)",
+					)
+					.get(username) as { id: number; is_admin: number } | undefined;
+
+				if (isPasskeyReset) {
+					if (
+						!currentUser ||
+						!existingUser ||
+						currentUser.id !== existingUser.id
+					) {
+						throw new RegistrationStateChangedError(
+							"Account changed during registration, please try again",
+						);
+					}
+					const credCount = (
+						db
+							.query(
+								"SELECT COUNT(*) as count FROM credentials WHERE user_id = ?",
+							)
+							.get(currentUser.id) as { count: number }
+					).count;
+					if (credCount > 0) {
+						throw new RegistrationStateChangedError("Username already taken");
+					}
+				} else if (currentUser) {
+					throw new RegistrationStateChangedError("Username already taken");
+				}
+
 				// Atomically consume the invite first — before any user rows exist.
 				if (inviteId) {
 					const result = db
@@ -370,7 +501,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 				}
 
 				// Store credential
-				// credential.id is a Uint8Array, convert to Buffer for storage
+				// credential.id is a base64url string; store its UTF-8 bytes
 				db.query(
 					"INSERT INTO credentials (user_id, credential_id, public_key, counter, name) VALUES (?, ?, ?, ?, ?)",
 				).run(
@@ -405,6 +536,9 @@ export async function registerVerify(req: Request): Promise<Response> {
 					{ status: 403 },
 				);
 			}
+			if (err instanceof RegistrationStateChangedError) {
+				return Response.json({ error: err.message }, { status: 409 });
+			}
 			throw err;
 		}
 
@@ -416,24 +550,14 @@ export async function registerVerify(req: Request): Promise<Response> {
 			"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
 		).run(token, userId, expiresAt);
 
-		const isProduction = process.env.NODE_ENV === "production";
-		const secureCookie = isProduction ? "; Secure" : "";
-
+		// The session token travels only in the HttpOnly cookie — it is not
+		// echoed in the body so page JS (and any XSS) never sees it.
 		return Response.json(
 			{
-				token,
 				username,
 				isAdmin: userIsAdmin,
 			},
-			{
-				headers: [
-					[
-						"Set-Cookie",
-						`indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secureCookie}`,
-					],
-					["Set-Cookie", csrfCookieHeader(generateCsrfToken())],
-				],
-			},
+			{ headers: sessionCookies(token) },
 		);
 	} catch (error) {
 		console.error("Registration verify error:", error);
@@ -441,8 +565,64 @@ export async function registerVerify(req: Request): Promise<Response> {
 	}
 }
 
+interface LdapLoginUser {
+	id: number;
+	username: string;
+	provisioned_via_ldap: number;
+	last_ldap_verified_at: number | null;
+}
+
+/**
+ * Per-login LDAP existence check for directory-provisioned accounts, with
+ * `last_ldap_verified_at` caching. Returns false when the user has been
+ * authoritatively removed from the directory — in which case the account is
+ * suspended and `orphaned_since` is stamped so the hourly LDAP job can
+ * restore it automatically if the directory entry reappears.
+ *
+ * Infrastructure errors are fail-open (login proceeds) but do not refresh
+ * the cache, so the check is retried on the next login.
+ */
+async function ldapUserStillPresent(user: LdapLoginUser): Promise<boolean> {
+	if (user.provisioned_via_ldap !== 1) return true;
+
+	const checkInterval =
+		Number.parseInt(process.env.LDAP_CHECK_INTERVAL || "86400", 10) * 1000;
+	const now = Date.now();
+	const shouldCheck =
+		!user.last_ldap_verified_at ||
+		now - user.last_ldap_verified_at * 1000 > checkInterval;
+	if (!shouldCheck) return true;
+
+	const ldapResult = await checkLdapUser(user.username);
+	if (ldapResult === "not_found") {
+		const nowSec = Math.floor(now / 1000);
+		db.query(
+			"UPDATE users SET status = 'suspended', orphaned_since = COALESCE(orphaned_since, ?) WHERE id = ?",
+		).run(nowSec, user.id);
+		db.query("DELETE FROM sessions WHERE user_id = ?").run(user.id);
+		console.warn(
+			`[auth] ${user.username} no longer exists in LDAP — account suspended`,
+		);
+		return false;
+	}
+	if (ldapResult === "error") {
+		console.warn(
+			`[auth] LDAP check failed for ${user.username}, skipping verification`,
+		);
+		return true;
+	}
+	db.query("UPDATE users SET last_ldap_verified_at = ? WHERE id = ?").run(
+		Math.floor(now / 1000),
+		user.id,
+	);
+	return true;
+}
+
 export async function loginOptions(req: Request): Promise<Response> {
 	try {
+		const limited = passkeyRateLimit(req);
+		if (limited) return limited;
+
 		const body = await req.json();
 		const { username, conditional } = body as {
 			username?: string;
@@ -472,11 +652,12 @@ export async function loginOptions(req: Request): Promise<Response> {
 		// Check if user exists and is active
 		const user = db
 			.query(
-				"SELECT id, status, provisioned_via_ldap, last_ldap_verified_at FROM users WHERE username = ?",
+				"SELECT id, username, status, provisioned_via_ldap, last_ldap_verified_at FROM users WHERE username = ?",
 			)
 			.get(username) as
 			| {
 					id: number;
+					username: string;
 					status: string;
 					provisioned_via_ldap: number;
 					last_ldap_verified_at: number | null;
@@ -491,40 +672,12 @@ export async function loginOptions(req: Request): Promise<Response> {
 			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
-		// Check if LDAP-provisioned user still exists in LDAP (with caching)
-		if (user.provisioned_via_ldap === 1) {
-			const checkInterval =
-				Number.parseInt(process.env.LDAP_CHECK_INTERVAL || "86400", 10) * 1000;
-			const now = Date.now();
-			const shouldCheck =
-				!user.last_ldap_verified_at ||
-				now - user.last_ldap_verified_at > checkInterval;
-
-			if (shouldCheck) {
-				const ldapResult = await checkLdapUser(username);
-				if (ldapResult === "not_found") {
-					// User authoritatively no longer exists in LDAP — suspend
-					db.query("UPDATE users SET status = 'suspended' WHERE id = ?").run(
-						user.id,
-					);
-					return Response.json(
-						{ error: "Invalid credentials" },
-						{ status: 401 },
-					);
-				}
-				if (ldapResult === "error") {
-					// LDAP infrastructure error — don't suspend, but also don't
-					// update the verification timestamp so we retry next login
-					console.warn(
-						`[auth] LDAP check failed for ${username}, skipping verification`,
-					);
-				} else {
-					// User exists — update last verification timestamp
-					db.query(
-						"UPDATE users SET last_ldap_verified_at = ? WHERE id = ?",
-					).run(Math.floor(now / 1000), user.id);
-				}
-			}
+		// Early LDAP existence check so a removed directory user gets a clean
+		// rejection before the browser prompts for a passkey. loginVerify
+		// repeats this check (it is cached), so the conditional-UI flow cannot
+		// skip it.
+		if (!(await ldapUserStillPresent(user))) {
+			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
 		// Get user's credentials (just to verify they exist)
@@ -563,6 +716,9 @@ export async function loginOptions(req: Request): Promise<Response> {
 
 export async function loginVerify(req: Request): Promise<Response> {
 	try {
+		const limited = passkeyRateLimit(req);
+		if (limited) return limited;
+
 		const body = await req.json();
 		const {
 			username,
@@ -593,7 +749,7 @@ export async function loginVerify(req: Request): Promise<Response> {
 
 		const credentialWithUser = db
 			.query(
-				"SELECT c.credential_id, c.public_key, c.counter, c.user_id, u.username, u.status FROM credentials c JOIN users u ON c.user_id = u.id WHERE c.credential_id = ?",
+				"SELECT c.credential_id, c.public_key, c.counter, c.user_id, u.username, u.status, u.provisioned_via_ldap, u.last_ldap_verified_at FROM credentials c JOIN users u ON c.user_id = u.id WHERE c.credential_id = ?",
 			)
 			.get(Buffer.from(credentialIdString)) as
 			| {
@@ -603,6 +759,8 @@ export async function loginVerify(req: Request): Promise<Response> {
 					user_id: number;
 					username: string;
 					status: string;
+					provisioned_via_ldap: number;
+					last_ldap_verified_at: number | null;
 			  }
 			| undefined;
 
@@ -617,6 +775,21 @@ export async function loginVerify(req: Request): Promise<Response> {
 
 		// Verify the username matches (skip for conditional UI where browser picks the cred)
 		if (!conditional && credentialWithUser.username !== username) {
+			return Response.json({ error: "Invalid credentials" }, { status: 401 });
+		}
+
+		// LDAP-provisioned accounts must still exist in the directory. This
+		// runs here — after the credential has resolved the user — so it is
+		// enforced for every flow, including conditional UI, which never
+		// passes through the username branch of loginOptions.
+		if (
+			!(await ldapUserStillPresent({
+				id: credentialWithUser.user_id,
+				username: credentialWithUser.username,
+				provisioned_via_ldap: credentialWithUser.provisioned_via_ldap,
+				last_ldap_verified_at: credentialWithUser.last_ldap_verified_at,
+			}))
+		) {
 			return Response.json({ error: "Invalid credentials" }, { status: 401 });
 		}
 
@@ -700,23 +873,10 @@ export async function loginVerify(req: Request): Promise<Response> {
 			"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
 		).run(token, user.id, expiresAt);
 
-		const isProduction = process.env.NODE_ENV === "production";
-		const secureCookie = isProduction ? "; Secure" : "";
-
+		// Session token lives only in the HttpOnly cookie (not echoed in JSON).
 		return Response.json(
-			{
-				token,
-				username: resolvedUsername,
-			},
-			{
-				headers: [
-					[
-						"Set-Cookie",
-						`indiko_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secureCookie}`,
-					],
-					["Set-Cookie", csrfCookieHeader(generateCsrfToken())],
-				],
-			},
+			{ username: resolvedUsername },
+			{ headers: sessionCookies(token) },
 		);
 	} catch (error) {
 		console.error("Login verify error:", error);
@@ -726,6 +886,12 @@ export async function loginVerify(req: Request): Promise<Response> {
 
 export async function ldapVerify(req: Request): Promise<Response> {
 	try {
+		// Per-IP budget first — before parsing the body so junk requests are
+		// cheap to reject.
+		const ip = getClientIp(req);
+		const ipResult = ldapIpLimiter.hit(ip);
+		if (ipResult.limited) return rateLimitedResponse(ipResult);
+
 		const body = await req.json();
 		const { username, password, returnUrl } = body as {
 			username: string;
@@ -743,6 +909,7 @@ export async function ldapVerify(req: Request): Promise<Response> {
 
 		if (
 			!username ||
+			typeof username !== "string" ||
 			username.length > 128 ||
 			!/^[A-Za-z0-9._@-]+$/.test(username)
 		) {
@@ -752,9 +919,20 @@ export async function ldapVerify(req: Request): Promise<Response> {
 			);
 		}
 
-		// Verify user doesn't already exist locally (race condition check)
+		if (typeof password !== "string" || password.length === 0) {
+			return Response.json({ error: "Password required" }, { status: 400 });
+		}
+
+		// Per-target-username budget: throttles online guessing against one
+		// directory account from many IPs and limits lockout-DoS against it.
+		const userResult = ldapUserLimiter.hit(username.toLowerCase());
+		if (userResult.limited) return rateLimitedResponse(userResult);
+
+		// Verify user doesn't already exist locally. Case-insensitive: LDAP
+		// uid matching ignores case, so "Alice" and "alice" are one person and
+		// must not be able to hold two (differently-suspended) local accounts.
 		const existingUser = db
-			.query("SELECT id FROM users WHERE username = ?")
+			.query("SELECT id FROM users WHERE lower(username) = lower(?)")
 			.get(username);
 
 		if (existingUser) {

@@ -7,6 +7,7 @@ import appsHTML from "./html/apps.html";
 import indexHTML from "./html/index.html";
 import loginHTML from "./html/login.html";
 import { getLdapAccounts, updateOrphanedAccounts } from "./ldap-cleanup";
+import { setServer } from "./lib/client-ip";
 import { sweepExpiredRecords } from "./lib/cleanup";
 import { getDiscoveryDocument, getJWKS } from "./oidc";
 import {
@@ -367,6 +368,9 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 	fetch: notFound,
 	development: process.env.NODE_ENV === "dev",
 });
+
+// Let rate limiters read the TCP peer address via server.requestIP().
+setServer(server);
 
 console.log("[Indiko] running on", env.ORIGIN);
 

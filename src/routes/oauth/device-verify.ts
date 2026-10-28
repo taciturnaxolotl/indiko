@@ -4,7 +4,11 @@ import {
 	escapeHtml,
 	FRAME_DENY_HEADERS,
 } from "../../lib/oauth/pages";
-import { getCsrfToken, getUserFromCookie } from "../../lib/session";
+import {
+	csrfTokenMatches,
+	getCsrfToken,
+	getUserFromCookie,
+} from "../../lib/session";
 
 const DEVICE_STYLES = `
 	body { padding: 2rem 1rem; }
@@ -314,10 +318,11 @@ export async function devicePost(req: Request): Promise<Response> {
 		return new Response("Missing parameters", { status: 400 });
 	}
 
-	// Validate CSRF token from form field against cookie
+	// Validate CSRF token from the form field against the token derived from the
+	// session cookie (constant-time compare).
 	const formCsrf = formData.get("csrf_token") as string;
-	const cookieCsrf = getCsrfToken(req);
-	if (!formCsrf || !cookieCsrf || formCsrf !== cookieCsrf) {
+	const expectedCsrf = getCsrfToken(req);
+	if (!csrfTokenMatches(formCsrf, expectedCsrf)) {
 		return new Response("CSRF token mismatch", { status: 403 });
 	}
 

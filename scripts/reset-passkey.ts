@@ -84,36 +84,20 @@ function createResetInvite(
 	const now = Math.floor(Date.now() / 1000);
 	const expiresAt = now + 86400; // 24 hours
 
-	// Check if there's a reset_username column, if not we'll use the note field
-	const hasResetColumn = db
-		.query(
-			"SELECT name FROM pragma_table_info('invites') WHERE name = 'reset_username'",
-		)
-		.get();
-
-	if (hasResetColumn) {
-		db.query(
-			"INSERT INTO invites (code, created_by, max_uses, current_uses, expires_at, note, reset_username) VALUES (?, ?, 1, 0, ?, ?, ?)",
-		).run(
-			code,
-			adminUserId,
-			expiresAt,
-			`Passkey reset for ${targetUsername}`,
-			targetUsername,
-		);
-	} else {
-		// Use a special note format to indicate this is a reset invite
-		// Format: PASSKEY_RESET:username
-		db.query(
-			"INSERT INTO invites (code, created_by, max_uses, current_uses, expires_at, note, message) VALUES (?, ?, 1, 0, ?, ?, ?)",
-		).run(
-			code,
-			adminUserId,
-			expiresAt,
-			`PASSKEY_RESET:${targetUsername}`,
-			`Your passkey has been reset. Please register a new passkey to regain access to your account.`,
-		);
-	}
+	// The invite MUST be bound to the target username via ldap_username:
+	// the server only allows a passkey reset (registration against an
+	// existing credential-less account) when the invite names that exact
+	// account. An unbound invite is refused with 403.
+	db.query(
+		"INSERT INTO invites (code, created_by, max_uses, current_uses, expires_at, note, message, ldap_username) VALUES (?, ?, 1, 0, ?, ?, ?, ?)",
+	).run(
+		code,
+		adminUserId,
+		expiresAt,
+		`PASSKEY_RESET:${targetUsername}`,
+		`Your passkey has been reset. Please register a new passkey to regain access to your account.`,
+		targetUsername,
+	);
 
 	return code;
 }
@@ -235,12 +219,13 @@ Example:
 	const deletedSessions = deleteSessions(user.id);
 	console.log(`   ✅ Invalidated ${deletedSessions} session(s)`);
 
-	// Create reset invite
-	const inviteCode = createResetInvite(admin.id, username);
+	// Create reset invite (bound to the stored username so the server
+	// accepts it as a reset for exactly this account)
+	const inviteCode = createResetInvite(admin.id, user.username);
 	console.log("   ✅ Created reset invite");
 
 	// Generate reset URL
-	const resetUrl = `${ORIGIN}/login?invite=${inviteCode}&username=${encodeURIComponent(username)}`;
+	const resetUrl = `${ORIGIN}/login?invite=${inviteCode}&username=${encodeURIComponent(user.username)}`;
 
 	console.log("\n" + "═".repeat(50));
 	console.log("✨ PASSKEY RESET COMPLETE");
@@ -248,7 +233,7 @@ Example:
 	console.log(`\n📧 Send this link to ${user.name || username}:\n`);
 	console.log(`   ${resetUrl}`);
 	console.log(`\n⏰ This link expires in 24 hours and can only be used once.`);
-	console.log(`\n💡 The user must register with username: ${username}`);
+	console.log(`\n💡 The user must register with username: ${user.username}`);
 }
 
 main().catch((error) => {

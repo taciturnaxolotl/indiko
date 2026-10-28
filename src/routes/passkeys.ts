@@ -40,8 +40,11 @@ export async function addPasskeyOptions(req: Request): Promise<Response> {
 		.query("SELECT credential_id FROM credentials WHERE user_id = ?")
 		.all(user.userId) as Array<{ credential_id: Buffer }>;
 
+	// credential_id is stored as the UTF-8 bytes of the base64url credential
+	// ID string (see addPasskeyVerify / loginVerify), so decode it as text —
+	// re-encoding it as base64url would double-encode and never match.
 	const excludeCredentials = existingCredentials.map((cred) => ({
-		id: Buffer.from(cred.credential_id).toString("base64url"),
+		id: cred.credential_id.toString(),
 		type: "public-key" as const,
 	}));
 

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { csrfTokenFor } from "../src/lib/session";
 import { authorizeGet, authorizePost } from "../src/routes/oauth/authorize";
 import { createSession, createUser, db } from "./helpers/db";
 
@@ -34,7 +35,8 @@ function validParams(overrides: Record<string, string> = {}) {
 }
 
 function consentPost(body: Record<string, string>, cookie: string): Request {
-	const csrfToken = "test-csrf";
+	// CSRF token is derived from the session token server-side.
+	const csrfToken = csrfTokenFor(cookie);
 	return new Request("http://localhost/auth/authorize", {
 		method: "POST",
 		headers: {
