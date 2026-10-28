@@ -368,3 +368,70 @@ Semantics only. Some errors should be 401, 403, or 500.
 - Consider a `Content-Security-Policy` beyond `frame-ancestors` for the consent/error pages (restrict script-src to self).
 - Add a `Referrer-Policy: strict-origin-when-cross-origin` header.
 - Consider requiring `Sec-Fetch-Site: same-origin` on sensitive POSTs (defense in depth alongside SameSite=Lax).
+
+---
+
+# Second Audit — 2026-10-28
+
+Prompted by [issue #4](https://tangled.org/dunkirk.sh/indiko/issues/4) (run the
+[indieauth.rocks](https://indieauth.rocks/server-tests) server suite). Two
+tracks: a static conformance pass over all 89 server tests, and a fresh
+adversarial review of the auth, API, SSRF and DCR surfaces. Code review only;
+the live suite still needs a run against the deployed instance (enter a
+`/u/{username}` profile URL at indieauth.rocks). `test/indieauth-rocks.test.ts`
+mirrors each criterion by test id so regressions show up locally.
+
+## indieauth.rocks conformance gaps found and fixed
+
+| Test | Was | Now |
+| --- | --- | --- |
+| S208-S212 redirect URI policy | Redirect list frozen at first sight of a client; same-origin siblings refused later, published list never refreshed | `isRedirectAllowed`: exact match on a published list, same-origin when nothing is published, metadata re-fetched on a miss (1/min per client) |
+| S213 repeated `redirect_uri` | First value silently used | Error page, no redirect |
+| S219 `..` in `client_id` | `new URL` collapsed it before validation | Raw `client_id` validated first |
+| S220 untrusted `me` | Accepted on consent, exchange failed later with `invalid_grant` | Hint checked against the user's own identities; dropped otherwise; token endpoint always returns the verified `me` |
+| S222 challenge without method | Accepted (treated as S256) | Refused: missing method means `plain` |
+| S206 consent identifies app | Name + hostname only | Full `client_id` shown |
+| S303 code replay | Only `invalid_grant` | Every token in the code's family revoked (`authcodes.family`, migration 015) |
+| S320/S321 scope-less sign-in | `profile` injected, access token issued | `{me, iss}` with no token and no `tokens` row |
+| S331 missing `grant_type` | `unsupported_grant_type` | `invalid_request` |
+| S332 JSON errors | Malformed `client_id` on refresh path threw → 500 | 400 JSON |
+| S333/S334 | Plain-text 405, no preflight | JSON 405 with `Allow`, `OPTIONS` answered |
+| S503 refresh scope | `scope` ignored | Narrowing allowed, widening → `invalid_scope` |
+| S801/S802 introspection | Unauthenticated oracle | Requires a live Bearer token or confidential client credentials; 401 reveals nothing |
+| S902 framing | Login redirect carried no frame headers | `X-Frame-Options`/CSP on the signed-out redirect |
+| S906/CORS | None | `Access-Control-Allow-Origin: *` on token/revoke/userinfo/discovery/JWKS, never credentialed |
+
+## Findings (new), by severity
+
+Status key: **fixed** in this change set, **open** with a note.
+
+### High
+- **H7 fixed** — Revoking an app from the dashboard (or an admin revoking for a user, or deleting a client) left access and refresh tokens valid for up to 30 days. `revokeGrant()` in `src/routes/api.ts` and `deleteClient` now revoke tokens and drop device codes.
+- **H8 fixed** — `/api/ldap-verify` and the WebAuthn option/verify endpoints had no rate limiting: online password guessing against the directory and challenge-table growth. `src/lib/rate-limit.ts`, applied per IP and (for LDAP) per username.
+
+### Medium
+- **M9 fixed** — CSRF token was an unbound double-submit cookie; a sibling subdomain could plant one and forge the `/device` approval form. Token is now `sha256("indiko-csrf:" + session)` and every check recomputes it from the session cookie (`csrfTokenFor`, `csrfTokenMatches`).
+- **M10 fixed** — Device-flow approval recorded no `permissions` row, so the grant was invisible on `/apps` and unrevocable. `recordDeviceGrant()`.
+- **M11 fixed** — A nameless DCR client (`ikc_…`) crashed every admin list/detail endpoint via `new URL(client_id)`. `clientDisplayName()` never throws; DCR `client_name` capped at 256 and `logo_uri` SSRF-validated; `apps.registration` column (migration 016) distinguishes `admin` / `dcr` / `url`.
+- **M12 fixed** — SSRF blocklist missed `100.64.0.0/10` (Tailscale, CGNAT, Alibaba metadata).
+- **M13 fixed** — Username collision checks were case-sensitive while LDAP `uid` matching is not: a suspended `alice` could re-provision as `Alice`. All existence and invite-binding checks are now case-insensitive; stored usernames unchanged.
+- **M14 fixed** — Any invite holder could claim a credential-less account (the passkey-reset path), inheriting `is_admin`. Reset now requires an invite bound to that username; `scripts/reset-passkey.ts` issues one.
+- **M15 fixed** — Conditional-UI login skipped the per-login LDAP existence check. Moved into `loginVerify`.
+- **M16 fixed** — LDAP group restriction never worked: `verifyUserExists` without admin credentials threw (fail closed), and the membership test was `!!user`. Now binds as admin and checks `user.groups` for the configured DN.
+- **M17 open** — DNS rebinding between `resolveAndValidateIPs` and the actual connect. Entry points are unauthenticated (`client_id`, `/auth/device`). Fix is to connect to the validated IP with `Host`/SNI set, which needs Bun TLS options checked first.
+
+### Low
+- **L7 fixed** — Login-path LDAP suspension did not set `orphaned_since`, so the hourly restore never un-suspended; `"Invalid Credentials"` (a bind failure) was classed as not-found.
+- **L8 fixed** — Bootstrap admin race across the WebAuthn `await`; state re-checked inside the transaction.
+- **L9 fixed** — Rate limiters keyed on the constant `"direct"` without a trusted proxy. `getClientIp` now uses `server.requestIP()`. `cloudflare`/`xff` modes still trust forgeable headers; only enable them behind a firewalled origin.
+- **L10 fixed** — `Secure` cookie flag and HSTS depended on `NODE_ENV=production`; derived from `ORIGIN` being https now.
+- **L11 fixed** — `excludeCredentials` double-encoded credential IDs, so duplicate passkey registration was never prevented.
+- **L12 fixed** — Unbounded response bodies on metadata/PRM/rel=me fetches; `readBodyCapped` with 5 KB/16 KB/256 KB caps and a read timeout. `resource` parameters capped at 5.
+- **L13 fixed** — No length limits on profile, client, invite, device `scope` fields; `updateClient` was a destructive overwrite.
+- **L14 open** — LDAP self-service invites copy roles from "the most recent admin invite", which is usually the invite just created and otherwise nondeterministic. Replace with explicit `LDAP_DEFAULT_ROLES` config.
+- **L15 open** — No `__Host-` cookie prefix; blocked by `__Host-` requiring `Secure`, which local dev lacks. Session-bound CSRF removes the practical attack.
+- **L16 open** — `withSecurityHeaders` is unused; docs, content pages, the 404 and Bun-bundled HTML pages ship without `nosniff`/HSTS. Bun's HTML routes do not expose response headers; the reverse proxy should add them.
+- **L17 open** — Expired LDAP invites are never swept; `/api/ldap-verify` can grow the table within its rate limit.
+
+## Verified fine this pass
+WebAuthn challenge handling (burned on any verify attempt, origin/RP ID enforced, counter regression rejected), credential-to-user binding, invite consumption atomicity, all SQL parameterized (the one dynamic `SET` list uses hard-coded column names), HTML escaping on every server-rendered page, DCR secret handling, device `user_code` lockout, PKCE constant-time compare, refresh rotation and family revocation.

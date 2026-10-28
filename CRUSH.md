@@ -40,12 +40,15 @@ src/
 │   ├── accept.ts      # Accept-header negotiation (acceptmarkdown.com)
 │   ├── content-pages.ts # Markdown-backed public pages + JSON-LD/meta shell
 │   ├── frontmatter.ts # Shared `---` frontmatter parser
-│   ├── session.ts     # Session auth (Bearer token and cookie), SessionUser type
+│   ├── session.ts     # Session auth (Bearer token and cookie), SessionUser type, cookie helpers, session-bound CSRF
+│   ├── rate-limit.ts  # In-memory fixed-window RateLimiter (no-op under NODE_ENV=test)
+│   ├── client-ip.ts   # getClientIp via server.requestIP (setServer) with optional TRUSTED_PROXY headers
 │   ├── ssrf-safe-fetch.ts  # SSRF-safe fetch wrapper (blocks private IPs, validates redirects)
 │   └── oauth/         # OAuth-specific helpers
 │       ├── client-metadata.ts  # Client registration, metadata fetch/validation
 │       ├── pages.ts            # Server-rendered HTML (consent page, error pages, escapeHtml)
 │       ├── urls.ts             # URL canonicalization and validation per IndieAuth spec
+│       ├── client-display.ts   # clientDisplayName / clientRegistration (never throw on ikc_ ids)
 │       └── errors.ts           # OAuth error responses
 ├── client/            # Client-side TypeScript modules
 │   ├── ds/            # Design system (Elena web components + CSS)
@@ -77,7 +80,7 @@ src/
 │   ├── docs.html
 │   ├── oauth-test.html
 │   └── admin-shared.css
-├── migrations/        # SQL migrations (001 through 008)
+├── migrations/        # SQL migrations (001 through 016; see `ls src/migrations` for the latest)
 │   ├── 001_init.sql
 │   ├── 002_add_me_to_authcodes.sql
 │   ├── 003_add_tokens_table.sql
@@ -85,7 +88,10 @@ src/
 │   ├── 005_add_user_tier.sql
 │   ├── 006_add_passkey_names.sql
 │   ├── 007_add_ldap_support.sql
-│   └── 008_add_oidc_keys.sql
+│   ├── 008_add_oidc_keys.sql
+│   ├── ...
+│   ├── 015_add_authcode_family.sql
+│   └── 016_add_app_registration.sql
 ├── styles.css         # Global styles (non-component)
 scripts/               # Utility scripts (run with `bun scripts/<name>.ts`)
 │   ├── audit-ldap-orphans.ts  # Audit/cleanup LDAP-orphaned accounts
@@ -174,7 +180,16 @@ test/                  # Tests (bun:test)
 - Session-based SSO (users only authenticate once with passkey)
 - User profile endpoints with h-card microformats
 - Invite-based registration for new users (admin only)
-- **`me` parameter delegation**: When a client passes `me=https://example.com` in the authorization request and it matches the user's website URL, the token response returns that URL instead of the canonical `/u/{username}` URL
+- **`me` parameter is a hint**: `trustedMeHint()` in `authorize.ts` keeps it only if it is one of the signed-in user's own identities (`/u/{username}` or their verified `url`); otherwise it is dropped. The token endpoint always returns the verified identity (indieauth.rocks S220)
+- **Scope-less requests**: no `scope` param means identity only. The consent page says so, the authcode stores `[]`, and the token endpoint returns `{me, iss}` with no access token and no `tokens` row (S320/S321)
+- **Redirect URI policy** (`isRedirectAllowed` in `lib/oauth/client-metadata.ts`): pre-registered clients get exact match on their stored list; URL clients with a published `redirect_uris` list get exact match; URL clients publishing nothing get same-origin only. `ensureApp(clientId, redirectUri | null)` re-fetches metadata when a redirect misses the stored list (throttled to once a minute per client) so the stored list is the client's *published* list, not whatever was seen first. Pass `null` for flows with no redirect (device)
+- **Duplicate params**: `/auth/authorize` refuses any repeated single-value parameter (S213) with an error page, not a redirect
+- **PKCE**: `code_challenge_method=S256` is required explicitly; a challenge without a method is refused (missing means plain per RFC 7636)
+- **Code reuse**: exchanging a code sets `authcodes.family` and tokens inherit it; a replayed code revokes every token in that family (S303, RFC 9700 §4.5)
+- **Refresh scope**: `scope` on a refresh request may narrow but never widen (`invalid_scope`)
+- **Introspection requires auth**: a live Bearer access token or confidential `client_id`+`client_secret`; otherwise 401 with no token info (S801/S802)
+- **CORS**: token, revoke, userinfo, OIDC discovery and JWKS send `Access-Control-Allow-Origin: *` (never with credentials) and answer `OPTIONS`; helpers in `lib/oauth/errors.ts` (`withCors`, `corsPreflight`, `methodNotAllowed`)
+- **indieauth.rocks**: `test/indieauth-rocks.test.ts` mirrors the server test suite by test id (S2xx-S9xx). Run the live suite at https://indieauth.rocks after deploying by entering a `/u/{username}` profile URL
 - OIDC nonce support and auth_time tracking in authcodes
 - Signing keys stored in `oidc_keys` table, auto-generated on first use (RS256, 2048-bit)
 
@@ -204,9 +219,9 @@ test/                  # Tests (bun:test)
 - **credentials**: passkey credentials (credential_id, public_key, counter, name)
 - **sessions**: user sessions with 24-hour expiry
 - **challenges**: WebAuthn challenges (5-minute expiry)
-- **apps**: OAuth clients (client_id, redirect_uris, name, logo_url, is_preregistered, client_secret_hash, available_roles, default_role)
-- **permissions**: per-user, per-app granted scopes and role
-- **authcodes**: short-lived authorization codes (60-second expiry, single-use), includes username, `me` for delegation, `nonce` and `auth_time` for OIDC
+- **apps**: OAuth clients (client_id, redirect_uris, name, logo_url, is_preregistered, registration ('admin' | 'dcr' | 'url'), client_secret_hash, available_roles, default_role). For URL clients `redirect_uris` is the *published* list (`[]` when the client publishes none)
+- **permissions**: per-user, per-app granted scopes and role; written by consent, device approval (`recordDeviceGrant`), and invite roles. Revoking (`revokeGrant` in api.ts) also revokes tokens and device codes
+- **authcodes**: short-lived authorization codes (60-second expiry, single-use), includes username, `me` hint, `nonce` and `auth_time` for OIDC, `family` set at exchange so a replay can revoke the tokens it minted
 - **tokens**: access tokens with optional refresh_token and refresh_expires_at
 - **invites**: admin-created invite codes, includes `ldap_username` for LDAP-provisioned accounts
 - **invite_roles**: pre-assign app roles to invites
@@ -219,6 +234,8 @@ test/                  # Tests (bun:test)
   - `getUserFromCookie(req)` - Cookie auth for browser pages, returns `SessionUser | null`
 - Session cookies named `indiko_session`
 - Authorization header: `Bearer {token}`
+- CSRF: `indiko_csrf` cookie value is `csrfTokenFor(sessionToken)` (sha256 of a prefix + session token). Checks recompute it from the session cookie via `getCsrfToken(req)` and compare with `csrfTokenMatches` (constant time); the csrf cookie itself is never trusted. Tests must derive the form/header token with `csrfTokenFor(cookie)`, not invent one
+- Cookie `Secure` flag comes from `ORIGIN` starting with `https://`, not `NODE_ENV`
 - Sessions join against users table, check expiry and status='active'
 
 ### WebAuthn/Passkey Settings
@@ -228,6 +245,11 @@ test/                  # Tests (bun:test)
 - Passkeys are discoverable so password managers can show them without hints
 - Multiple passkeys per user, each with a user-editable name
 - Re-registration allowed to reset passkey (via `scripts/reset-passkey.ts` generating a reset link)
+
+### Rate Limiting
+- `src/lib/rate-limit.ts` `RateLimiter({ max, windowMs })` keyed by string, `hit(key)` returns `{ limited, retryAfter }`; `rateLimitedResponse()` builds the 429
+- Applied: token endpoint (30/min/IP, inline map in token.ts), DCR and device authorization (inline maps), passkey options/verify (60/min/IP), `/api/ldap-verify` (20/15min/IP and 5/15min/username)
+- All limiters skip under `NODE_ENV=test`; `getClientIp` falls back to `"direct"` when no server is registered (tests, scripts)
 
 ### Background Jobs
 - Hourly cleanup job (in `src/index.ts`): deletes expired sessions, challenges, authcodes, tokens
