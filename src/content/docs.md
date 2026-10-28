@@ -74,7 +74,12 @@ Alternatively, you can publish redirect URIs as HTML `<link>` tags:
 <link rel="redirect_uri" href="https://myapp.example.com/callback" />
 ```
 
-> **Security:** If your `redirect_uri` uses a different host than your `client_id`, you MUST publish `redirect_uris` in your client metadata. This prevents unauthorized apps from hijacking your client_id.
+> **Redirect URI policy:** Which `redirect_uri` values Indiko accepts depends on what you publish.
+>
+> - If your metadata lists `redirect_uris`, the request must match one of them exactly. Prefix matches, extra query parameters, and `https://you@attacker/` tricks are all refused.
+> - If you publish nothing, only redirect URIs on the same origin (scheme, host, port) as your `client_id` are accepted.
+>
+> Indiko refetches your metadata when a request arrives with a redirect URI it has not seen (at most once a minute per client), so adding a new callback to your document takes effect right away. Sending `redirect_uri` twice in one request is refused rather than guessed at.
 
 > **Client ID Metadata Document (CIMD):** This URL-published metadata follows the OAuth Client ID Metadata Document draft. A few rules apply: the `client_id` in the document must exactly match the URL it's fetched from, the document must be under 5 KB, and it must not request a shared-secret `token_endpoint_auth_method` (like `client_secret_post`) — public URL-based clients have no secret. If you need a client secret, use [dynamic registration](#dynamic-client-registration-rfc-7591) instead.
 
@@ -150,7 +155,7 @@ The metadata endpoint returns:
   "authorization_endpoint": "{{origin}}/auth/authorize",
   "token_endpoint": "{{origin}}/auth/token",
   "introspection_endpoint": "{{origin}}/auth/token/introspect",
-  "introspection_endpoint_auth_methods_supported": ["none"],
+  "introspection_endpoint_auth_methods_supported": ["client_secret_post"],
   "revocation_endpoint": "{{origin}}/auth/token/revoke",
   "revocation_endpoint_auth_methods_supported": ["none"],
   "userinfo_endpoint": "{{origin}}/userinfo",
@@ -186,7 +191,11 @@ GET {{origin}}/auth/authorize?response_type=code
   &scope=profile email
 ```
 
-> **PKCE is required:** Generate a random `code_verifier` (43-128 characters), then create `code_challenge` by hashing it with SHA-256 and base64url encoding.
+> **PKCE is required:** Generate a random `code_verifier` (43-128 characters), then create `code_challenge` by hashing it with SHA-256 and base64url encoding. Send `code_challenge_method=S256` explicitly; a missing method means `plain` under RFC 7636, and Indiko refuses that.
+
+> **Identity only:** Leave `scope` out entirely if you only need to know who signed in. The consent screen says so, and the code exchange returns `me` (plus `iss`) with no access token, as IndieAuth §5.3.3 describes. Ask for `profile` if you also want name, photo and URL.
+
+> **The `me` parameter is a hint:** You may pass `me=` with the profile URL the user typed. Indiko never trusts it. If it is one of the signed-in user's own identities it is echoed back; otherwise it is ignored and the verified identity is returned.
 
 ### 2. user authenticates and approves
 
@@ -221,6 +230,10 @@ grant_type=authorization_code
 ```
 
 > **Client authentication:** All clients MUST use PKCE (code_verifier) per the IndieAuth specification. Pre-registered confidential clients should also include `client_secret` in the token request for additional security.
+
+> **Codes are single use:** A code lives sixty seconds and can be exchanged once. Presenting it a second time is treated as a leak: the exchange fails with `invalid_grant` and every token minted from that code (including refreshed ones) is revoked.
+
+> **Browser apps:** The token, revocation and userinfo endpoints answer `OPTIONS` preflights and send `Access-Control-Allow-Origin: *` (never with credentials), so a browser-based client can call them directly.
 
 ### 5. receive tokens and user profile
 
@@ -285,18 +298,26 @@ Response:
 
 > **Token rotation:** Refresh tokens are rotated on every use. The old refresh token is invalidated when a new one is issued. Always store and use the latest refresh token from the response.
 
+> **Narrowing scope:** You may send `scope` with a refresh request to ask for a subset of what was originally granted. Asking for anything that was not in the original grant fails with `invalid_scope`; leaving `scope` out keeps the grant as it was.
+
 > **Reuse detection (RFC 9700):** If a refresh token that was already rotated is presented again, Indiko treats it as a possible token leak and **revokes the entire token family** — the current access and refresh tokens in that chain stop working immediately. This means a stolen refresh token can't be replayed without killing the session it came from. Well-behaved clients never replay an old token, so this only fires on a race or a leak; if it fires for you, re-authorize and check how the token was stored.
 
 ### token introspection
 
-Verify an access token and get its metadata:
+Verify an access token and get its metadata. Introspection requires authorization (IndieAuth §6.1), so the endpoint cannot be used as an oracle by anyone who finds a token. Authenticate one of two ways:
+
+- **Bearer token:** any live Indiko access token in the `Authorization` header. A resource server may present the very token it is checking.
+- **Client credentials:** `client_id` and `client_secret` of a pre-registered confidential client in the body.
 
 ```http
 POST {{origin}}/auth/token/introspect
 Content-Type: application/x-www-form-urlencoded
+Authorization: Bearer access_token_here
 
 token=access_token_here
 ```
+
+An unauthenticated request gets `401` with a `WWW-Authenticate` header and nothing about the token.
 
 Active token response:
 
@@ -500,12 +521,13 @@ Scopes control what data your app can access:
 
 | Scope | Description |
 | --- | --- |
-| `profile` | Access to user profile (name, photo, URL) — **always required** |
+| _(none)_ | Identity only: the code exchange returns `me` and no access token |
+| `profile` | Access to user profile (name, photo, URL); cannot be unchecked once requested |
 | `email` | Access to user email address |
 | `openid` | Request an OIDC ID token |
 | `offline_access` | Request a refresh token for long-lived access |
 
-Users can uncheck optional scopes during authorization. The `profile` scope is always granted.
+Users can uncheck optional scopes during authorization. When `profile` is requested it is always granted along with whatever else the user approves.
 
 > **offline_access:** Request this only if your app needs to act on the user's behalf after the access token expires. Without it you get a 1-hour access token and no refresh token. Users see it on the consent screen as a distinct "keep you signed in long-term" permission.
 

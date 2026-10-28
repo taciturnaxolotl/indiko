@@ -1,7 +1,12 @@
 import crypto from "node:crypto";
 import { db } from "../../db";
-import { ensureApp } from "../../lib/oauth/client-metadata";
-import { consentPage, errorPage, escapeHtml } from "../../lib/oauth/pages";
+import { ensureApp, isRedirectAllowed } from "../../lib/oauth/client-metadata";
+import {
+	consentPage,
+	errorPage,
+	escapeHtml,
+	FRAME_DENY_HEADERS,
+} from "../../lib/oauth/pages";
 import {
 	type ResourceInfo,
 	resourceDisplay,
@@ -9,16 +14,79 @@ import {
 	storedToResources,
 	validateResources,
 } from "../../lib/oauth/resource";
-import { canonicalizeURL } from "../../lib/oauth/urls";
-import { getCsrfToken, getUserFromCookie } from "../../lib/session";
+import { canonicalizeURL, validateClientURL } from "../../lib/oauth/urls";
+import {
+	csrfTokenMatches,
+	getCsrfToken,
+	getUserFromCookie,
+} from "../../lib/session";
 import { token } from "./token";
 
 const AUTH_CODE_TTL = 60; // seconds
+
+// RFC 6749 §3.1: request parameters MUST NOT be included more than once.
+// A repeated redirect_uri in particular is a trick to get one value validated
+// and the other used, so refuse rather than pick.
+const SINGLE_VALUE_PARAMS = [
+	"response_type",
+	"client_id",
+	"redirect_uri",
+	"state",
+	"code_challenge",
+	"code_challenge_method",
+	"scope",
+	"me",
+	"nonce",
+] as const;
+
+function findDuplicateParam(params: URLSearchParams): string | null {
+	for (const name of SINGLE_VALUE_PARAMS) {
+		if (params.getAll(name).length > 1) return name;
+	}
+	return null;
+}
+
+/** The profile URLs this user may be returned as `me`. */
+function userIdentities(userId: number): string[] {
+	const origin = process.env.ORIGIN || "http://localhost:3000";
+	const row = db
+		.query("SELECT username, url FROM users WHERE id = ?")
+		.get(userId) as { username: string; url: string | null } | undefined;
+	if (!row) return [];
+	const ids = [`${origin}/u/${row.username}`];
+	if (row.url) ids.push(row.url);
+	return ids;
+}
+
+// The `me` parameter is a hint about who the user expects to sign in as. It
+// is never trusted: a value that is not one of this user's own identities is
+// dropped, and the token response always carries the verified identity.
+function trustedMeHint(me: string | null, userId: number): string | null {
+	if (!me) return null;
+	let canonical: string;
+	try {
+		canonical = canonicalizeURL(me);
+	} catch {
+		return null;
+	}
+	return userIdentities(userId).some((id) => canonicalizeURL(id) === canonical)
+		? canonical
+		: null;
+}
 
 // GET /auth/authorize - Authorization request
 export async function authorizeGet(req: Request): Promise<Response> {
 	const url = new URL(req.url);
 	const params = url.searchParams;
+
+	const duplicate = findDuplicateParam(params);
+	if (duplicate) {
+		return errorPage({
+			title: "Invalid Request",
+			message: `The authorization request repeats the ${duplicate} parameter. Each parameter may appear only once.`,
+			hint: "Send each OAuth parameter exactly once (RFC 6749 §3.1).",
+		});
+	}
 
 	const responseType = params.get("response_type");
 	const rawClientId = params.get("client_id");
@@ -26,7 +94,9 @@ export async function authorizeGet(req: Request): Promise<Response> {
 	const state = params.get("state");
 	const codeChallenge = params.get("code_challenge");
 	const codeChallengeMethod = params.get("code_challenge_method");
-	const scope = params.get("scope") || "profile";
+	// No scope means the client only wants to know who signed in (IndieAuth
+	// §5.3.3): the code is exchanged for a profile URL, not an access token.
+	const scope = params.get("scope") ?? "";
 	const me = params.get("me");
 	const nonce = params.get("nonce"); // OIDC nonce parameter
 
@@ -44,13 +114,32 @@ export async function authorizeGet(req: Request): Promise<Response> {
 
 	// Step 1: client_id and redirect_uri must exist (can't redirect without them)
 	if (!rawClientId || !rawRedirectUri) {
-		return new Response(
-			"Missing required parameters: client_id and redirect_uri",
-			{ status: 400 },
-		);
+		return errorPage({
+			title: "Invalid Request",
+			message:
+				"The authorization request is missing client_id or redirect_uri, so there is nowhere safe to send you back to.",
+			hint: "Both client_id and redirect_uri are required.",
+		});
 	}
 
-	// Step 2: Canonicalize URLs (if malformed, can't trust redirect_uri)
+	// Step 2: Validate and canonicalize URLs. The raw client_id is checked
+	// before canonicalizing because URL parsing quietly collapses "..", and a
+	// client_id with dot segments is not a valid client identifier (§3.3).
+	if (
+		(rawClientId.startsWith("http://") || rawClientId.startsWith("https://")) &&
+		!validateClientURL(rawClientId).valid
+	) {
+		return errorPage({
+			title: "Invalid Client ID",
+			message:
+				"The OAuth authorization request failed because the provided client_id is not a valid client identifier.",
+			details: [
+				{ label: "Provided client_id:", value: rawClientId, isCode: true },
+			],
+			hint: "A client_id must be an absolute http(s) URL with no fragment, credentials, or . / .. path segments.",
+		});
+	}
+
 	let clientId: string;
 	let redirectUri: string;
 	try {
@@ -79,8 +168,34 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		});
 	}
 
-	// Step 3: Verify app is registered (can't trust redirect_uri if client is invalid)
+	// Step 3: Resolve the client and check the redirect_uri belongs to it. We
+	// cannot redirect any error until this passes.
 	const appResult = await ensureApp(clientId, redirectUri);
+
+	if (appResult.error && appResult.code === "invalid_redirect") {
+		const appName = clientId;
+		const details: Array<{ label: string; value: string; isCode?: boolean }> = [
+			{ label: "Error:", value: appResult.error },
+			{
+				label: "Requested redirect_uri:",
+				value: redirectUri,
+				isCode: true,
+			},
+		];
+		if (me)
+			details.push({
+				label: "Requested identity (me):",
+				value: me,
+				isCode: true,
+			});
+		return errorPage({
+			title: "Unauthorized Redirect URI",
+			message:
+				"The OAuth authorization request failed because the provided redirect_uri is not registered for this client application.",
+			details,
+			hint: `The redirect_uri must exactly match a URI registered for <strong>${escapeHtml(appName)}</strong>. If you are the application developer, publish the redirect_uri in your client metadata or use one on the same origin as your client_id.`,
+		});
+	}
 
 	if (appResult.error) {
 		const details: Array<{ label: string; value: string; isCode?: boolean }> = [
@@ -110,33 +225,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		});
 	}
 
-	// Step 4: Verify redirect_uri is allowed for this app
-	const allowedRedirects = JSON.parse(app.redirect_uris) as string[];
-	if (!allowedRedirects.includes(redirectUri)) {
-		const appName = app.name || clientId;
-		const details: Array<{ label: string; value: string; isCode?: boolean }> = [
-			{
-				label: "Requested redirect_uri:",
-				value: redirectUri,
-				isCode: true,
-			},
-		];
-		if (me)
-			details.push({
-				label: "Requested identity (me):",
-				value: me,
-				isCode: true,
-			});
-		return errorPage({
-			title: "Unauthorized Redirect URI",
-			message:
-				"The OAuth authorization request failed because the provided redirect_uri is not registered for this client application.",
-			details,
-			hint: `The redirect_uri must exactly match a registered URI for <strong>${escapeHtml(appName)}</strong>. If you are the application developer, please ensure your redirect_uri matches the one registered with this authorization server.`,
-		});
-	}
-
-	// Step 5: redirect_uri is now trusted — report remaining errors via
+	// Step 4: redirect_uri is now trusted — report remaining errors via
 	// redirect per RFC 6749 §4.1.2.1
 	const redirectError = (error: string, description: string): Response => {
 		const origin = process.env.ORIGIN || "http://localhost:3000";
@@ -163,10 +252,14 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		);
 	}
 
-	if (codeChallengeMethod && codeChallengeMethod !== "S256") {
+	// RFC 7636 §4.3: a missing method means "plain", which is not supported
+	// here, so the method must be sent and must be S256.
+	if (codeChallengeMethod !== "S256") {
 		return redirectError(
 			"invalid_request",
-			"Only S256 code_challenge_method is supported",
+			codeChallengeMethod
+				? "Only S256 code_challenge_method is supported"
+				: "code_challenge_method is required and must be S256",
 		);
 	}
 
@@ -182,8 +275,16 @@ export async function authorizeGet(req: Request): Promise<Response> {
 
 	if (!user) {
 		const returnUrl = `/auth/authorize${url.search}`;
-		return Response.redirect(`/login?return=${encodeURIComponent(returnUrl)}`);
+		return new Response(null, {
+			status: 302,
+			headers: {
+				Location: `/login?return=${encodeURIComponent(returnUrl)}`,
+				...FRAME_DENY_HEADERS,
+			},
+		});
 	}
+
+	const meHint = trustedMeHint(me, user.userId);
 
 	// Check if user has previously granted permission to this app
 	const permission = db
@@ -225,7 +326,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 				JSON.stringify(requestedScopes),
 				codeChallenge,
 				expiresAt,
-				me,
+				meHint,
 				nonce,
 				now, // auth_time - user already authenticated
 				resourceStored,
@@ -253,7 +354,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		state,
 		codeChallenge,
 		requestedScopes,
-		me,
+		meHint,
 		nonce,
 		requestedResources,
 	);
@@ -282,9 +383,9 @@ async function showConsentScreen(
 		| undefined;
 
 	// Pre-registered apps (ikc_ prefix) use the name from DB;
-	// URL-based client IDs fall back to hostname
+	// URL-based client IDs fall back to hostname. The full client_id is shown
+	// alongside either way so a borrowed name cannot impersonate another app.
 	let appName: string;
-	let appUrl: string | null = null;
 
 	if (clientId.startsWith("ikc_")) {
 		appName = appData?.name || clientId;
@@ -292,7 +393,6 @@ async function showConsentScreen(
 		try {
 			const parsedUrl = new URL(clientId);
 			appName = appData?.name || parsedUrl.hostname;
-			appUrl = parsedUrl.hostname;
 		} catch {
 			appName = appData?.name || clientId;
 		}
@@ -307,7 +407,6 @@ async function showConsentScreen(
 	return consentPage({
 		username: user.username,
 		appName,
-		appUrl,
 		appLogo: appData?.logo_url,
 		appDescription: appData?.description,
 		scopes,
@@ -333,10 +432,14 @@ export async function authorizePost(req: Request): Promise<Response> {
 		formData = await req.formData();
 		body = Object.fromEntries(formData.entries()) as Record<string, string>;
 	} else {
-		body = await req.json();
+		try {
+			body = (await req.json()) as Record<string, string>;
+		} catch {
+			return new Response("Invalid JSON body", { status: 400 });
+		}
 		formData = new FormData();
 		for (const [key, value] of Object.entries(body)) {
-			formData.append(key, value);
+			formData.append(key, String(value));
 		}
 	}
 
@@ -360,10 +463,8 @@ export async function authorizePost(req: Request): Promise<Response> {
 		return new Response("Unauthorized", { status: 401 });
 	}
 
-	// Validate CSRF token from the form field against the cookie
-	const formCsrf = body.csrf_token;
-	const cookieCsrf = getCsrfToken(req);
-	if (!formCsrf || !cookieCsrf || formCsrf !== cookieCsrf) {
+	// The form's CSRF token must be the one derived from this session cookie.
+	if (!csrfTokenMatches(body.csrf_token, getCsrfToken(req))) {
 		return new Response("CSRF token mismatch", { status: 403 });
 	}
 
@@ -372,7 +473,8 @@ export async function authorizePost(req: Request): Promise<Response> {
 	const rawRedirectUri = body.redirect_uri;
 	const state = body.state;
 	const codeChallenge = body.code_challenge;
-	const me = body.me || null;
+	// Re-checked against the signed-in user: hidden fields are attacker-editable.
+	const me = trustedMeHint(body.me || null, user.userId);
 	const nonce = body.nonce || null; // OIDC nonce
 
 	if (!rawClientId || !rawRedirectUri || !state || !codeChallenge) {
@@ -394,15 +496,18 @@ export async function authorizePost(req: Request): Promise<Response> {
 	// form POSTs attacker-controllable hidden fields, so we must not trust the
 	// submitted redirect_uri without checking it against the registered list.
 	const app = db
-		.query("SELECT redirect_uris FROM apps WHERE client_id = ?")
-		.get(clientId) as { redirect_uris: string } | undefined;
+		.query(
+			"SELECT redirect_uris, is_preregistered FROM apps WHERE client_id = ?",
+		)
+		.get(clientId) as
+		| { redirect_uris: string; is_preregistered: number }
+		| undefined;
 
 	if (!app) {
 		return new Response("Invalid client_id", { status: 400 });
 	}
 
-	const allowedRedirects = JSON.parse(app.redirect_uris) as string[];
-	if (!allowedRedirects.includes(redirectUri)) {
+	if (!isRedirectAllowed(app, clientId, redirectUri)) {
 		return new Response("redirect_uri not registered for this client", {
 			status: 400,
 		});
@@ -417,8 +522,17 @@ export async function authorizePost(req: Request): Promise<Response> {
 		return Response.redirect(denyUrl.toString(), 302);
 	}
 
-	// Get the scopes the user actually approved (from checkboxes)
-	const approvedScopes = formData.getAll("scope") as string[];
+	// Get the scopes the user actually approved (from checkboxes). An empty
+	// set is a valid grant: the client only asked who the user is.
+	const approvedScopes = [
+		...new Set(
+			(formData.getAll("scope") as string[])
+				.map((s) => s.trim())
+				.filter(
+					(s) => s.length > 0 && s.length <= 64 && /^[\x21-\x7e]+$/.test(s),
+				),
+		),
+	];
 
 	// Resource indicators carried through the consent form (hidden fields).
 	// Re-validate — the POST body is attacker-controllable.
@@ -429,11 +543,6 @@ export async function authorizePost(req: Request): Promise<Response> {
 		return new Response("invalid_target", { status: 400 });
 	}
 	const resourceStored = resourcesToStored(approvedResources);
-
-	// Profile scope is always required and included via hidden input
-	if (approvedScopes.length === 0 || !approvedScopes.includes("profile")) {
-		return new Response("Invalid scope selection", { status: 400 });
-	}
 
 	const code = crypto.randomBytes(32).toString("base64url");
 	const now = Math.floor(Date.now() / 1000);

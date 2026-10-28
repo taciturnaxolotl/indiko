@@ -103,7 +103,7 @@ export function indieauthMetadata(): Response {
 		authorization_endpoint: `${origin}/auth/authorize`,
 		token_endpoint: `${origin}/auth/token`,
 		introspection_endpoint: `${origin}/auth/token/introspect`,
-		introspection_endpoint_auth_methods_supported: ["none"],
+		introspection_endpoint_auth_methods_supported: ["client_secret_post"],
 		revocation_endpoint: `${origin}/auth/token/revoke`,
 		revocation_endpoint_auth_methods_supported: ["none"],
 		userinfo_endpoint: `${origin}/userinfo`,

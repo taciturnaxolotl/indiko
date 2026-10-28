@@ -136,8 +136,16 @@ export async function fetchClientMetadata(clientId: string): Promise<{
 			if (!rel) continue;
 			if (!rel.split(/\s+/).includes("redirect_uri")) continue;
 
-			const href = tag.match(/href=["']?([^"'\s>]+)["']?/i)?.[1];
-			if (href && !redirectUris.includes(href)) {
+			const rawHref = tag.match(/href=["']?([^"'\s>]+)["']?/i)?.[1];
+			if (!rawHref) continue;
+			let href: string;
+			try {
+				// rel=redirect_uri links may be relative to the client_id document
+				href = new URL(rawHref, clientId).toString();
+			} catch {
+				continue;
+			}
+			if (!redirectUris.includes(href)) {
 				redirectUris.push(href);
 			}
 		}
@@ -261,106 +269,229 @@ export interface AppRecord {
 	name: string | null;
 	redirect_uris: string;
 	logo_url?: string | null;
+	is_preregistered?: number;
 }
 
-// Validate and register app with client information discovery
-export async function ensureApp(
+export type EnsureAppErrorCode = "invalid_client" | "invalid_redirect";
+
+/**
+ * True when two http(s) URLs share scheme, host and port. Credentials in the
+ * authority (https://client-host@other-host/) do not count: URL parsing puts
+ * them in username/password, and `origin` ignores them.
+ */
+export function sameOrigin(a: string, b: string): boolean {
+	try {
+		const urlA = new URL(a);
+		const urlB = new URL(b);
+		if (urlA.origin === "null" || urlB.origin === "null") return false;
+		return urlA.origin === urlB.origin;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Decide whether a redirect_uri may be used with a client, given the client's
+ * published redirect list (IndieAuth §4.2.2, Client ID Metadata Document).
+ *
+ * - A pre-registered (admin-created) client gets exact matching only.
+ * - A URL client that publishes a redirect_uris list is held to that list,
+ *   exactly: prefix matches and extra query parameters are not matches.
+ * - A URL client that publishes nothing may only redirect back to its own
+ *   origin, which is the only place the spec lets us trust without a list.
+ */
+export function isRedirectAllowed(
+	app: { is_preregistered?: number; redirect_uris: string },
 	clientId: string,
 	redirectUri: string,
-): Promise<{
-	error?: string;
-	app?: AppRecord;
-}> {
-	const existing = db
-		.query("SELECT name, redirect_uris, logo_url FROM apps WHERE client_id = ?")
-		.get(clientId) as
-		| { name: string | null; redirect_uris: string; logo_url?: string | null }
-		| undefined;
+): boolean {
+	let published: string[];
+	try {
+		published = JSON.parse(app.redirect_uris) as string[];
+	} catch {
+		published = [];
+	}
+	if (!Array.isArray(published)) published = [];
+
+	// The request side arrives canonicalized; hold the registered side to the
+	// same form so a hostname case or a bare-origin slash cannot split them.
+	const listed = published.some((entry) => {
+		if (typeof entry !== "string") return false;
+		if (entry === redirectUri) return true;
+		try {
+			return canonicalizeURL(entry) === redirectUri;
+		} catch {
+			return false;
+		}
+	});
+
+	if (app.is_preregistered === 1 || published.length > 0) {
+		return listed;
+	}
+	return sameOrigin(clientId, redirectUri);
+}
+
+// Re-fetching metadata on every miss would let a client_id turn the auth
+// endpoint into a fetch amplifier. One refresh per client per minute is plenty:
+// a client that just published a new redirect URI can wait that long.
+const METADATA_REFRESH_INTERVAL_MS = 60 * 1000;
+const metadataLastFetched = new Map<string, number>();
+
+function canRefreshMetadata(clientId: string): boolean {
+	if (process.env.NODE_ENV === "test") return true;
+	const last = metadataLastFetched.get(clientId) ?? 0;
+	return Date.now() - last > METADATA_REFRESH_INTERVAL_MS;
+}
+
+/**
+ * Fetch the client's metadata and fold it into the apps row. Returns the
+ * published redirect list (empty when the client publishes none), or null
+ * when the document could not be fetched or was not trustworthy.
+ */
+async function refreshClientMetadata(
+	clientId: string,
+	existing: boolean,
+): Promise<string[] | null> {
+	metadataLastFetched.set(clientId, Date.now());
+	const result = await fetchClientMetadata(clientId);
+	if (!result.success || !result.metadata) {
+		return null;
+	}
+
+	const published = Array.isArray(result.metadata.redirect_uris)
+		? result.metadata.redirect_uris.filter((u) => typeof u === "string")
+		: [];
+	const name = result.metadata.client_name || null;
+	const logo = result.metadata.logo_uri || null;
+	const now = Math.floor(Date.now() / 1000);
 
 	if (existing) {
+		db.query(
+			"UPDATE apps SET redirect_uris = ?, name = ?, logo_url = ?, last_used = ? WHERE client_id = ? AND is_preregistered = 0",
+		).run(JSON.stringify(published), name, logo, now, clientId);
+	} else {
+		db.query(
+			"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, first_seen, last_used) VALUES (?, ?, ?, ?, 0, ?, ?)",
+		).run(clientId, JSON.stringify(published), name, logo, now, now);
+	}
+
+	return published;
+}
+
+function loadApp(clientId: string): AppRecord | undefined {
+	// bun:sqlite returns null for a miss; normalize so callers can use `?.`
+	// and truthiness without caring which empty value they got.
+	return (
+		(db
+			.query(
+				"SELECT name, redirect_uris, logo_url, is_preregistered FROM apps WHERE client_id = ?",
+			)
+			.get(clientId) as AppRecord | null) ?? undefined
+	);
+}
+
+/**
+ * Resolve the client for an authorization request and decide whether the
+ * requested redirect_uri belongs to it. On success the returned app is the
+ * current row; on failure `code` says whether the client or the redirect was
+ * the problem so the caller can pick the right error page.
+ *
+ * URL clients are registered on first sight and their metadata is refreshed
+ * whenever a redirect_uri is not already covered, so a client that publishes a
+ * new redirect URI does not stay frozen at what it said the first time.
+ */
+export async function ensureApp(
+	clientId: string,
+	redirectUri: string | null,
+): Promise<{
+	error?: string;
+	code?: EnsureAppErrorCode;
+	app?: AppRecord;
+}> {
+	const existing = loadApp(clientId);
+	const allowed = (app: AppRecord): boolean =>
+		redirectUri === null || isRedirectAllowed(app, clientId, redirectUri);
+
+	if (existing?.is_preregistered === 1) {
 		db.query("UPDATE apps SET last_used = ? WHERE client_id = ?").run(
 			Math.floor(Date.now() / 1000),
 			clientId,
 		);
+		if (!allowed(existing)) {
+			return {
+				code: "invalid_redirect",
+				error: "redirect_uri is not registered for this client",
+			};
+		}
 		return { app: existing };
 	}
 
 	// Validate client URL per IndieAuth spec
 	const validation = validateClientURL(clientId);
 	if (!validation.valid) {
-		return { error: validation.error || "Invalid client URL" };
+		return {
+			code: "invalid_client",
+			error: validation.error || "Invalid client URL",
+		};
 	}
 
-	const canonicalClientId = validation.canonicalUrl;
-	if (!canonicalClientId) {
-		return { error: "Invalid client URL" };
-	}
-
-	// Fetch client metadata per IndieAuth spec
-	const metadataResult = await fetchClientMetadata(canonicalClientId);
-
-	let clientName: string | null = null;
-	let logoUrl: string | null = null;
-	let allowedRedirectUris: string[] = [];
-
-	const hostsDiffer = (a: string, b: string): boolean => {
-		const urlA = new URL(a);
-		const urlB = new URL(b);
-		return (
-			urlA.protocol !== urlB.protocol ||
-			urlA.hostname !== urlB.hostname ||
-			urlA.port !== urlB.port
+	if (existing) {
+		db.query("UPDATE apps SET last_used = ? WHERE client_id = ?").run(
+			Math.floor(Date.now() / 1000),
+			clientId,
 		);
-	};
-
-	if (metadataResult.success && metadataResult.metadata) {
-		clientName = metadataResult.metadata.client_name || null;
-		logoUrl = metadataResult.metadata.logo_uri || null;
-		allowedRedirectUris = metadataResult.metadata.redirect_uris || [];
-
-		if (allowedRedirectUris.length > 0) {
-			if (hostsDiffer(canonicalClientId, redirectUri)) {
-				// MUST verify redirect_uri is in published list
-				if (!allowedRedirectUris.includes(redirectUri)) {
-					return {
-						error: `redirect_uri not registered in client metadata. The client published a list of allowed redirect URIs, but ${redirectUri} is not in that list.`,
-					};
-				}
-			} else if (!allowedRedirectUris.includes(redirectUri)) {
-				allowedRedirectUris.push(redirectUri);
-			}
-		} else {
-			allowedRedirectUris = [redirectUri];
+		if (allowed(existing)) {
+			return { app: existing };
 		}
-	} else {
-		// Could not fetch metadata - allow only same-host redirects
-		if (hostsDiffer(canonicalClientId, redirectUri)) {
+		if (!canRefreshMetadata(clientId)) {
 			return {
-				error: `Could not fetch client metadata to verify redirect_uri. For security, redirect_uri must have same host as client_id, or client must publish redirect_uris. Error: ${metadataResult.error}`,
+				code: "invalid_redirect",
+				error: `redirect_uri is not in the client's published redirect_uris, and ${redirectUri} is not on the client's origin.`,
 			};
 		}
-
-		allowedRedirectUris = [redirectUri];
 	}
 
-	db.query(
-		"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, first_seen, last_used) VALUES (?, ?, ?, ?, 0, ?, ?)",
-	).run(
-		canonicalClientId,
-		JSON.stringify(allowedRedirectUris),
-		clientName,
-		logoUrl,
-		Math.floor(Date.now() / 1000),
-		Math.floor(Date.now() / 1000),
-	);
+	const published = await refreshClientMetadata(clientId, Boolean(existing));
 
-	const newApp = db
-		.query("SELECT name, redirect_uris, logo_url FROM apps WHERE client_id = ?")
-		.get(canonicalClientId) as {
-		name: string | null;
-		redirect_uris: string;
-		logo_url?: string | null;
-	};
+	if (published === null) {
+		// Nothing trustworthy to go on: only the client's own origin is safe.
+		if (redirectUri !== null && !sameOrigin(clientId, redirectUri)) {
+			return {
+				code: "invalid_redirect",
+				error:
+					"Could not fetch client metadata to verify redirect_uri. For security, redirect_uri must have the same origin as client_id, or the client must publish redirect_uris.",
+			};
+		}
+		if (!existing) {
+			const now = Math.floor(Date.now() / 1000);
+			db.query(
+				"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, first_seen, last_used) VALUES (?, ?, NULL, NULL, 0, ?, ?)",
+			).run(clientId, "[]", now, now);
+		} else {
+			// Rows written before metadata was refreshed on demand stored the
+			// first redirect seen rather than the published list. When that
+			// stored list is all same-origin anyway, fold it into the
+			// same-origin rule so the next sibling path does not wait a minute.
+			const stored = JSON.parse(existing.redirect_uris) as string[];
+			if (stored.length > 0 && stored.every((u) => sameOrigin(clientId, u))) {
+				db.query(
+					"UPDATE apps SET redirect_uris = '[]' WHERE client_id = ? AND is_preregistered = 0",
+				).run(clientId);
+			}
+		}
+		return { app: loadApp(clientId) };
+	}
 
-	return { app: newApp };
+	const fresh = loadApp(clientId);
+	if (!fresh || !allowed(fresh)) {
+		return {
+			code: "invalid_redirect",
+			error:
+				published.length > 0
+					? `redirect_uri not registered in client metadata. The client published a list of allowed redirect URIs, but ${redirectUri} is not in that list.`
+					: "The client publishes no redirect_uris, so redirect_uri must have the same origin as client_id.",
+		};
+	}
+
+	return { app: fresh };
 }

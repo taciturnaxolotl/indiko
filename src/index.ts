@@ -7,8 +7,9 @@ import appsHTML from "./html/apps.html";
 import indexHTML from "./html/index.html";
 import loginHTML from "./html/login.html";
 import { getLdapAccounts, updateOrphanedAccounts } from "./ldap-cleanup";
-import { setServer } from "./lib/client-ip";
 import { sweepExpiredRecords } from "./lib/cleanup";
+import { setServer } from "./lib/client-ip";
+import { corsPreflight, methodNotAllowed, withCors } from "./lib/oauth/errors";
 import { getDiscoveryDocument, getJWKS } from "./oidc";
 import {
 	deleteSelfAccount,
@@ -196,16 +197,21 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 		},
 		"/.well-known/openid-configuration": () => {
 			const origin = process.env.ORIGIN as string;
-			return Response.json(getDiscoveryDocument(origin));
+			return withCors(Response.json(getDiscoveryDocument(origin)));
 		},
 		"/jwks": async () => {
 			const jwks = await getJWKS();
-			return Response.json(jwks);
+			return withCors(
+				Response.json(jwks, {
+					headers: { "Cache-Control": "public, max-age=3600" },
+				}),
+			);
 		},
 		// OAuth/IndieAuth endpoints
 		"/userinfo": (req: Request) => {
-			if (req.method === "GET") return userinfo(req);
-			return new Response("Method not allowed", { status: 405 });
+			if (req.method === "GET") return withCors(userinfo(req));
+			if (req.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
+			return methodNotAllowed("GET");
 		},
 		// API endpoints
 		"/api/hello": hello,
@@ -286,16 +292,18 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 			return new Response("Method not allowed", { status: 405 });
 		},
 		"/auth/token": async (req: Request) => {
-			if (req.method === "POST") return await token(req);
-			return new Response("Method not allowed", { status: 405 });
+			if (req.method === "POST") return withCors(await token(req));
+			if (req.method === "OPTIONS") return corsPreflight();
+			return methodNotAllowed("POST");
 		},
 		"/auth/token/introspect": async (req: Request) => {
 			if (req.method === "POST") return await tokenIntrospect(req);
-			return new Response("Method not allowed", { status: 405 });
+			return methodNotAllowed("POST");
 		},
 		"/auth/token/revoke": async (req: Request) => {
-			if (req.method === "POST") return await tokenRevoke(req);
-			return new Response("Method not allowed", { status: 405 });
+			if (req.method === "POST") return withCors(await tokenRevoke(req));
+			if (req.method === "OPTIONS") return corsPreflight();
+			return methodNotAllowed("POST");
 		},
 		"/auth/logout": (req: Request) => {
 			if (req.method === "POST") return logout(req);

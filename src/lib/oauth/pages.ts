@@ -208,6 +208,16 @@ const CONSENT_STYLES = `
 		color: var(--paper-dim);
 		font-family: monospace;
 		margin-top: 0.25rem;
+		word-break: break-all;
+	}
+	.identity-only {
+		margin-bottom: 1.75rem;
+		padding: 1.25rem;
+		background: rgba(12, 23, 19, 0.4);
+		border: 1px solid var(--paper-dim);
+		font-size: 0.9375rem;
+		color: var(--paper-dim);
+		line-height: 1.6;
 	}
 	.app-description {
 		font-size: 0.9375rem;
@@ -379,7 +389,6 @@ const CONSENT_STYLES = `
 export interface ConsentPageOptions {
 	username: string;
 	appName: string;
-	appUrl: string | null;
 	appLogo: string | null | undefined;
 	appDescription: string | null | undefined;
 	scopes: string[];
@@ -451,21 +460,25 @@ export function consentPage(opts: ConsentPageOptions): Response {
       </div>
       <div class="app-info">
         <div class="app-name">${escapeHtml(opts.appName)}</div>
-        ${opts.appUrl ? `<div class="app-url">${escapeHtml(opts.appUrl)}</div>` : ""}
+        <div class="app-url">${escapeHtml(opts.clientId)}</div>
         ${opts.appDescription ? `<div class="app-description">${escapeHtml(opts.appDescription)}</div>` : ""}
       </div>
     </div>
 
-    <p class="request-text">wants to access your account</p>
+    <p class="request-text">${opts.scopes.length ? "wants to access your account" : "wants to know who you are"}</p>
     ${opts.me ? `<div class="me-identity">requesting identity <code>${escapeHtml(opts.me)}</code></div>` : ""}
 
     <form method="POST" action="/auth/authorize">
       ${resourceBlock}
-      <div class="scopes">
+      ${
+				opts.scopes.length
+					? `<div class="scopes">
         <div class="scope-title">requested permissions</div>
         <ul class="scope-list">${scopeItems}
         </ul>
-      </div>
+      </div>`
+					: `<div class="identity-only">This app only asked to confirm your identity. It will learn your profile URL and nothing else, and gets no access token.</div>`
+			}
 
       ${resourceHidden}
       <input type="hidden" name="csrf_token" value="${escapeHtml(opts.csrfToken)}" />
@@ -475,8 +488,7 @@ export function consentPage(opts: ConsentPageOptions): Response {
       <input type="hidden" name="code_challenge" value="${escapeHtml(opts.codeChallenge)}" />
       ${opts.me ? `<input type="hidden" name="me" value="${escapeHtml(opts.me)}" />` : ""}
       ${opts.nonce ? `<input type="hidden" name="nonce" value="${escapeHtml(opts.nonce)}" />` : ""}
-      <!-- Always include profile scope as it's required -->
-      <input type="hidden" name="scope" value="profile" />
+      ${opts.scopes.includes("profile") ? `<input type="hidden" name="scope" value="profile" />` : ""}
 
       <div class="buttons">
         <button type="submit" name="action" value="deny" class="deny">deny</button>

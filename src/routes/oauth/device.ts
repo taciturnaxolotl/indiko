@@ -115,8 +115,8 @@ export async function deviceAuthorization(req: Request): Promise<Response> {
 		if (grantError) return grantError;
 
 		// Auto-register the client if not already known (same as authorization flow).
-		// Device flow has no redirect_uri, so pass a same-origin placeholder.
-		const appResult = await ensureApp(clientId, `${clientId}callback`);
+		// Device flow has no redirect_uri, so there is nothing to match.
+		const appResult = await ensureApp(clientId, null);
 		if (appResult.error) {
 			return oauthError(400, "invalid_client", appResult.error);
 		}

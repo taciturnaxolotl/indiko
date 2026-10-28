@@ -9,8 +9,10 @@ import {
 	NO_STORE_HEADERS,
 	oauthError,
 	parseBody,
+	unauthorizedResponse,
 } from "../../lib/oauth/errors";
 import { canonicalizeURL, verifyPKCE } from "../../lib/oauth/urls";
+import { verifySecret } from "../../lib/secrets";
 import { signIDToken } from "../../oidc";
 
 const ACCESS_TOKEN_TTL = 3600; // 1 hour
@@ -63,6 +65,16 @@ export async function token(req: Request): Promise<Response> {
 
 		const { grant_type } = body;
 
+		// RFC 6749 §5.2: a missing parameter is invalid_request; a grant we do
+		// not issue is unsupported_grant_type.
+		if (!grant_type) {
+			return oauthError(
+				400,
+				"invalid_request",
+				"grant_type parameter is required",
+			);
+		}
+
 		if (
 			grant_type !== "authorization_code" &&
 			grant_type !== "refresh_token" &&
@@ -77,10 +89,17 @@ export async function token(req: Request): Promise<Response> {
 
 		// RFC 7591 §2: a client may only use the grants it registered for.
 		if (body.client_id) {
-			const grantError = verifyGrantAllowed(
-				canonicalizeURL(body.client_id),
-				grant_type,
-			);
+			let clientId: string;
+			try {
+				clientId = canonicalizeURL(body.client_id);
+			} catch {
+				return oauthError(
+					400,
+					"invalid_request",
+					"Invalid client_id URL format",
+				);
+			}
+			const grantError = verifyGrantAllowed(clientId, grant_type);
 			if (grantError) return grantError;
 		}
 
@@ -114,9 +133,12 @@ async function handleRefreshTokenGrant(
 		return oauthError(400, "invalid_request", "client_id is required");
 	}
 
-	const client_id = body.client_id
-		? canonicalizeURL(body.client_id)
-		: undefined;
+	let client_id: string;
+	try {
+		client_id = canonicalizeURL(body.client_id);
+	} catch {
+		return oauthError(400, "invalid_request", "Invalid client_id URL format");
+	}
 
 	const tokenData = db
 		.query(
@@ -175,6 +197,23 @@ async function handleRefreshTokenGrant(
 		return credentialError;
 	}
 
+	// RFC 6749 §6: the requested scope may narrow the original grant but can
+	// never widen it. Absent, the new token keeps the scope it had.
+	const grantedScopes = tokenData.scope.split(" ").filter(Boolean);
+	let newScope = tokenData.scope;
+	if (body.scope !== undefined && body.scope.trim() !== "") {
+		const requested = [...new Set(body.scope.split(" ").filter(Boolean))];
+		const extra = requested.filter((sc) => !grantedScopes.includes(sc));
+		if (extra.length > 0) {
+			return oauthError(
+				400,
+				"invalid_scope",
+				`Refresh cannot add scopes not in the original grant: ${extra.join(" ")}`,
+			);
+		}
+		newScope = requested.join(" ");
+	}
+
 	// Rotate: issue a new row in the same family, mark this one rotated.
 	// The UPDATE must be atomic (WHERE rotated = 0) — otherwise two concurrent
 	// refreshes both win and reuse detection is defeated.
@@ -210,7 +249,7 @@ async function handleRefreshTokenGrant(
 		newAccessToken,
 		tokenData.user_id,
 		tokenData.client_id,
-		tokenData.scope,
+		newScope,
 		expiresAt,
 		newRefreshToken,
 		refreshExpiresAt,
@@ -242,7 +281,7 @@ async function handleRefreshTokenGrant(
 			expires_in: ACCESS_TOKEN_TTL,
 			refresh_token: newRefreshToken,
 			me: meValue,
-			scope: tokenData.scope,
+			scope: newScope,
 			iss: origin,
 		},
 		{ headers: NO_STORE_HEADERS },
@@ -501,7 +540,7 @@ async function handleAuthorizationCodeGrant(
 
 	const authcode = db
 		.query(
-			"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me, nonce, auth_time, resource FROM authcodes WHERE code = ?",
+			"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me, nonce, auth_time, resource, family FROM authcodes WHERE code = ?",
 		)
 		.get(code) as
 		| {
@@ -516,6 +555,7 @@ async function handleAuthorizationCodeGrant(
 				nonce: string | null;
 				auth_time: number | null;
 				resource: string | null;
+				family: string | null;
 		  }
 		| undefined;
 
@@ -524,6 +564,16 @@ async function handleAuthorizationCodeGrant(
 	}
 
 	if (authcode.used) {
+		// RFC 6749 §4.1.2 / RFC 9700 §4.5: a replayed code means it leaked.
+		// Whoever holds the tokens it minted (us or the attacker) loses them.
+		if (authcode.family) {
+			db.query("UPDATE tokens SET revoked = 1 WHERE family = ?").run(
+				authcode.family,
+			);
+			console.warn(
+				`[token] authorization code reuse detected — family ${authcode.family} revoked`,
+			);
+		}
 		return oauthError(400, "invalid_grant", "Authorization code already used");
 	}
 
@@ -553,9 +603,13 @@ async function handleAuthorizationCodeGrant(
 	// Mark code as used — atomic guard prevents double-use race.
 	// Two concurrent exchanges with the same code: the first UPDATE
 	// sets used=1 and returns changes=1; the second gets changes=0.
+	// The family recorded here is what a later replay revokes.
+	const family = crypto.randomUUID();
 	const markResult = db
-		.query("UPDATE authcodes SET used = 1 WHERE code = ? AND used = 0")
-		.run(code);
+		.query(
+			"UPDATE authcodes SET used = 1, family = ? WHERE code = ? AND used = 0",
+		)
+		.run(family, code);
 
 	if (markResult.changes === 0) {
 		return oauthError(400, "invalid_grant", "Authorization code already used");
@@ -603,22 +657,26 @@ async function handleAuthorizationCodeGrant(
 		.query("SELECT role FROM permissions WHERE user_id = ? AND client_id = ?")
 		.get(authcode.user_id, client_id) as { role: string | null } | undefined;
 
-	// Use custom domain as identity if user has verified one, otherwise indiko profile
-	let meValue = `${process.env.ORIGIN}/u/${user.username}`;
-	if (user.url) {
-		meValue = user.url;
+	const origin = process.env.ORIGIN || "http://localhost:3000";
+
+	// The identity we return is always the one we verified: the user's own
+	// domain when they have proven one, otherwise their indiko profile. The
+	// `me` the client asked for was only ever a hint (checked at authorization
+	// time to be one of the user's identities) and is honored when it was.
+	let meValue = user.url || `${origin}/u/${user.username}`;
+	if (authcode.me) {
+		const own = [`${origin}/u/${user.username}`, user.url].filter(Boolean);
+		if (own.includes(authcode.me)) meValue = authcode.me;
 	}
 
-	// Validate that the user controls the requested me parameter
-	if (authcode.me && authcode.me !== meValue) {
-		return oauthError(
-			400,
-			"invalid_grant",
-			"The requested identity does not match the user's verified domain",
+	// IndieAuth §5.3.3: a code issued without any scope is exchanged for the
+	// user's identity only. No access token exists, so nothing is stored.
+	if (scopes.length === 0) {
+		return Response.json(
+			{ me: meValue, iss: origin },
+			{ headers: NO_STORE_HEADERS },
 		);
 	}
-
-	const origin = process.env.ORIGIN || "http://localhost:3000";
 
 	const accessToken = generateToken();
 	const expiresAt = now + ACCESS_TOKEN_TTL;
@@ -639,7 +697,7 @@ async function handleAuthorizationCodeGrant(
 		expiresAt,
 		refreshToken,
 		refreshExpiresAt,
-		crypto.randomUUID(),
+		family,
 		authcode.resource, // RFC 8707: bind the token to the requested audience
 	);
 
@@ -708,6 +766,51 @@ async function handleAuthorizationCodeGrant(
 	return Response.json(response, { headers: NO_STORE_HEADERS });
 }
 
+/**
+ * IndieAuth §6.1: the introspection endpoint MUST require authorization, or
+ * it becomes an oracle that confirms any token it is shown. Two credentials
+ * are accepted: a live indiko access token as a Bearer credential (the usual
+ * case for a resource server, which may present the very token it received),
+ * or the client_id and client_secret of a confidential client.
+ */
+function introspectionCallerAuthorized(
+	req: Request,
+	body: Record<string, string>,
+): boolean {
+	const authHeader = req.headers.get("Authorization");
+	if (authHeader?.startsWith("Bearer ")) {
+		const credential = authHeader.substring(7).trim();
+		if (!credential) return false;
+		const row = db
+			.query(
+				"SELECT t.expires_at, t.revoked, u.status FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
+			)
+			.get(credential) as
+			| { expires_at: number; revoked: number; status: string }
+			| undefined;
+		if (!row || row.revoked === 1 || row.status !== "active") return false;
+		return row.expires_at >= Math.floor(Date.now() / 1000);
+	}
+
+	if (body.client_id && body.client_secret) {
+		let clientId: string;
+		try {
+			clientId = canonicalizeURL(body.client_id);
+		} catch {
+			return false;
+		}
+		const app = db
+			.query(
+				"SELECT client_secret_hash FROM apps WHERE client_id = ? AND is_preregistered = 1",
+			)
+			.get(clientId) as { client_secret_hash: string | null } | undefined;
+		if (!app?.client_secret_hash) return false;
+		return verifySecret(body.client_secret, app.client_secret_hash);
+	}
+
+	return false;
+}
+
 // POST /auth/token/introspect - Introspect access token
 export async function tokenIntrospect(req: Request): Promise<Response> {
 	try {
@@ -717,6 +820,14 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 				400,
 				"invalid_request",
 				"Content-Type must be application/json or application/x-www-form-urlencoded",
+			);
+		}
+
+		if (!introspectionCallerAuthorized(req, body)) {
+			// RFC 7662 §2.3: say nothing about the token, not even active:false.
+			return unauthorizedResponse(
+				"invalid_token",
+				"Introspection requires a valid Bearer access token or client credentials",
 			);
 		}
 
@@ -744,12 +855,12 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 			| undefined;
 
 		if (!tokenData || tokenData.revoked === 1) {
-			return Response.json({ active: false });
+			return Response.json({ active: false }, { headers: NO_STORE_HEADERS });
 		}
 
 		const now = Math.floor(Date.now() / 1000);
 		if (tokenData.expires_at < now) {
-			return Response.json({ active: false });
+			return Response.json({ active: false }, { headers: NO_STORE_HEADERS });
 		}
 
 		const user = db
@@ -772,17 +883,20 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 					? resources
 					: undefined;
 
-		return Response.json({
-			active: true,
-			sub: meValue,
-			me: meValue,
-			client_id: tokenData.client_id,
-			scope: tokenData.scope,
-			exp: tokenData.expires_at,
-			iat: tokenData.created_at,
-			username: tokenData.username,
-			...(aud ? { aud } : {}),
-		});
+		return Response.json(
+			{
+				active: true,
+				sub: meValue,
+				me: meValue,
+				client_id: tokenData.client_id,
+				scope: tokenData.scope,
+				exp: tokenData.expires_at,
+				iat: tokenData.created_at,
+				username: tokenData.username,
+				...(aud ? { aud } : {}),
+			},
+			{ headers: NO_STORE_HEADERS },
+		);
 	} catch (error) {
 		console.error("Token introspection error:", error);
 		return oauthError(500, "server_error", "Internal server error");

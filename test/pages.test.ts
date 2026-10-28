@@ -39,7 +39,6 @@ describe("consentPage", () => {
 	const base = {
 		username: "kieran",
 		appName: "Test App",
-		appUrl: "example.com",
 		appLogo: null,
 		appDescription: null,
 		scopes: ["profile", "email"],
@@ -68,6 +67,18 @@ describe("consentPage", () => {
 		const html = await consentPage(base).text();
 		expect(html).toContain('value="profile" checked disabled');
 		expect(html).toContain('value="email" checked');
+		expect(html).toContain('type="hidden" name="scope" value="profile"');
+	});
+
+	test("shows the full client_id, not just a name (S206)", async () => {
+		const html = await consentPage(base).text();
+		expect(html).toContain("https://example.com/");
+	});
+
+	test("scope-less request explains identity-only and submits no scope", async () => {
+		const html = await consentPage({ ...base, scopes: [] }).text();
+		expect(html).toContain("wants to know who you are");
+		expect(html).not.toContain('name="scope"');
 	});
 
 	test("hidden inputs round-trip flow params", async () => {
