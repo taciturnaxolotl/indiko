@@ -466,7 +466,8 @@ export async function ensureApp(
 		if (!canRefreshMetadata(clientId)) {
 			return {
 				code: "invalid_redirect",
-				error: `redirect_uri is not in the client's published redirect_uris, and ${redirectUri} is not on the client's origin.`,
+				error:
+					"The redirect_uri is not in the client's published redirect_uris and is not on the client's origin.",
 			};
 		}
 	}
@@ -508,7 +509,7 @@ export async function ensureApp(
 			code: "invalid_redirect",
 			error:
 				published.length > 0
-					? `redirect_uri not registered in client metadata. The client published a list of allowed redirect URIs, but ${redirectUri} is not in that list.`
+					? "The client publishes a list of allowed redirect URIs, and this redirect_uri is not in that list."
 					: "The client publishes no redirect_uris, so redirect_uri must have the same origin as client_id.",
 		};
 	}

@@ -55,6 +55,10 @@ export const BASE_STYLES = `
 		border-left: 4px solid var(--accent-deep);
 		padding: 1rem;
 		margin: 1.5rem 0;
+		min-width: 0;
+	}
+	.error-details p, .hint, .box p {
+		overflow-wrap: anywhere;
 	}
 	.error-details strong {
 		display: block;
