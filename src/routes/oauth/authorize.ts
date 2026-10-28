@@ -435,7 +435,10 @@ export async function authorizePost(req: Request): Promise<Response> {
 		try {
 			body = (await req.json()) as Record<string, string>;
 		} catch {
-			return new Response("Invalid JSON body", { status: 400 });
+			return errorPage({
+				title: "Invalid Request",
+				message: "The consent submission was not valid JSON.",
+			});
 		}
 		formData = new FormData();
 		for (const [key, value] of Object.entries(body)) {
@@ -460,12 +463,22 @@ export async function authorizePost(req: Request): Promise<Response> {
 	const user = getUserFromCookie(req);
 
 	if (!user) {
-		return new Response("Unauthorized", { status: 401 });
+		return errorPage({
+			title: "Signed Out",
+			message:
+				"Your session ended before the consent form was submitted. Start the sign-in again from the app.",
+			status: 401,
+		});
 	}
 
 	// The form's CSRF token must be the one derived from this session cookie.
 	if (!csrfTokenMatches(body.csrf_token, getCsrfToken(req))) {
-		return new Response("CSRF token mismatch", { status: 403 });
+		return errorPage({
+			title: "Stale Consent Form",
+			message:
+				"This consent form does not belong to your current session, so it was not accepted. Start the sign-in again from the app.",
+			status: 403,
+		});
 	}
 
 	const action = body.action;
@@ -478,7 +491,11 @@ export async function authorizePost(req: Request): Promise<Response> {
 	const nonce = body.nonce || null; // OIDC nonce
 
 	if (!rawClientId || !rawRedirectUri || !state || !codeChallenge) {
-		return new Response("Missing required parameters", { status: 400 });
+		return errorPage({
+			title: "Invalid Request",
+			message:
+				"The consent submission is missing client_id, redirect_uri, state or code_challenge.",
+		});
 	}
 
 	let clientId: string;
@@ -487,8 +504,10 @@ export async function authorizePost(req: Request): Promise<Response> {
 		clientId = canonicalizeURL(rawClientId);
 		redirectUri = canonicalizeURL(rawRedirectUri);
 	} catch {
-		return new Response("Invalid client_id or redirect_uri URL format", {
-			status: 400,
+		return errorPage({
+			title: "Invalid Request",
+			message:
+				"The consent submission carried a client_id or redirect_uri that is not a valid URL.",
 		});
 	}
 
@@ -504,12 +523,23 @@ export async function authorizePost(req: Request): Promise<Response> {
 		| undefined;
 
 	if (!app) {
-		return new Response("Invalid client_id", { status: 400 });
+		return errorPage({
+			title: "Invalid Client ID",
+			message: "The consent submission names a client that is not registered.",
+			details: [
+				{ label: "Provided client_id:", value: clientId, isCode: true },
+			],
+		});
 	}
 
 	if (!isRedirectAllowed(app, clientId, redirectUri)) {
-		return new Response("redirect_uri not registered for this client", {
-			status: 400,
+		return errorPage({
+			title: "Unauthorized Redirect URI",
+			message:
+				"The consent submission carried a redirect_uri that is not registered for this client, so you were not redirected.",
+			details: [
+				{ label: "Requested redirect_uri:", value: redirectUri, isCode: true },
+			],
 		});
 	}
 
@@ -540,7 +570,11 @@ export async function authorizePost(req: Request): Promise<Response> {
 		formData.getAll("resource") as string[],
 	);
 	if (approvedResources === null) {
-		return new Response("invalid_target", { status: 400 });
+		return errorPage({
+			title: "Invalid Resource",
+			message:
+				"The consent submission included a resource that is not an absolute https URI.",
+		});
 	}
 	const resourceStored = resourcesToStored(approvedResources);
 

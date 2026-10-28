@@ -107,7 +107,12 @@ export const FRAME_DENY_HEADERS = {
 	"Content-Security-Policy": "frame-ancestors 'none'",
 };
 
-function page(title: string, styles: string, body: string): Response {
+function page(
+	title: string,
+	styles: string,
+	body: string,
+	status = 400,
+): Response {
 	const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -127,7 +132,7 @@ ${body}
 </html>`;
 
 	return new Response(html, {
-		status: 400,
+		status,
 		headers: { "Content-Type": "text/html", ...FRAME_DENY_HEADERS },
 	});
 }
@@ -137,6 +142,8 @@ export interface ErrorPageOptions {
 	message: string;
 	details?: Array<{ label: string; value: string; isCode?: boolean }>;
 	hint?: string;
+	/** HTTP status; defaults to 400. */
+	status?: number;
 }
 
 // Branded error page for authorization failures that cannot be redirected
@@ -161,6 +168,7 @@ export function errorPage(opts: ErrorPageOptions): Response {
 		${details}
 		${opts.hint ? `<p class="hint">${opts.hint}</p>` : ""}
 	</div>`,
+		opts.status ?? 400,
 	);
 }
 

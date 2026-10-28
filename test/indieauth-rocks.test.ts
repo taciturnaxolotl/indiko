@@ -318,6 +318,43 @@ describe("S2xx authorization requests", () => {
 		);
 		expect(res.status).toBe(400);
 		expect(res.headers.get("Location")).toBeNull();
+		expect(res.headers.get("Content-Type")).toContain("text/html");
+		expect(await res.text()).toContain("Invalid Request");
+	});
+
+	test("consent POST failures render the branded error page, not plain text", async () => {
+		seedApp();
+		const userId = createUser({ username: "kieran" });
+		const cookie = createSession(userId);
+
+		const noCsrf = await authorizePost(
+			new Request("http://localhost/auth/authorize", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/x-www-form-urlencoded",
+					Cookie: `indiko_session=${cookie}`,
+				},
+				body: new URLSearchParams({ action: "allow" }).toString(),
+			}),
+		);
+		expect(noCsrf.status).toBe(403);
+		expect(noCsrf.headers.get("Content-Type")).toContain("text/html");
+		expect(noCsrf.headers.get("X-Frame-Options")).toBe("DENY");
+
+		const badRedirect = await authorizePost(
+			consentPost(
+				{
+					action: "allow",
+					client_id: CLIENT_ID,
+					redirect_uri: "https://evil-site.net/cb",
+					state: "s",
+					code_challenge: CHALLENGE,
+				},
+				cookie,
+			),
+		);
+		expect(badRedirect.status).toBe(400);
+		expect(await badRedirect.text()).toContain("Unauthorized Redirect URI");
 	});
 
 	test("S215: missing code_challenge is refused", async () => {
