@@ -1,7 +1,22 @@
 ---
 title: indiko documentation
-subtitle: IndieAuth/OAuth 2.0 server with passkey authentication
+subtitle: IndieAuth/OAuth 2.0 authorization server with passkey authentication
 ---
+
+## what indiko is
+
+Indiko is an IndieAuth server and provides the authorization endpoints and token endpoints that you can use in other apps!
+
+### spec version
+
+Indiko follows the **IndieAuth Living Standard, 11 July 2024** (the current edition at [indieauth.spec.indieweb.org](https://indieauth.spec.indieweb.org/)), together with the OAuth 2.0 Client ID Metadata Document. The main changes:
+
+- Client information comes from a **JSON metadata document** at the `client_id` URL (`client_name`, `logo_uri`, `redirect_uris`). The older `h-app` microformats discovery is **not** supported; an HTML `client_id` page is still read for `<link rel="redirect_uri">` tags, but nothing else is taken from it.
+- Server discovery is through `rel="indieauth-metadata"` (Link header and HTML `<link>`) pointing at an [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414) metadata document, which is also served at the `.well-known` path. Legacy `rel="authorization_endpoint"` / `rel="token_endpoint"` links are published too for older clients.
+- PKCE with `S256` is required, `iss` is returned on every redirect, and a scope-less request yields identity only.
+- Codes issued without a scope are redeemed at the **token endpoint** (the 2024 behaviour); the authorization endpoint also accepts the exchange for clients written against the 2022 edition.
+
+Conformance is tracked against the [indieauth.rocks](https://indieauth.rocks/server-tests) server suite; `test/indieauth-rocks.test.ts` attempts to replicate the checks for our ci as well.
 
 ## openid connect (oidc)
 

@@ -2,7 +2,9 @@
 
 ![screenshot of oauth page](https://l4.dunkirk.sh/i/tdChAD_1IvnH.webp)
 
-No that was not a typo the project's name actually is `indiko`! This is a small implementation of [IndieAuth](https://indieweb.org/How_to_set_up_web_sign-in_on_your_own_domain) running on bun with sqlite and serving as the authentication provider for my homelab / side projects it also supports custom clients with roles over the OAuth 2.0 spec.
+No that was not a typo the project's name actually is `indiko`! This is a small IndieAuth **server** (authorization endpoint + token endpoint) running on bun with sqlite and serving as the authentication provider for my homelab / side projects. It also supports custom clients with roles over the OAuth 2.0 spec.
+
+It follows the [IndieAuth Living Standard, 11 July 2024](https://indieauth.spec.indieweb.org/). See the [docs](https://indiko.dunkirk.sh/docs) for the full list of what is and is not supported.
 
 The canonical repo for this is hosted on tangled over at [`dunkirk.sh/indiko`](https://tangled.org/@dunkirk.sh/indiko)
 
