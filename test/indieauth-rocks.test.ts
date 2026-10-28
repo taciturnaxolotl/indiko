@@ -818,6 +818,32 @@ describe("S6xx revocation and S7xx userinfo", () => {
 		expect(unknown.status).toBe(200);
 	});
 
+	test("S701: userinfo carries the token response's profile keys (and the OIDC ones)", async () => {
+		seedApp();
+		const userId = createUser({ username: "kieran" });
+		db.query("UPDATE users SET photo = ?, url = ?, email = ? WHERE id = ?").run(
+			"https://img-host.net/k.png",
+			"https://kieran-site.net/",
+			"k@kieran-site.net",
+			userId,
+		);
+		const code = seedAuthCode(userId, { scopes: ["profile", "email"] });
+		const tokenBody = (await (await exchange(code)).json()) as {
+			access_token: string;
+			profile: Record<string, string>;
+		};
+		const info = (await userinfo(
+			new Request("http://localhost/userinfo", {
+				headers: { Authorization: `Bearer ${tokenBody.access_token}` },
+			}),
+		).json()) as Record<string, string>;
+		for (const [key, value] of Object.entries(tokenBody.profile)) {
+			expect(info[key]).toBe(value);
+		}
+		expect(info.picture).toBe(tokenBody.profile.photo);
+		expect(info.website).toBe(tokenBody.profile.url);
+	});
+
 	test("S702/S703: userinfo without or with a bad token is 401", async () => {
 		const none = userinfo(new Request("http://localhost/userinfo"));
 		expect(none.status).toBe(401);

@@ -388,12 +388,14 @@ Response (claims depend on granted scopes):
   "sub": "{{origin}}/u/username",
   "name": "Jane Doe",
   "email": "jane@example.com",
+  "photo": "https://example.com/photo.jpg",
   "picture": "https://example.com/photo.jpg",
+  "url": "https://jane.example.com",
   "website": "https://jane.example.com"
 }
 ```
 
-> **OIDC claims:** The userinfo endpoint returns OIDC-standard claim names (`picture` instead of `photo`, `website` instead of `url`). The `sub` claim always uses the canonical profile URL for stability.
+> **Two vocabularies:** IndieAuth clients expect the same keys as the token response's `profile` object (`name`, `url`, `photo`, `email`); OIDC clients expect `picture` and `website`. The endpoint returns both so either kind works unchanged. The `sub` claim always uses the canonical profile URL for stability.
 
 ### device flow (RFC 8628)
 

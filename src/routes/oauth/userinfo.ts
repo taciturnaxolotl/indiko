@@ -69,11 +69,19 @@ export function userinfo(req: Request): Response {
 		// sub claim - use stable canonical profile URL (OIDC Core §2)
 		response.sub = `${origin}/u/${tokenData.username}`;
 
+		// One endpoint serves two audiences: IndieAuth §9 expects the same
+		// shape as the token response's profile object (name, url, photo),
+		// OIDC Core §5.1 expects picture and website. Send both spellings so
+		// neither kind of client has to know about the other.
 		if (scopes.includes("profile")) {
 			response.name = tokenData.name;
-			if (tokenData.photo) response.picture = tokenData.photo; // OIDC uses 'picture'
+			if (tokenData.photo) {
+				response.photo = tokenData.photo;
+				response.picture = tokenData.photo;
+			}
 			if (tokenData.url) {
-				response.website = tokenData.url; // OIDC uses 'website'
+				response.url = tokenData.url;
+				response.website = tokenData.url;
 			}
 		}
 
