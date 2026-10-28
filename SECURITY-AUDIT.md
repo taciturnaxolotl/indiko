@@ -376,10 +376,12 @@ Semantics only. Some errors should be 401, 403, or 500.
 Prompted by [issue #4](https://tangled.org/dunkirk.sh/indiko/issues/4) (run the
 [indieauth.rocks](https://indieauth.rocks/server-tests) server suite). Two
 tracks: a static conformance pass over all 89 server tests, and a fresh
-adversarial review of the auth, API, SSRF and DCR surfaces. Code review only;
-the live suite still needs a run against the deployed instance (enter a
-`/u/{username}` profile URL at indieauth.rocks). `test/indieauth-rocks.test.ts`
-mirrors each criterion by test id so regressions show up locally.
+adversarial review of the auth, API, SSRF and DCR surfaces. After deploying,
+the live suite was run against `indiko.dunkirk.sh` and the
+[published report](https://indieauth.rocks/implementations/3) shows 75 passed,
+0 failed, 0 warnings, 9 skipped (JWT and refresh-token checks that do not
+apply). `test/indieauth-rocks.test.ts` mirrors each criterion by test id so
+regressions show up locally.
 
 ## indieauth.rocks conformance gaps found and fixed
 

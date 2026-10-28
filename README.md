@@ -4,7 +4,7 @@
 
 No that was not a typo the project's name actually is `indiko`! This is a small IndieAuth **server** (authorization endpoint + token endpoint) running on bun with sqlite and serving as the authentication provider for my homelab / side projects. It also supports custom clients with roles over the OAuth 2.0 spec.
 
-It follows the [IndieAuth Living Standard, 11 July 2024](https://indieauth.spec.indieweb.org/). See the [docs](https://indiko.dunkirk.sh/docs) for the full list of what is and is not supported.
+It follows the [IndieAuth Living Standard, 11 July 2024](https://indieauth.spec.indieweb.org/) and passes every applicable check in the [indieauth.rocks server suite](https://indieauth.rocks/implementations/3) (75 passed, 0 failed, 0 warnings; the 9 skipped are the JWT access-token and refresh-token checks, which do not apply to opaque tokens and to grants without `offline_access`). See the [docs](https://indiko.dunkirk.sh/docs) for the full list of what is and is not supported.
 
 The canonical repo for this is hosted on tangled over at [`dunkirk.sh/indiko`](https://tangled.org/@dunkirk.sh/indiko)
 
