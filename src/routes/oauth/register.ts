@@ -4,6 +4,12 @@ import { getClientIp } from "../../lib/client-ip";
 import { SUPPORTED_GRANT_TYPES } from "../../lib/oauth/client-auth";
 import { NO_STORE_HEADERS, oauthError } from "../../lib/oauth/errors";
 import { hashSecret } from "../../lib/secrets";
+import { validateExternalURL } from "../../lib/ssrf-safe-fetch";
+
+// Caps on the free-text metadata an anonymous caller can make us store and
+// later render on the consent page / admin UI.
+const MAX_CLIENT_NAME_LENGTH = 256;
+const MAX_LOGO_URI_LENGTH = 2048;
 
 function generateClientId(): string {
 	return `ikc_${nanoid(21)}`; // indiko client
@@ -162,9 +168,52 @@ export async function registerClient(req: Request): Promise<Response> {
 		}
 	}
 
-	const clientName =
-		typeof body.client_name === "string" ? body.client_name : null;
-	const logoUri = typeof body.logo_uri === "string" ? body.logo_uri : null;
+	// client_name: RFC 7591 §2 makes it optional, so absence is allowed (the
+	// admin UI falls back to the client_id), but a present value must be a
+	// non-empty, bounded string — it is rendered verbatim on the consent page.
+	let clientName: string | null = null;
+	if (body.client_name !== undefined && body.client_name !== null) {
+		if (
+			typeof body.client_name !== "string" ||
+			!body.client_name.trim() ||
+			body.client_name.length > MAX_CLIENT_NAME_LENGTH
+		) {
+			return oauthError(
+				400,
+				"invalid_client_metadata",
+				`client_name must be a non-empty string of at most ${MAX_CLIENT_NAME_LENGTH} characters`,
+			);
+		}
+		clientName = body.client_name;
+	}
+
+	// logo_uri: the consent page will <img src> whatever we store, so it must be
+	// a bounded, public http(s) URL — the same SSRF rules the URL-client path
+	// applies to a fetched logo.
+	let logoUri: string | null = null;
+	if (body.logo_uri !== undefined && body.logo_uri !== null) {
+		if (
+			typeof body.logo_uri !== "string" ||
+			body.logo_uri.length > MAX_LOGO_URI_LENGTH
+		) {
+			return oauthError(
+				400,
+				"invalid_client_metadata",
+				`logo_uri must be a string of at most ${MAX_LOGO_URI_LENGTH} characters`,
+			);
+		}
+		if (body.logo_uri) {
+			const logoCheck = validateExternalURL(body.logo_uri);
+			if (!logoCheck.safe) {
+				return oauthError(
+					400,
+					"invalid_client_metadata",
+					`logo_uri is not an acceptable URL: ${logoCheck.error ?? "invalid"}`,
+				);
+			}
+			logoUri = body.logo_uri;
+		}
+	}
 
 	// RFC 7591 §2 / RFC 6749 §2.1: a client that cannot keep a secret should say
 	// so and register as public. A CLI shipping one secret in its binary is
@@ -189,7 +238,7 @@ export async function registerClient(req: Request): Promise<Response> {
 	const now = Math.floor(Date.now() / 1000);
 
 	db.query(
-		"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, client_secret_hash, grant_types, first_seen, last_used) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)",
+		"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, registration, client_secret_hash, grant_types, first_seen, last_used) VALUES (?, ?, ?, ?, 1, 'dcr', ?, ?, ?, ?)",
 	).run(
 		clientId,
 		JSON.stringify(redirectUris),

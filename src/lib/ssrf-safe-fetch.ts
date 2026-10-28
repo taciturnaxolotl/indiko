@@ -25,6 +25,7 @@ function isPrivateIP(ip: string): boolean {
 	const ipv4Patterns = [
 		/^0\./, // 0.0.0.0/8 - Current network
 		/^10\./, // 10.0.0.0/8 - Private
+		/^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./, // 100.64.0.0/10 - CGNAT / Tailscale / Alibaba metadata (100.100.100.200)
 		/^127\./, // 127.0.0.0/8 - Loopback
 		/^169\.254\./, // 169.254.0.0/16 - Link-local (including AWS metadata 169.254.169.254)
 		/^172\.(1[6-9]|2[0-9]|3[0-1])\./, // 172.16.0.0/12 - Private
@@ -328,6 +329,11 @@ const MAX_REDIRECTS = 5;
  *
  * Validates the URL, resolves DNS and checks every returned IP, then follows
  * redirects manually — validating URL + DNS for each hop before connecting.
+ *
+ * The `timeout` covers connection + response headers only. The body is NOT
+ * read here, so a slow or endless body is the caller's problem: read it with
+ * {@link readBodyCapped}, which enforces its own byte cap and read timeout,
+ * rather than `response.text()` / `response.json()`.
  */
 export async function safeFetch(
 	url: string,
@@ -402,4 +408,77 @@ export async function safeFetch(
 	}
 
 	return { success: false, error: "Too many redirects" };
+}
+
+const DEFAULT_BODY_READ_TIMEOUT_MS = 5000;
+
+/**
+ * Read a response body with a hard byte cap and a read timeout.
+ *
+ * Streams the body chunk by chunk and stops as soon as `maxBytes` have been
+ * received, cancelling the rest of the stream so the remote cannot tie up
+ * memory or a connection with an endless body. If the body has not finished
+ * (or hit the cap) within `timeout` ms, the stream is cancelled and `null` is
+ * returned — a partially-read body is treated as a failed read, not as data.
+ *
+ * Returns `{ text, truncated }` where `truncated` is true when the cap was hit
+ * (so the caller knows `text` is incomplete and e.g. must not JSON.parse it as
+ * if it were whole), or `null` if the read failed or timed out.
+ */
+export async function readBodyCapped(
+	response: Response,
+	maxBytes: number,
+	options: { timeout?: number } = {},
+): Promise<{ text: string; truncated: boolean } | null> {
+	const { timeout = DEFAULT_BODY_READ_TIMEOUT_MS } = options;
+	const body = response.body;
+	if (!body) return { text: "", truncated: false };
+
+	const reader = body.getReader();
+	const chunks: Uint8Array[] = [];
+	let received = 0;
+	let truncated = false;
+	let timedOut = false;
+
+	const timer = setTimeout(() => {
+		timedOut = true;
+		reader.cancel().catch(() => {});
+	}, timeout);
+
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (!value || value.byteLength === 0) continue;
+
+			if (received + value.byteLength > maxBytes) {
+				const room = maxBytes - received;
+				if (room > 0) chunks.push(value.subarray(0, room));
+				received += Math.max(room, 0);
+				// Anything beyond the cap is cut off here. Cancel so the remote
+				// stops sending instead of buffering the rest.
+				truncated = true;
+				await reader.cancel().catch(() => {});
+				break;
+			}
+
+			chunks.push(value);
+			received += value.byteLength;
+		}
+	} catch {
+		return null;
+	} finally {
+		clearTimeout(timer);
+	}
+
+	if (timedOut) return null;
+
+	const merged = new Uint8Array(received);
+	let offset = 0;
+	for (const chunk of chunks) {
+		merged.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+
+	return { text: new TextDecoder().decode(merged), truncated };
 }

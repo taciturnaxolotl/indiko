@@ -4,6 +4,7 @@ import {
 	escapeHtml,
 	FRAME_DENY_HEADERS,
 } from "../../lib/oauth/pages";
+import { resourcesToStored, storedToResources } from "../../lib/oauth/resource";
 import {
 	csrfTokenMatches,
 	getCsrfToken,
@@ -185,7 +186,7 @@ function lookupDeviceCode(userCode: string) {
 
 	return db
 		.query(
-			`SELECT dc.id, dc.client_id, dc.scope, dc.expires_at, dc.status, dc.user_id,
+			`SELECT dc.id, dc.client_id, dc.scope, dc.resource, dc.expires_at, dc.status, dc.user_id,
 			        a.name as app_name, a.logo_url as app_logo
 			 FROM device_codes dc
 			 LEFT JOIN apps a ON dc.client_id = a.client_id
@@ -196,6 +197,7 @@ function lookupDeviceCode(userCode: string) {
 				id: number;
 				client_id: string;
 				scope: string;
+				resource: string | null;
 				expires_at: number;
 				status: string;
 				user_id: number | null;
@@ -203,6 +205,64 @@ function lookupDeviceCode(userCode: string) {
 				app_logo: string | null;
 		  }
 		| undefined;
+}
+
+/**
+ * Record the consent a device-flow approval represents, exactly as the
+ * authorization-code consent screen does. Without this row the grant is
+ * invisible on /apps and cannot be revoked by the user, even though the
+ * device will go on to receive access and (possibly) refresh tokens.
+ */
+function recordDeviceGrant(
+	userId: number,
+	clientId: string,
+	scope: string,
+	resourceStored: string | null,
+): void {
+	const scopes = scope.split(" ").filter(Boolean);
+	const resources = storedToResources(resourceStored);
+	const now = Math.floor(Date.now() / 1000);
+
+	const existing = db
+		.query(
+			"SELECT scopes, resources FROM permissions WHERE user_id = ? AND client_id = ?",
+		)
+		.get(userId, clientId) as
+		| { scopes: string; resources: string | null }
+		| undefined;
+
+	if (existing) {
+		// Union with what was already granted so approving a device never
+		// silently narrows an earlier browser consent.
+		let priorScopes: string[] = [];
+		try {
+			priorScopes = JSON.parse(existing.scopes) as string[];
+		} catch {
+			priorScopes = [];
+		}
+		const mergedScopes = [...new Set([...priorScopes, ...scopes])];
+		const mergedResources = resourcesToStored([
+			...new Set([...storedToResources(existing.resources), ...resources]),
+		]);
+		db.query(
+			"UPDATE permissions SET scopes = ?, resources = ?, last_used = ? WHERE user_id = ? AND client_id = ?",
+		).run(JSON.stringify(mergedScopes), mergedResources, now, userId, clientId);
+		return;
+	}
+
+	const app = db
+		.query("SELECT default_role FROM apps WHERE client_id = ?")
+		.get(clientId) as { default_role: string | null } | undefined;
+
+	db.query(
+		"INSERT INTO permissions (user_id, client_id, scopes, resources, role) VALUES (?, ?, ?, ?, ?)",
+	).run(
+		userId,
+		clientId,
+		JSON.stringify(scopes),
+		resourcesToStored(resources),
+		app?.default_role || null,
+	);
 }
 
 // GET /device - User verification page
@@ -318,7 +378,7 @@ export async function devicePost(req: Request): Promise<Response> {
 		return new Response("Missing parameters", { status: 400 });
 	}
 
-	// Validate CSRF token from the form field against the token derived from the
+	// Validate CSRF token from form field against the token derived from the
 	// session cookie (constant-time compare).
 	const formCsrf = formData.get("csrf_token") as string;
 	const expectedCsrf = getCsrfToken(req);
@@ -397,6 +457,19 @@ export async function devicePost(req: Request): Promise<Response> {
 			400,
 		);
 	}
+
+	// The approval IS the consent: persist it so it shows on /apps and the
+	// user's revoke path also kills the tokens this device is about to get.
+	recordDeviceGrant(
+		user.userId,
+		deviceCode.client_id,
+		deviceCode.scope,
+		deviceCode.resource,
+	);
+	db.query("UPDATE apps SET last_used = ? WHERE client_id = ?").run(
+		Math.floor(Date.now() / 1000),
+		deviceCode.client_id,
+	);
 
 	return devicePage(
 		"device authorized",

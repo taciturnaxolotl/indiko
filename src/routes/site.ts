@@ -250,7 +250,13 @@ const marked = new Marked();
  */
 export function notFound(req: Request): Response {
 	const base = origin();
-	const path = new URL(req.url).pathname;
+	// The path is attacker-controlled and ends up inside markdown that is then
+	// rendered to HTML. WHATWG URL already percent-encodes < > " ` and strips
+	// CR/LF, but don't depend on that: HTML-escape it and drop backticks so it
+	// can never break out of the inline code span.
+	const path = escapeHtml(
+		new URL(req.url).pathname.replaceAll("`", "").slice(0, 512),
+	);
 	const body = `# 404 — page not found
 
 \`${path}\` does not exist on this server.

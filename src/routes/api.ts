@@ -1,7 +1,56 @@
 import { db } from "../db";
+import {
+	clientDisplayName,
+	clientRegistration,
+} from "../lib/oauth/client-display";
 import { verifyDomain } from "../lib/oauth/client-metadata";
 import { validateProfileURL } from "../lib/oauth/urls";
 import { getSessionUserFlexible, validateCsrf } from "../lib/session";
+
+// Input caps for user-editable profile fields. Anything larger is a storage /
+// bandwidth DoS (served back on /u/:username, /userinfo and admin lists).
+const MAX_NAME_LENGTH = 256;
+const MAX_EMAIL_LENGTH = 256;
+const MAX_URL_LENGTH = 2048;
+
+function isHttpUrl(value: string): boolean {
+	try {
+		const u = new URL(value);
+		return u.protocol === "http:" || u.protocol === "https:";
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Cut off every credential an app holds for a user: the consent grant, unused
+ * auth codes, issued access/refresh tokens, and any pending device codes.
+ * Shared by self-service and admin revocation so neither path forgets a table.
+ */
+function revokeGrant(userId: number, clientId: string): number {
+	const result = db
+		.query("DELETE FROM permissions WHERE user_id = ? AND client_id = ?")
+		.run(userId, clientId);
+
+	if (result.changes === 0) return 0;
+
+	db.query(
+		"DELETE FROM authcodes WHERE user_id = ? AND client_id = ? AND used = 0",
+	).run(userId, clientId);
+
+	// Revoking the grant must also kill the tokens already issued under it;
+	// token validation never consults the permissions table.
+	db.query(
+		"UPDATE tokens SET revoked = 1 WHERE user_id = ? AND client_id = ?",
+	).run(userId, clientId);
+
+	db.query("DELETE FROM device_codes WHERE user_id = ? AND client_id = ?").run(
+		userId,
+		clientId,
+	);
+
+	return result.changes;
+}
 
 export function hello(req: Request): Response {
 	const user = getSessionUserFlexible(req);
@@ -128,8 +177,58 @@ export async function updateProfile(req: Request): Promise<Response> {
 		const body = await req.json();
 		const { name, email, photo, url } = body;
 
-		if (!name || typeof name !== "string") {
+		if (!name || typeof name !== "string" || !name.trim()) {
 			return Response.json({ error: "Name is required" }, { status: 400 });
+		}
+		if (name.length > MAX_NAME_LENGTH) {
+			return Response.json(
+				{ error: `Name must be at most ${MAX_NAME_LENGTH} characters` },
+				{ status: 400 },
+			);
+		}
+
+		if (email !== undefined && email !== null && typeof email !== "string") {
+			return Response.json(
+				{ error: "Email must be a string" },
+				{ status: 400 },
+			);
+		}
+		if (typeof email === "string" && email.length > MAX_EMAIL_LENGTH) {
+			return Response.json(
+				{ error: `Email must be at most ${MAX_EMAIL_LENGTH} characters` },
+				{ status: 400 },
+			);
+		}
+
+		if (photo !== undefined && photo !== null && typeof photo !== "string") {
+			return Response.json(
+				{ error: "Photo must be a string" },
+				{ status: 400 },
+			);
+		}
+		if (typeof photo === "string" && photo) {
+			if (photo.length > MAX_URL_LENGTH) {
+				return Response.json(
+					{ error: `Photo URL must be at most ${MAX_URL_LENGTH} characters` },
+					{ status: 400 },
+				);
+			}
+			if (!isHttpUrl(photo)) {
+				return Response.json(
+					{ error: "Photo must be an http(s) URL" },
+					{ status: 400 },
+				);
+			}
+		}
+
+		if (url !== undefined && url !== null && typeof url !== "string") {
+			return Response.json({ error: "URL must be a string" }, { status: 400 });
+		}
+		if (typeof url === "string" && url.length > MAX_URL_LENGTH) {
+			return Response.json(
+				{ error: `URL must be at most ${MAX_URL_LENGTH} characters` },
+				{ status: 400 },
+			);
 		}
 
 		// If URL is being set, validate format and verify domain ownership
@@ -239,19 +338,9 @@ export function revokeApp(req: Request, clientId: string): Response {
 	const csrfError = validateCsrf(req);
 	if (csrfError) return csrfError;
 
-	// Delete permission
-	const result = db
-		.query("DELETE FROM permissions WHERE user_id = ? AND client_id = ?")
-		.run(user.userId, clientId);
-
-	if (result.changes === 0) {
+	if (revokeGrant(user.userId, clientId) === 0) {
 		return Response.json({ error: "App not found" }, { status: 404 });
 	}
-
-	// Also delete any unused auth codes for this app
-	db.query(
-		"DELETE FROM authcodes WHERE user_id = ? AND client_id = ? AND used = 0",
-	).run(user.userId, clientId);
 
 	return Response.json({ success: true });
 }
@@ -271,6 +360,8 @@ export function listAllApps(req: Request): Response {
 			`SELECT 
 				a.client_id,
 				a.name,
+				a.is_preregistered,
+				a.registration,
 				a.first_seen,
 				a.last_used,
 				COUNT(DISTINCT p.user_id) as user_count
@@ -282,6 +373,8 @@ export function listAllApps(req: Request): Response {
 		.all() as Array<{
 		client_id: string;
 		name: string | null;
+		is_preregistered: number;
+		registration: string | null;
 		first_seen: number;
 		last_used: number;
 		user_count: number;
@@ -290,7 +383,8 @@ export function listAllApps(req: Request): Response {
 	return Response.json({
 		apps: apps.map((app) => ({
 			clientId: app.client_id,
-			name: app.name || new URL(app.client_id).hostname,
+			name: clientDisplayName(app.client_id, app.name),
+			registration: clientRegistration(app),
 			firstSeen: app.first_seen,
 			lastUsed: app.last_used,
 			userCount: app.user_count,
@@ -310,7 +404,7 @@ export function getAppDetails(req: Request, clientId: string): Response {
 
 	const app = db
 		.query(
-			`SELECT client_id, name, first_seen, last_used
+			`SELECT client_id, name, is_preregistered, registration, first_seen, last_used
 			FROM apps
 			WHERE client_id = ?`,
 		)
@@ -318,6 +412,8 @@ export function getAppDetails(req: Request, clientId: string): Response {
 		| {
 				client_id: string;
 				name: string | null;
+				is_preregistered: number;
+				registration: string | null;
 				first_seen: number;
 				last_used: number;
 		  }
@@ -351,7 +447,8 @@ export function getAppDetails(req: Request, clientId: string): Response {
 	return Response.json({
 		app: {
 			clientId: app.client_id,
-			name: app.name || new URL(app.client_id).hostname,
+			name: clientDisplayName(app.client_id, app.name),
+			registration: clientRegistration(app),
 			firstSeen: app.first_seen,
 			lastUsed: app.last_used,
 		},
@@ -390,17 +487,9 @@ export function revokeAppForUser(
 		return Response.json({ error: "User not found" }, { status: 404 });
 	}
 
-	const result = db
-		.query("DELETE FROM permissions WHERE user_id = ? AND client_id = ?")
-		.run(targetUser.id, clientId);
-
-	if (result.changes === 0) {
+	if (revokeGrant(targetUser.id, clientId) === 0) {
 		return Response.json({ error: "Permission not found" }, { status: 404 });
 	}
-
-	db.query(
-		"DELETE FROM authcodes WHERE user_id = ? AND client_id = ? AND used = 0",
-	).run(targetUser.id, clientId);
 
 	return Response.json({ success: true });
 }

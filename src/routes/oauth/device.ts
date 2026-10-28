@@ -17,6 +17,9 @@ import { canonicalizeURL } from "../../lib/oauth/urls";
 
 const DEVICE_CODE_TTL = 600; // 10 minutes
 const POLL_INTERVAL = 5; // seconds
+// Longest scope string we will store. Real scope lists are a few dozen bytes;
+// this is an unauthenticated endpoint so the cap bounds what a flood can store.
+const MAX_SCOPE_LENGTH = 512;
 
 // Rate limiting for device authorization — unauthenticated endpoint
 // that inserts DB rows.
@@ -76,6 +79,18 @@ export async function deviceAuthorization(req: Request): Promise<Response> {
 		}
 
 		const { client_id: rawClientId, scope, resource: rawResource } = body;
+
+		if (
+			scope !== undefined &&
+			scope !== null &&
+			(typeof scope !== "string" || scope.length > MAX_SCOPE_LENGTH)
+		) {
+			return oauthError(
+				400,
+				"invalid_scope",
+				`scope must be at most ${MAX_SCOPE_LENGTH} characters`,
+			);
+		}
 
 		// RFC 8707 resource indicator (device flow carries it from the start).
 		const resources = validateResources(rawResource ? [rawResource] : []);

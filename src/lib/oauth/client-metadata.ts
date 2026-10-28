@@ -1,5 +1,9 @@
 import { db } from "../../db";
-import { safeFetch, validateExternalURL } from "../ssrf-safe-fetch";
+import {
+	readBodyCapped,
+	safeFetch,
+	validateExternalURL,
+} from "../ssrf-safe-fetch";
 import { canonicalizeURL, isLoopbackURL, validateClientURL } from "./urls";
 
 export interface ClientMetadata {
@@ -23,6 +27,9 @@ const SECRET_AUTH_METHODS = new Set([
 
 // Draft recommends bounding the metadata document size.
 const MAX_METADATA_BYTES = 5 * 1024;
+// HTML pages (rel=redirect_uri / rel=me discovery) only need their <head>,
+// but sites put a lot before it; 256 KB is generous without being unbounded.
+const MAX_HTML_BYTES = 256 * 1024;
 
 // Validate a fetched metadata document against the client_id URL it came
 // from. Pure so it's directly testable without a live fetch.
@@ -119,13 +126,22 @@ export async function fetchClientMetadata(clientId: string): Promise<{
 	const contentType = response.headers.get("content-type") || "";
 
 	if (contentType.includes("application/json")) {
-		const text = await response.text();
-		return validateMetadataDocument(text, clientId);
+		// Read one byte past the cap so an oversized document is still
+		// reported as too large rather than silently truncated into validity.
+		const body = await readBodyCapped(response, MAX_METADATA_BYTES + 1);
+		if (!body) {
+			return { success: false, error: "Timed out reading client metadata" };
+		}
+		return validateMetadataDocument(body.text, clientId);
 	}
 
 	// HTML: look for <link rel="redirect_uri"> tags
 	if (contentType.includes("text/html")) {
-		const html = await response.text();
+		const body = await readBodyCapped(response, MAX_HTML_BYTES);
+		if (!body) {
+			return { success: false, error: "Timed out reading client page" };
+		}
+		const html = body.text;
 
 		const redirectUris: string[] = [];
 		const linkTagRegex = /<link\s+[^>]*>/gi;
@@ -206,13 +222,13 @@ export async function verifyDomain(
 	const response = fetchResult.data;
 
 	if (!response.ok) {
-		const errorBody = await response.text();
+		const errorBody = await readBodyCapped(response, 1024);
 		console.error(
 			`[verifyDomain] Failed to fetch ${domainUrl}: HTTP ${response.status}`,
 			{
 				status: response.status,
 				contentType: response.headers.get("content-type"),
-				bodyPreview: errorBody.substring(0, 200),
+				bodyPreview: (errorBody?.text ?? "").substring(0, 200),
 			},
 		);
 		return {
@@ -221,7 +237,11 @@ export async function verifyDomain(
 		};
 	}
 
-	const html = await response.text();
+	const body = await readBodyCapped(response, MAX_HTML_BYTES);
+	if (!body) {
+		return { success: false, error: "Timed out reading your site" };
+	}
+	const html = body.text;
 
 	// Find all <link> and <a> tags with rel containing "me", collect their hrefs
 	const relMeLinks: string[] = [];
@@ -371,7 +391,7 @@ async function refreshClientMetadata(
 		).run(JSON.stringify(published), name, logo, now, clientId);
 	} else {
 		db.query(
-			"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, first_seen, last_used) VALUES (?, ?, ?, ?, 0, ?, ?)",
+			"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, registration, first_seen, last_used) VALUES (?, ?, ?, ?, 0, 'url', ?, ?)",
 		).run(clientId, JSON.stringify(published), name, logo, now, now);
 	}
 
@@ -465,7 +485,7 @@ export async function ensureApp(
 		if (!existing) {
 			const now = Math.floor(Date.now() / 1000);
 			db.query(
-				"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, first_seen, last_used) VALUES (?, ?, NULL, NULL, 0, ?, ?)",
+				"INSERT INTO apps (client_id, redirect_uris, name, logo_url, is_preregistered, registration, first_seen, last_used) VALUES (?, ?, NULL, NULL, 0, 'url', ?, ?)",
 			).run(clientId, "[]", now, now);
 		} else {
 			// Rows written before metadata was refreshed on demand stored the

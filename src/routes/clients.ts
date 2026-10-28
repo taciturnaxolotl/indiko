@@ -1,5 +1,9 @@
 import { nanoid } from "nanoid";
 import { db } from "../db";
+import {
+	clientDisplayName,
+	clientRegistration,
+} from "../lib/oauth/client-display";
 import { hashSecret } from "../lib/secrets";
 import { getSessionUserFlexible, validateCsrf } from "../lib/session";
 
@@ -9,6 +13,80 @@ function generateClientSecret(): string {
 
 function generateClientId(): string {
 	return `ikc_${nanoid(21)}`; // indiko client
+}
+
+// Input caps for admin-supplied client metadata.
+const MAX_NAME_LENGTH = 256;
+const MAX_DESCRIPTION_LENGTH = 2048;
+const MAX_URL_LENGTH = 2048;
+
+function isHttpUrl(value: string): boolean {
+	try {
+		const u = new URL(value);
+		return u.protocol === "http:" || u.protocol === "https:";
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Validate an optional free-text field: must be a string within `max` when
+ * present. Returns the normalized value (null for empty/absent) or an error
+ * message. `undefined` is passed through so callers can tell "omitted" from
+ * "cleared".
+ */
+function optionalText(
+	value: unknown,
+	label: string,
+	max: number,
+):
+	| { ok: true; value: string | null | undefined }
+	| { ok: false; error: string } {
+	if (value === undefined) return { ok: true, value: undefined };
+	if (value === null || value === "") return { ok: true, value: null };
+	if (typeof value !== "string") {
+		return { ok: false, error: `${label} must be a string` };
+	}
+	if (value.length > max) {
+		return { ok: false, error: `${label} must be at most ${max} characters` };
+	}
+	return { ok: true, value };
+}
+
+function optionalHttpUrl(
+	value: unknown,
+	label: string,
+):
+	| { ok: true; value: string | null | undefined }
+	| { ok: false; error: string } {
+	const text = optionalText(value, label, MAX_URL_LENGTH);
+	if (!text.ok) return text;
+	if (typeof text.value === "string" && !isHttpUrl(text.value)) {
+		return { ok: false, error: `${label} must be an http(s) URL` };
+	}
+	return text;
+}
+
+/** redirect_uris must be a non-empty array of http(s) URL strings. */
+function validateRedirectUris(
+	value: unknown,
+): { ok: true; value: string[] } | { ok: false; error: string } {
+	if (!Array.isArray(value) || value.length === 0) {
+		return { ok: false, error: "At least one redirect URI is required" };
+	}
+	for (const uri of value) {
+		if (
+			typeof uri !== "string" ||
+			uri.length > MAX_URL_LENGTH ||
+			!isHttpUrl(uri)
+		) {
+			return {
+				ok: false,
+				error: `Invalid redirect URI: ${typeof uri === "string" ? uri.slice(0, 200) : String(uri)}`,
+			};
+		}
+	}
+	return { ok: true, value: value as string[] };
 }
 
 export function listClients(req: Request): Response {
@@ -31,6 +109,7 @@ export function listClients(req: Request): Response {
 				description,
 				redirect_uris,
 				is_preregistered,
+				registration,
 				first_seen,
 				last_used
 			FROM apps
@@ -44,6 +123,7 @@ export function listClients(req: Request): Response {
 		description: string | null;
 		redirect_uris: string;
 		is_preregistered: number;
+		registration: string | null;
 		first_seen: number;
 		last_used: number;
 	}>;
@@ -73,11 +153,12 @@ export function listClients(req: Request): Response {
 		clients: clients.map((c) => ({
 			id: c.id,
 			clientId: c.client_id,
-			name: c.name || new URL(c.client_id).hostname,
+			name: clientDisplayName(c.client_id, c.name),
 			logoUrl: c.logo_url,
 			description: c.description,
 			redirectUris: JSON.parse(c.redirect_uris) as string[],
 			isPreregistered: c.is_preregistered === 1,
+			registration: clientRegistration(c),
 			firstSeen: c.first_seen,
 			lastUsed: c.last_used,
 			roles: rolesByApp.get(c.id) || [],
@@ -109,35 +190,39 @@ export async function createClient(req: Request): Promise<Response> {
 	try {
 		const body = await req.json();
 		const {
-			name,
-			logoUrl,
-			description,
-			redirectUris,
+			name: rawName,
+			logoUrl: rawLogoUrl,
+			description: rawDescription,
+			redirectUris: rawRedirectUris,
 			availableRoles,
 			defaultRole,
 		} = body;
 
-		if (
-			!redirectUris ||
-			!Array.isArray(redirectUris) ||
-			redirectUris.length === 0
-		) {
-			return Response.json(
-				{ error: "At least one redirect URI is required" },
-				{ status: 400 },
-			);
+		const redirects = validateRedirectUris(rawRedirectUris);
+		if (!redirects.ok) {
+			return Response.json({ error: redirects.error }, { status: 400 });
 		}
+		const redirectUris = redirects.value;
 
-		for (const uri of redirectUris) {
-			try {
-				new URL(uri);
-			} catch {
-				return Response.json(
-					{ error: `Invalid redirect URI: ${uri}` },
-					{ status: 400 },
-				);
-			}
+		const nameCheck = optionalText(rawName, "Name", MAX_NAME_LENGTH);
+		if (!nameCheck.ok) {
+			return Response.json({ error: nameCheck.error }, { status: 400 });
 		}
+		const descriptionCheck = optionalText(
+			rawDescription,
+			"Description",
+			MAX_DESCRIPTION_LENGTH,
+		);
+		if (!descriptionCheck.ok) {
+			return Response.json({ error: descriptionCheck.error }, { status: 400 });
+		}
+		const logoCheck = optionalHttpUrl(rawLogoUrl, "Logo URL");
+		if (!logoCheck.ok) {
+			return Response.json({ error: logoCheck.error }, { status: 400 });
+		}
+		const name = nameCheck.value ?? null;
+		const description = descriptionCheck.value ?? null;
+		const logoUrl = logoCheck.value ?? null;
 
 		// Generate client ID and secret for pre-registered clients
 		const clientId = generateClientId();
@@ -172,14 +257,14 @@ export async function createClient(req: Request): Promise<Response> {
 
 		const result = db
 			.query(
-				`INSERT INTO apps (client_id, name, logo_url, description, redirect_uris, is_preregistered, client_secret_hash, available_roles, default_role, first_seen, last_used) 
-				VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+				`INSERT INTO apps (client_id, name, logo_url, description, redirect_uris, is_preregistered, registration, client_secret_hash, available_roles, default_role, first_seen, last_used) 
+				VALUES (?, ?, ?, ?, ?, 1, 'admin', ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				clientId,
-				name || null,
-				logoUrl || null,
-				description || null,
+				name,
+				logoUrl,
+				description,
 				JSON.stringify(redirectUris),
 				clientSecretHash,
 				rolesArray.length > 0 ? JSON.stringify(rolesArray) : null,
@@ -195,10 +280,11 @@ export async function createClient(req: Request): Promise<Response> {
 				clientId,
 				clientSecret, // Return the plain secret only once on creation
 				name: name || clientId,
-				logoUrl: logoUrl || null,
-				description: description || null,
+				logoUrl,
+				description,
 				redirectUris,
 				isPreregistered: true,
+				registration: "admin",
 			},
 		});
 	} catch (error) {
@@ -227,6 +313,7 @@ export function getClient(req: Request, clientId: string): Response {
 				description,
 				redirect_uris,
 				is_preregistered,
+				registration,
 				available_roles,
 				default_role,
 				first_seen,
@@ -243,6 +330,7 @@ export function getClient(req: Request, clientId: string): Response {
 				description: string | null;
 				redirect_uris: string;
 				is_preregistered: number;
+				registration: string | null;
 				available_roles: string | null;
 				default_role: string | null;
 				first_seen: number;
@@ -281,11 +369,12 @@ export function getClient(req: Request, clientId: string): Response {
 		client: {
 			id: client.id,
 			clientId: client.client_id,
-			name: client.name || new URL(client.client_id).hostname,
+			name: clientDisplayName(client.client_id, client.name),
 			logoUrl: client.logo_url,
 			description: client.description,
 			redirectUris: JSON.parse(client.redirect_uris) as string[],
 			isPreregistered: client.is_preregistered === 1,
+			registration: clientRegistration(client),
 			availableRoles: client.available_roles
 				? (JSON.parse(client.available_roles) as string[])
 				: null,
@@ -322,6 +411,12 @@ export async function updateClient(
 
 	try {
 		const body = await req.json();
+		if (!body || typeof body !== "object" || Array.isArray(body)) {
+			return Response.json(
+				{ error: "Body must be a JSON object" },
+				{ status: 400 },
+			);
+		}
 		const {
 			name,
 			logoUrl,
@@ -329,45 +424,84 @@ export async function updateClient(
 			redirectUris,
 			availableRoles,
 			defaultRole,
-		} = body;
+		} = body as Record<string, unknown>;
 
 		const existing = db
-			.query("SELECT id, is_preregistered FROM apps WHERE client_id = ?")
-			.get(clientId) as { id: number; is_preregistered: number } | undefined;
+			.query(
+				"SELECT id, is_preregistered, available_roles, default_role FROM apps WHERE client_id = ?",
+			)
+			.get(clientId) as
+			| {
+					id: number;
+					is_preregistered: number;
+					available_roles: string | null;
+					default_role: string | null;
+			  }
+			| undefined;
 
 		if (!existing) {
 			return Response.json({ error: "Client not found" }, { status: 404 });
 		}
 
-		if (redirectUris) {
-			if (!Array.isArray(redirectUris) || redirectUris.length === 0) {
-				return Response.json(
-					{ error: "At least one redirect URI is required" },
-					{ status: 400 },
-				);
-			}
+		// Partial update: a field that is absent from the body is left as-is.
+		// Only fields that are present are validated and written. `null` (or
+		// "") clears an optional field.
+		const updates: string[] = [];
+		const values: (string | null)[] = [];
 
-			for (const uri of redirectUris) {
-				try {
-					new URL(uri);
-				} catch {
-					return Response.json(
-						{ error: `Invalid redirect URI: ${uri}` },
-						{ status: 400 },
-					);
-				}
-			}
+		const nameCheck = optionalText(name, "Name", MAX_NAME_LENGTH);
+		if (!nameCheck.ok) {
+			return Response.json({ error: nameCheck.error }, { status: 400 });
+		}
+		if (nameCheck.value !== undefined) {
+			updates.push("name = ?");
+			values.push(nameCheck.value);
 		}
 
-		// Validate roles if provided
-		let rolesArray: string[] | null = null;
+		const logoCheck = optionalHttpUrl(logoUrl, "Logo URL");
+		if (!logoCheck.ok) {
+			return Response.json({ error: logoCheck.error }, { status: 400 });
+		}
+		if (logoCheck.value !== undefined) {
+			updates.push("logo_url = ?");
+			values.push(logoCheck.value);
+		}
+
+		const descriptionCheck = optionalText(
+			description,
+			"Description",
+			MAX_DESCRIPTION_LENGTH,
+		);
+		if (!descriptionCheck.ok) {
+			return Response.json({ error: descriptionCheck.error }, { status: 400 });
+		}
+		if (descriptionCheck.value !== undefined) {
+			updates.push("description = ?");
+			values.push(descriptionCheck.value);
+		}
+
+		// redirect_uris is NOT NULL: when provided it must be a valid list;
+		// when omitted it is untouched.
+		if (redirectUris !== undefined) {
+			const redirects = validateRedirectUris(redirectUris);
+			if (!redirects.ok) {
+				return Response.json({ error: redirects.error }, { status: 400 });
+			}
+			updates.push("redirect_uris = ?");
+			values.push(JSON.stringify(redirects.value));
+		}
+
+		// Roles: start from what is stored, overlay whatever the body provides.
+		let rolesArray: string[] = existing.available_roles
+			? (JSON.parse(existing.available_roles) as string[])
+			: [];
 		if (availableRoles !== undefined) {
 			if (availableRoles === null) {
 				// Explicitly disable roles
-				rolesArray = null;
+				rolesArray = [];
 			} else if (Array.isArray(availableRoles)) {
 				rolesArray = availableRoles.filter(
-					(r: unknown) => typeof r === "string" && r.trim(),
+					(r: unknown): r is string => typeof r === "string" && !!r.trim(),
 				);
 			} else {
 				return Response.json(
@@ -375,14 +509,51 @@ export async function updateClient(
 					{ status: 400 },
 				);
 			}
+			updates.push("available_roles = ?");
+			values.push(rolesArray.length > 0 ? JSON.stringify(rolesArray) : null);
+		}
+
+		let effectiveDefault: string | null = existing.default_role;
+		if (defaultRole !== undefined) {
+			if (defaultRole === null || defaultRole === "") {
+				effectiveDefault = null;
+			} else if (typeof defaultRole === "string") {
+				if (defaultRole.length > MAX_NAME_LENGTH) {
+					return Response.json(
+						{
+							error: `Default role must be at most ${MAX_NAME_LENGTH} characters`,
+						},
+						{ status: 400 },
+					);
+				}
+				effectiveDefault = defaultRole;
+			} else {
+				return Response.json(
+					{ error: "Default role must be a string or null" },
+					{ status: 400 },
+				);
+			}
+			updates.push("default_role = ?");
+			values.push(effectiveDefault);
+		} else if (
+			availableRoles !== undefined &&
+			effectiveDefault &&
+			rolesArray.length > 0 &&
+			!rolesArray.includes(effectiveDefault)
+		) {
+			// The role list changed underneath an unchanged default that is no
+			// longer in it: clear the default rather than leave a dangling one.
+			effectiveDefault = null;
+			updates.push("default_role = ?");
+			values.push(null);
 		}
 
 		// Validate default role is in available roles
 		if (
-			defaultRole &&
-			rolesArray &&
+			defaultRole !== undefined &&
+			effectiveDefault &&
 			rolesArray.length > 0 &&
-			!rolesArray.includes(defaultRole)
+			!rolesArray.includes(effectiveDefault)
 		) {
 			return Response.json(
 				{ error: "Default role must be one of the available roles" },
@@ -390,21 +561,12 @@ export async function updateClient(
 			);
 		}
 
-		db.query(
-			`UPDATE apps 
-			SET name = ?, logo_url = ?, description = ?, redirect_uris = ?, available_roles = ?, default_role = ?
-			WHERE client_id = ?`,
-		).run(
-			name || null,
-			logoUrl || null,
-			description || null,
-			redirectUris ? JSON.stringify(redirectUris) : null,
-			rolesArray !== null
-				? rolesArray.length > 0
-					? JSON.stringify(rolesArray)
-					: null
-				: null,
-			defaultRole || null,
+		if (updates.length === 0) {
+			return Response.json({ error: "No fields to update" }, { status: 400 });
+		}
+
+		db.query(`UPDATE apps SET ${updates.join(", ")} WHERE client_id = ?`).run(
+			...values,
 			clientId,
 		);
 
@@ -436,6 +598,15 @@ export function deleteClient(req: Request, clientId: string): Response {
 		return Response.json({ error: "Client not found" }, { status: 404 });
 	}
 
+	// tokens.client_id and device_codes.client_id have no FK to apps, so they
+	// would outlive the client. Kill everything it was ever issued first;
+	// permissions cascade via FK but are deleted explicitly to be unambiguous.
+	db.query("UPDATE tokens SET revoked = 1 WHERE client_id = ?").run(clientId);
+	db.query("DELETE FROM device_codes WHERE client_id = ?").run(clientId);
+	db.query("DELETE FROM authcodes WHERE client_id = ? AND used = 0").run(
+		clientId,
+	);
+	db.query("DELETE FROM permissions WHERE client_id = ?").run(clientId);
 	db.query("DELETE FROM apps WHERE client_id = ?").run(clientId);
 
 	return Response.json({ success: true });

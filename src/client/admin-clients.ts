@@ -561,7 +561,7 @@ clientForm.addEventListener("submit", async (e) => {
 				description,
 				redirectUris,
 				availableRoles: availableRolesText.trim() ? availableRoles : null,
-				defaultRole: defaultRole || undefined,
+				defaultRole: defaultRole || null,
 			}),
 		});
 
