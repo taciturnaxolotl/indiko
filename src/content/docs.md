@@ -284,7 +284,13 @@ Indiko provides a complete OAuth 2.0 token management system with access tokens,
 
 ### refresh tokens
 
-A refresh token is only issued when your app requests the `offline_access` scope at authorization time. If you don't request it, the grant is one-shot: you get an access token (1 hour) and nothing more. See [scopes](#scopes).
+Whether you get a refresh token depends on who is asking:
+
+- **OIDC clients** (any request with `openid`) get one only when they also request `offline_access`, per OpenID Connect Core §11.
+- **IndieAuth clients** have no scope for this (the IndieAuth spec leaves refresh tokens to the server), so the consent screen offers the person a **"stay signed in to this app"** checkbox, on by default. Ticked, your token response carries a `refresh_token`; unticked, the grant is one-shot and lasts an hour. The choice is remembered for later silent approvals, and your `scope` string is never widened by it.
+- **Identity-only requests** (no `scope`) get no tokens at all, so nothing to refresh.
+
+Either way, treat `refresh_token` as optional in the response and fall back to a fresh authorization when it is absent or stops working. See [scopes](#scopes).
 
 Exchange a refresh token for a new access token (and a new rotated refresh token):
 
@@ -546,7 +552,7 @@ Scopes control what data your app can access:
 
 Users can uncheck optional scopes during authorization. When `profile` is requested it is always granted along with whatever else the user approves.
 
-> **offline_access:** Request this only if your app needs to act on the user's behalf after the access token expires. Without it you get a 1-hour access token and no refresh token. Users see it on the consent screen as a distinct "keep you signed in long-term" permission.
+> **offline_access:** OIDC clients request this to get a refresh token; without it an OIDC grant is a 1-hour access token. IndieAuth clients do not need it: the consent screen asks the person directly whether to stay signed in. See [refresh tokens](#refresh-tokens).
 
 > **Scope handling:** Requested scopes appear as checkboxes on the consent screen. Users can deny optional scopes, and your app receives only the approved subset in the token response.
 

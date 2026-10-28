@@ -540,7 +540,7 @@ async function handleAuthorizationCodeGrant(
 
 	const authcode = db
 		.query(
-			"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me, nonce, auth_time, resource, family FROM authcodes WHERE code = ?",
+			"SELECT user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used, me, nonce, auth_time, resource, family, issue_refresh FROM authcodes WHERE code = ?",
 		)
 		.get(code) as
 		| {
@@ -556,6 +556,7 @@ async function handleAuthorizationCodeGrant(
 				auth_time: number | null;
 				resource: string | null;
 				family: string | null;
+				issue_refresh: number;
 		  }
 		| undefined;
 
@@ -681,9 +682,13 @@ async function handleAuthorizationCodeGrant(
 	const accessToken = generateToken();
 	const expiresAt = now + ACCESS_TOKEN_TTL;
 
-	// Only issue a refresh token when the client requested offline_access
-	// (OIDC Core §11). Otherwise this is a one-shot grant, access token only.
-	const issueRefresh = scopes.includes("offline_access");
+	// A refresh token is issued when the client asked for offline_access (OIDC
+	// Core §11) or when the person ticked "stay signed in" on the consent
+	// screen for an IndieAuth client, which has no scope to ask with
+	// (IndieAuth §5.5 leaves this to the server). Otherwise the grant is
+	// one-shot: an access token and nothing more.
+	const issueRefresh =
+		scopes.includes("offline_access") || authcode.issue_refresh === 1;
 	const refreshToken = issueRefresh ? generateToken() : null;
 	const refreshExpiresAt = issueRefresh ? now + REFRESH_TOKEN_TTL : null;
 

@@ -8,6 +8,10 @@ import {
 	FRAME_DENY_HEADERS,
 } from "../../lib/oauth/pages";
 import {
+	offersStaySignedIn,
+	STAY_SIGNED_IN_FIELD,
+} from "../../lib/oauth/refresh-choice";
+import {
 	type ResourceInfo,
 	resourceDisplay,
 	resourcesToStored,
@@ -316,8 +320,14 @@ export async function authorizeGet(req: Request): Promise<Response> {
 			const now = Math.floor(Date.now() / 1000);
 			const expiresAt = now + AUTH_CODE_TTL;
 
+			// The earlier "stay signed in" answer is remembered as offline_access
+			// on the grant; honor it again without widening what the client asked.
+			const staySignedIn =
+				offersStaySignedIn(requestedScopes) &&
+				grantedScopes.includes("offline_access");
+
 			db.query(
-				"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me, nonce, auth_time, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me, nonce, auth_time, resource, issue_refresh) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			).run(
 				code,
 				user.userId,
@@ -330,6 +340,7 @@ export async function authorizeGet(req: Request): Promise<Response> {
 				nonce,
 				now, // auth_time - user already authenticated
 				resourceStored,
+				staySignedIn ? 1 : 0,
 			);
 
 			db.query(
@@ -578,12 +589,24 @@ export async function authorizePost(req: Request): Promise<Response> {
 	}
 	const resourceStored = resourcesToStored(approvedResources);
 
+	// The person's answer to "stay signed in". Only meaningful for an
+	// IndieAuth-style request; an OIDC client says it with offline_access.
+	const staySignedIn =
+		offersStaySignedIn(approvedScopes) &&
+		formData.get(STAY_SIGNED_IN_FIELD) === "1";
+
+	// What the grant remembers. offline_access stands in for the checkbox so
+	// a later auto-approval can repeat the choice; it is not sent to the client.
+	const rememberedScopes = staySignedIn
+		? [...approvedScopes, "offline_access"]
+		: approvedScopes;
+
 	const code = crypto.randomBytes(32).toString("base64url");
 	const now = Math.floor(Date.now() / 1000);
 	const expiresAt = now + AUTH_CODE_TTL;
 
 	db.query(
-		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me, nonce, auth_time, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, me, nonce, auth_time, resource, issue_refresh) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
 		code,
 		user.userId,
@@ -596,6 +619,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 		nonce,
 		now, // auth_time
 		resourceStored,
+		staySignedIn ? 1 : 0,
 	);
 
 	// Store or update permission grant
@@ -618,7 +642,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 		db.query(
 			"UPDATE permissions SET scopes = ?, resources = ?, last_used = ? WHERE user_id = ? AND client_id = ?",
 		).run(
-			JSON.stringify(approvedScopes),
+			JSON.stringify(rememberedScopes),
 			merged,
 			Math.floor(Date.now() / 1000),
 			user.userId,
@@ -634,7 +658,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 		).run(
 			user.userId,
 			clientId,
-			JSON.stringify(approvedScopes),
+			JSON.stringify(rememberedScopes),
 			resourceStored,
 			app?.default_role || null,
 		);

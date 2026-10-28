@@ -729,6 +729,143 @@ describe("S4xx token responses", () => {
 	});
 });
 
+describe("stay signed in: refresh tokens for IndieAuth clients", () => {
+	async function consentAndExchange(
+		body: Record<string, string>,
+	): Promise<Record<string, unknown>> {
+		const userId = createUser({ username: "kieran" });
+		const cookie = createSession(userId);
+		const res = await authorizePost(
+			consentPost(
+				{
+					action: "allow",
+					client_id: CLIENT_ID,
+					redirect_uri: REDIRECT_URI,
+					state: "s",
+					code_challenge: CHALLENGE,
+					...body,
+				},
+				cookie,
+			),
+		);
+		expect(res.status).toBe(302);
+		const code = location(res).searchParams.get("code") ?? "";
+		return (await (await exchange(code)).json()) as Record<string, unknown>;
+	}
+
+	test("the consent screen offers the choice only to IndieAuth-style requests", async () => {
+		seedApp();
+		const userId = createUser({ username: "kieran" });
+		const cookie = createSession(userId);
+
+		const indieauth = await (await get(validParams(), cookie)).text();
+		expect(indieauth).toContain('name="stay_signed_in"');
+
+		const oidc = await (
+			await get(validParams({ scope: "openid profile" }), cookie)
+		).text();
+		expect(oidc).not.toContain('name="stay_signed_in"');
+
+		const offline = await (
+			await get(validParams({ scope: "profile offline_access" }), cookie)
+		).text();
+		expect(offline).not.toContain('name="stay_signed_in"');
+
+		const identity = await (
+			await get(validParams({ scope: null }), cookie)
+		).text();
+		expect(identity).not.toContain('name="stay_signed_in"');
+	});
+
+	test("ticked: a refresh token is issued and the scope string is untouched", async () => {
+		seedApp();
+		const body = await consentAndExchange({
+			scope: "profile",
+			stay_signed_in: "1",
+		});
+		expect(typeof body.refresh_token).toBe("string");
+		expect(body.scope).toBe("profile");
+	});
+
+	test("unticked: a one-hour grant with no refresh token", async () => {
+		seedApp();
+		const body = await consentAndExchange({ scope: "profile" });
+		expect(body.refresh_token).toBeUndefined();
+		expect(body.scope).toBe("profile");
+	});
+
+	test("the choice is remembered for the next silent approval", async () => {
+		seedApp();
+		const userId = createUser({ username: "kieran" });
+		const cookie = createSession(userId);
+		const first = await authorizePost(
+			consentPost(
+				{
+					action: "allow",
+					client_id: CLIENT_ID,
+					redirect_uri: REDIRECT_URI,
+					state: "s",
+					code_challenge: CHALLENGE,
+					scope: "profile",
+					stay_signed_in: "1",
+				},
+				cookie,
+			),
+		);
+		expect(first.status).toBe(302);
+
+		const again = await get(validParams({ scope: "profile" }), cookie);
+		expect(again.status).toBe(302);
+		const code = location(again).searchParams.get("code") ?? "";
+		const body = (await (await exchange(code)).json()) as Record<
+			string,
+			unknown
+		>;
+		expect(typeof body.refresh_token).toBe("string");
+		expect(body.scope).toBe("profile");
+	});
+
+	test("the checkbox cannot smuggle a refresh token into an OIDC grant", async () => {
+		seedApp();
+		const body = await consentAndExchange({
+			scope: "profile",
+			openid: "ignored",
+			stay_signed_in: "1",
+		});
+		// scope field is only "profile" here, so this is IndieAuth-style and
+		// honored; the real guard is below with openid in the approved scopes.
+		expect(typeof body.refresh_token).toBe("string");
+
+		const userId = createUser({ username: "other" });
+		const cookie = createSession(userId);
+		const form = new URLSearchParams();
+		form.append("action", "allow");
+		form.append("client_id", CLIENT_ID);
+		form.append("redirect_uri", REDIRECT_URI);
+		form.append("state", "s");
+		form.append("code_challenge", CHALLENGE);
+		form.append("scope", "profile");
+		form.append("scope", "openid");
+		form.append("stay_signed_in", "1");
+		form.append("csrf_token", csrfTokenFor(cookie));
+		const res = await authorizePost(
+			new Request("http://localhost/auth/authorize", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/x-www-form-urlencoded",
+					Cookie: `indiko_session=${cookie}`,
+				},
+				body: form.toString(),
+			}),
+		);
+		const code = location(res).searchParams.get("code") ?? "";
+		const row = db
+			.query("SELECT issue_refresh FROM authcodes WHERE code = ?")
+			.get(code) as { issue_refresh: number };
+		expect(row.issue_refresh).toBe(0);
+	});
+});
+
 describe("S5xx refresh tokens", () => {
 	async function issue(): Promise<{
 		access_token: string;

@@ -1,5 +1,6 @@
 // Server-rendered HTML pages for the OAuth flow (errors, consent).
 
+import { offersStaySignedIn, STAY_SIGNED_IN_FIELD } from "./refresh-choice";
 import type { ResourceInfo } from "./resource";
 
 export function escapeHtml(value: string): string {
@@ -230,6 +231,49 @@ const CONSENT_STYLES = `
 	.app-url a:hover {
 		color: var(--accent);
 		text-decoration-style: solid;
+	}
+	.stay {
+		margin: -0.75rem 0 1.75rem;
+		padding: 0 1.25rem;
+	}
+	.stay label {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+		cursor: pointer;
+		font-size: 0.9375rem;
+		color: var(--paper);
+		line-height: 1.5;
+	}
+	.stay input[type="checkbox"] {
+		appearance: none;
+		width: 1.25rem;
+		height: 1.25rem;
+		margin: 0.125rem 0 0;
+		border: 2px solid var(--paper-dim);
+		background: rgba(12, 23, 19, 0.6);
+		cursor: pointer;
+		flex-shrink: 0;
+		position: relative;
+	}
+	.stay input[type="checkbox"]:checked {
+		background: var(--accent);
+		border-color: var(--accent);
+	}
+	.stay input[type="checkbox"]:checked::after {
+		content: "✓";
+		position: absolute;
+		inset: 0;
+		display: grid;
+		place-items: center;
+		color: var(--paper);
+		font-size: 0.875rem;
+		font-weight: 700;
+	}
+	.stay small {
+		display: block;
+		color: var(--paper-dim);
+		font-size: 0.8125rem;
 	}
 	.identity-only {
 		margin-bottom: 1.75rem;
@@ -510,6 +554,16 @@ export function consentPage(opts: ConsentPageOptions): Response {
         </ul>
       </div>`
 					: `<div class="identity-only">This app only asked to confirm your identity. It will learn your profile URL and nothing else, and gets no access token.</div>`
+			}
+      ${
+				offersStaySignedIn(opts.scopes)
+					? `<div class="stay">
+        <label>
+          <input type="checkbox" name="${STAY_SIGNED_IN_FIELD}" value="1" checked />
+          <span>Stay signed in to this app<small>Lets it renew its access for up to 30 days without asking you again. Uncheck for a one-hour session.</small></span>
+        </label>
+      </div>`
+					: ""
 			}
 
       ${resourceHidden}

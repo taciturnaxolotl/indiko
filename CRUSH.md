@@ -80,7 +80,7 @@ src/
 │   ├── docs.html
 │   ├── oauth-test.html
 │   └── admin-shared.css
-├── migrations/        # SQL migrations (001 through 016; see `ls src/migrations` for the latest)
+├── migrations/        # SQL migrations (001 through 017; see `ls src/migrations` for the latest)
 │   ├── 001_init.sql
 │   ├── 002_add_me_to_authcodes.sql
 │   ├── 003_add_tokens_table.sql
@@ -91,7 +91,8 @@ src/
 │   ├── 008_add_oidc_keys.sql
 │   ├── ...
 │   ├── 015_add_authcode_family.sql
-│   └── 016_add_app_registration.sql
+│   ├── 016_add_app_registration.sql
+│   └── 017_add_authcode_issue_refresh.sql
 ├── styles.css         # Global styles (non-component)
 scripts/               # Utility scripts (run with `bun scripts/<name>.ts`)
 │   ├── audit-ldap-orphans.ts  # Audit/cleanup LDAP-orphaned accounts
@@ -187,6 +188,7 @@ test/                  # Tests (bun:test)
 - **PKCE**: `code_challenge_method=S256` is required explicitly; a challenge without a method is refused (missing means plain per RFC 7636)
 - **Code reuse**: exchanging a code sets `authcodes.family` and tokens inherit it; a replayed code revokes every token in that family (S303, RFC 9700 §4.5)
 - **Refresh scope**: `scope` on a refresh request may narrow but never widen (`invalid_scope`)
+- **Refresh token issuance**: `offline_access` (OIDC) or the consent-screen "stay signed in" checkbox for IndieAuth-style requests (`offersStaySignedIn` in `lib/oauth/refresh-choice.ts`: scoped, no `openid`, no `offline_access`). The answer rides on `authcodes.issue_refresh` (migration 017) so the client's `scope` is never widened; the grant remembers it as `offline_access` in `permissions.scopes` for auto-approval
 - **Introspection requires auth**: a live Bearer access token or confidential `client_id`+`client_secret`; otherwise 401 with no token info (S801/S802)
 - **CORS**: token, revoke, userinfo, OIDC discovery and JWKS send `Access-Control-Allow-Origin: *` (never with credentials) and answer `OPTIONS`; helpers in `lib/oauth/errors.ts` (`withCors`, `corsPreflight`, `methodNotAllowed`)
 - **indieauth.rocks**: `test/indieauth-rocks.test.ts` mirrors the server test suite by test id (S2xx-S9xx). Run the live suite at https://indieauth.rocks after deploying by entering a `/u/{username}` profile URL
