@@ -16,7 +16,7 @@ Indiko follows the **IndieAuth Living Standard, 11 July 2024** (the current edit
 - PKCE with `S256` is required, `iss` is returned on every redirect, and a scope-less request yields identity only.
 - Codes issued without a scope are redeemed at the **token endpoint** (the 2024 behaviour); the authorization endpoint also accepts the exchange for clients written against the 2022 edition.
 
-Conformance is tracked against the [indieauth.rocks](https://indieauth.rocks/server-tests) server suite. The [published report for this instance](https://indieauth.rocks/implementations/3) passes every applicable check (75 passed, 0 failed, 0 warnings); the skipped ones cover JWT access tokens, which Indiko does not issue, and refresh tokens, which are only issued with `offline_access`. `test/indieauth-rocks.test.ts` attempts to replicate the checks for our ci as well.
+Conformance is tracked against the [indieauth.rocks](https://indieauth.rocks/server-tests) server suite. The [published report for this instance](https://indieauth.rocks/implementations/3) passes every applicable check (81 passed, 0 failed, 0 warnings); the three skipped cover JWT access tokens, which Indiko does not issue. `test/indieauth-rocks.test.ts` attempts to replicate the checks for our ci as well.
 
 ## openid connect (oidc)
 
