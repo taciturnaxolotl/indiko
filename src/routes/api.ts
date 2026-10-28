@@ -5,7 +5,11 @@ import {
 } from "../lib/oauth/client-display";
 import { verifyDomain } from "../lib/oauth/client-metadata";
 import { validateProfileURL } from "../lib/oauth/urls";
-import { getSessionUserFlexible, validateCsrf } from "../lib/session";
+import {
+	csrfCookieRefreshHeaders,
+	getSessionUserFlexible,
+	validateCsrf,
+} from "../lib/session";
 
 // Input caps for user-editable profile fields. Anything larger is a storage /
 // bandwidth DoS (served back on /u/:username, /userinfo and admin lists).
@@ -58,13 +62,18 @@ export function hello(req: Request): Response {
 		return user;
 	}
 
-	return Response.json({
-		message: `Hello ${user.username}! You're authenticated with passkeys.`,
-		id: user.userId,
-		username: user.username,
-		isAdmin: user.isAdmin,
-		tier: user.tier,
-	});
+	// Every signed-in page calls this first, which makes it the natural place
+	// to hand the browser a correct CSRF cookie before it tries to mutate.
+	return Response.json(
+		{
+			message: `Hello ${user.username}! You're authenticated with passkeys.`,
+			id: user.userId,
+			username: user.username,
+			isAdmin: user.isAdmin,
+			tier: user.tier,
+		},
+		{ headers: csrfCookieRefreshHeaders(req) },
+	);
 }
 
 export function listUsers(req: Request): Response {

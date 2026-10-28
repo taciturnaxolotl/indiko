@@ -4,6 +4,7 @@ import {
 	clearSessionCookieHeader,
 	cookieSecureFlag,
 	csrfCookieHeader,
+	csrfCookieRefreshHeaders,
 	csrfTokenFor,
 	csrfTokenMatches,
 	getCsrfToken,
@@ -157,6 +158,30 @@ describe("CSRF token binding", () => {
 		expect(
 			validateCsrf(csrfReq({ header: csrfTokenFor("sess-1") }))?.status,
 		).toBe(403);
+	});
+
+	test("a stale csrf cookie is reissued on the 403 and by the refresh helper", () => {
+		const session = "sess-stale";
+		const derived = csrfTokenFor(session);
+		// Browser still holds a cookie from before the derivation changed.
+		const stale = csrfReq({
+			session,
+			csrfCookie: "old-random",
+			header: "old-random",
+		});
+
+		const res = validateCsrf(stale);
+		expect(res?.status).toBe(403);
+		expect(res?.headers.get("Set-Cookie")).toContain(`indiko_csrf=${derived}`);
+
+		expect(csrfCookieRefreshHeaders(stale)).toEqual([
+			["Set-Cookie", csrfCookieHeader(derived)],
+		]);
+		// Already correct: nothing to send. No session: nothing to derive.
+		expect(
+			csrfCookieRefreshHeaders(csrfReq({ session, csrfCookie: derived })),
+		).toEqual([]);
+		expect(csrfCookieRefreshHeaders(csrfReq({ csrfCookie: "x" }))).toEqual([]);
 	});
 
 	test("csrfTokenMatches is strict about length and content", () => {

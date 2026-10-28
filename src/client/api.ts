@@ -15,13 +15,41 @@ export async function apiFetch(
 	const method = (options.method || "GET").toUpperCase();
 	const headers = new Headers(options.headers);
 
+	const mutating =
+		method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+
 	// Include CSRF token on mutating requests
-	if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+	if (mutating) {
 		const csrf = getCsrfToken();
 		if (csrf) {
 			headers.set("X-CSRF-Token", csrf);
 		}
 	}
 
-	return fetch(url, { ...options, headers });
+	const response = await fetch(url, { ...options, headers });
+
+	// A 403 for a stale CSRF cookie comes back with a corrected cookie, so one
+	// retry with the fresh value is all it takes. Bodies that were streams
+	// cannot be replayed; everything in this app sends strings or nothing.
+	if (
+		mutating &&
+		response.status === 403 &&
+		typeof (options.body ?? "") === "string"
+	) {
+		const body = await response
+			.clone()
+			.json()
+			.catch(() => null as { code?: string } | null);
+		const fresh = getCsrfToken();
+		if (
+			body?.code === "csrf" &&
+			fresh &&
+			fresh !== headers.get("X-CSRF-Token")
+		) {
+			headers.set("X-CSRF-Token", fresh);
+			return fetch(url, { ...options, headers });
+		}
+	}
+
+	return response;
 }

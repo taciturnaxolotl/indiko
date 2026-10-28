@@ -195,21 +195,57 @@ export function csrfTokenMatches(
 	return crypto.timingSafeEqual(a, b);
 }
 
+function readCsrfCookie(req: Request): string | null {
+	const cookieHeader = req.headers.get("Cookie");
+	if (!cookieHeader) return null;
+	const match = cookieHeader.match(
+		new RegExp(`(?:^|;\\s*)${CSRF_COOKIE}=([^;]+)`),
+	);
+	return match?.[1] ?? null;
+}
+
+/**
+ * Headers that bring a browser's indiko_csrf cookie back in line with the
+ * value derived from its session. The cookie is only a convenience copy for
+ * page scripts, so when it is missing or stale (a session issued before the
+ * derivation changed, say) it is simply reissued; nothing is trusted from it.
+ * Returns an empty list when the cookie is already correct or there is no
+ * session to derive from.
+ */
+export function csrfCookieRefreshHeaders(
+	req: Request,
+): Array<[string, string]> {
+	const expected = getCsrfToken(req);
+	if (!expected) return [];
+	const present = readCsrfCookie(req);
+	if (present && csrfTokenMatches(present, expected)) return [];
+	return [["Set-Cookie", csrfCookieHeader(expected)]];
+}
+
 /**
  * Validate the CSRF token on a mutating request. The token from the
  * X-CSRF-Token header must equal the token derived from the session cookie.
- * Returns null if valid, or a 403 Response to send back.
+ * Returns null if valid, or a 403 Response to send back. The 403 carries a
+ * corrected indiko_csrf cookie so a page that was holding a stale copy can
+ * retry without a fresh sign-in.
  */
 export function validateCsrf(req: Request): Response | null {
 	const expected = getCsrfToken(req);
 	const headerToken = req.headers.get(CSRF_HEADER);
+	const refresh = csrfCookieRefreshHeaders(req);
 
 	if (!expected || !headerToken) {
-		return Response.json({ error: "CSRF token missing" }, { status: 403 });
+		return Response.json(
+			{ error: "CSRF token missing", code: "csrf" },
+			{ status: 403, headers: refresh },
+		);
 	}
 
 	if (!csrfTokenMatches(headerToken, expected)) {
-		return Response.json({ error: "CSRF token mismatch" }, { status: 403 });
+		return Response.json(
+			{ error: "CSRF token mismatch", code: "csrf" },
+			{ status: 403, headers: refresh },
+		);
 	}
 
 	return null;
