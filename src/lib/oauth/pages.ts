@@ -216,7 +216,16 @@ const CONSENT_STYLES = `
 		color: var(--paper-dim);
 		font-family: monospace;
 		margin-top: 0.25rem;
-		word-break: break-all;
+		overflow-wrap: anywhere;
+	}
+	.app-url a {
+		color: inherit;
+		text-decoration: underline dotted;
+		text-underline-offset: 0.2em;
+	}
+	.app-url a:hover {
+		color: var(--accent);
+		text-decoration-style: solid;
 	}
 	.identity-only {
 		margin-bottom: 1.75rem;
@@ -417,6 +426,17 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
 	offline_access: "Keep you signed in long-term",
 };
 
+// The client_id is shown in full (IndieAuth §5.2: the prompt MUST identify the
+// application, and a bare name is forgeable). URL clients get a link so the
+// user can look before they allow; opaque ikc_ ids are plain text.
+function clientIdMarkup(clientId: string): string {
+	const escaped = escapeHtml(clientId);
+	if (!clientId.startsWith("https://") && !clientId.startsWith("http://")) {
+		return escaped;
+	}
+	return `<a href="${escaped}" title="${escaped}" target="_blank" rel="noopener noreferrer nofollow">${escaped}</a>`;
+}
+
 export function consentPage(opts: ConsentPageOptions): Response {
 	// RFC 8707: show WHAT the client is being granted access to (name + icon from
 	// the resource's PRM), and carry each resource through the form as a hidden
@@ -468,7 +488,7 @@ export function consentPage(opts: ConsentPageOptions): Response {
       </div>
       <div class="app-info">
         <div class="app-name">${escapeHtml(opts.appName)}</div>
-        <div class="app-url">${escapeHtml(opts.clientId)}</div>
+        <div class="app-url">${clientIdMarkup(opts.clientId)}</div>
         ${opts.appDescription ? `<div class="app-description">${escapeHtml(opts.appDescription)}</div>` : ""}
       </div>
     </div>

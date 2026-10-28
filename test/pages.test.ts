@@ -70,9 +70,24 @@ describe("consentPage", () => {
 		expect(html).toContain('type="hidden" name="scope" value="profile"');
 	});
 
-	test("shows the full client_id, not just a name (S206)", async () => {
-		const html = await consentPage(base).text();
-		expect(html).toContain("https://example.com/");
+	test("shows the full client_id as a link, not just a name (S206)", async () => {
+		const html = await consentPage({
+			...base,
+			clientId: "https://example.com/clients/abc/main",
+		}).text();
+		expect(html).toContain(
+			'<a href="https://example.com/clients/abc/main" title="https://example.com/clients/abc/main" target="_blank" rel="noopener noreferrer nofollow">https://example.com/clients/abc/main</a>',
+		);
+	});
+
+	test("opaque client ids are plain text, and javascript: never becomes a link", async () => {
+		const opaque = await consentPage({ ...base, clientId: "ikc_abc" }).text();
+		expect(opaque).toContain('<div class="app-url">ikc_abc</div>');
+		const evil = await consentPage({
+			...base,
+			clientId: "javascript:alert(1)",
+		}).text();
+		expect(evil).not.toContain('href="javascript:');
 	});
 
 	test("scope-less request explains identity-only and submits no scope", async () => {
