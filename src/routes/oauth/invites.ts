@@ -1,19 +1,6 @@
 import crypto from "node:crypto";
 import { db } from "../../db";
-import { getSessionUserFlexible, validateCsrf } from "../../lib/session";
-
-function requireAdmin(req: Request): { userId: number } | Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
-
-	return user;
-}
+import { requireAdmin } from "../../lib/session";
 
 function parseInviteId(req: Request): string | null {
 	const url = new URL(req.url);
@@ -100,12 +87,7 @@ async function readJsonObject(
 // POST /api/invites/create - Create invite link (admin only)
 export async function createInvite(req: Request): Promise<Response> {
 	const user = requireAdmin(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
+	if (user instanceof Response) return user;
 
 	const body = await readJsonObject(req);
 	if (body instanceof Response) return body;
@@ -212,9 +194,7 @@ export async function createInvite(req: Request): Promise<Response> {
 // GET /api/invites - List all invites (admin only)
 export function listInvites(req: Request): Response {
 	const user = requireAdmin(req);
-	if (user instanceof Response) {
-		return user;
-	}
+	if (user instanceof Response) return user;
 
 	const invites = db
 		.query(`
@@ -300,12 +280,7 @@ export function listInvites(req: Request): Response {
 // PATCH /api/invites/:id - Update invite (admin only)
 export async function updateInvite(req: Request): Promise<Response> {
 	const user = requireAdmin(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
+	if (user instanceof Response) return user;
 
 	const inviteId = parseInviteId(req);
 	if (!inviteId) {
@@ -367,12 +342,7 @@ export async function updateInvite(req: Request): Promise<Response> {
 // DELETE /api/invites/:id - Delete an invite (admin only)
 export function deleteInvite(req: Request): Response {
 	const user = requireAdmin(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
+	if (user instanceof Response) return user;
 
 	const inviteId = parseInviteId(req);
 	if (!inviteId) {

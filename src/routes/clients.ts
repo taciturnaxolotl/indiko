@@ -5,7 +5,7 @@ import {
 	clientRegistration,
 } from "../lib/oauth/client-display";
 import { hashSecret } from "../lib/secrets";
-import { getSessionUserFlexible, validateCsrf } from "../lib/session";
+import { requireAdmin } from "../lib/session";
 import {
 	isHttpUrl,
 	MAX_URL_LENGTH,
@@ -48,14 +48,8 @@ function validateRedirectUris(
 }
 
 export function listClients(req: Request): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const clients = db
 		.query(
@@ -125,17 +119,8 @@ export function listClients(req: Request): Response {
 }
 
 export async function createClient(req: Request): Promise<Response> {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	// Only admin and developer tiers can create apps
 	if (user.tier !== "admin" && user.tier !== "developer") {
@@ -252,14 +237,8 @@ export async function createClient(req: Request): Promise<Response> {
 }
 
 export function getClient(req: Request, clientId: string): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const client = db
 		.query(
@@ -355,17 +334,8 @@ export async function updateClient(
 	req: Request,
 	clientId: string,
 ): Promise<Response> {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	try {
 		const body = await req.json();
@@ -536,17 +506,8 @@ export async function updateClient(
 }
 
 export function deleteClient(req: Request, clientId: string): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const existing = db
 		.query("SELECT id FROM apps WHERE client_id = ?")
@@ -575,17 +536,8 @@ export async function setUserRole(
 	clientId: string,
 	username: string,
 ): Promise<Response> {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	try {
 		const body = await req.json();
@@ -648,17 +600,8 @@ export function regenerateClientSecret(
 	req: Request,
 	clientId: string,
 ): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const client = db
 		.query("SELECT id, is_preregistered FROM apps WHERE client_id = ?")

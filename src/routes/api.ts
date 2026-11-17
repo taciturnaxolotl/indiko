@@ -8,6 +8,7 @@ import { validateProfileURL } from "../lib/oauth/urls";
 import {
 	csrfCookieRefreshHeaders,
 	getSessionUserFlexible,
+	requireAdmin,
 	validateCsrf,
 } from "../lib/session";
 import { isHttpUrl, MAX_URL_LENGTH } from "../lib/validate";
@@ -68,14 +69,8 @@ export function hello(req: Request): Response {
 }
 
 export function listUsers(req: Request): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const users = db
 		.query(
@@ -346,14 +341,8 @@ export function revokeApp(req: Request, clientId: string): Response {
 }
 
 export function listAllApps(req: Request): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const apps = db
 		.query(
@@ -393,14 +382,8 @@ export function listAllApps(req: Request): Response {
 }
 
 export function getAppDetails(req: Request, clientId: string): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const app = db
 		.query(
@@ -467,17 +450,8 @@ export function revokeAppForUser(
 	clientId: string,
 	username: string,
 ): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const targetUser = db
 		.query("SELECT id FROM users WHERE username = ?")
@@ -495,17 +469,8 @@ export function revokeAppForUser(
 }
 
 export function disableUser(req: Request, userId: string): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const targetUserId = Number.parseInt(userId, 10);
 	if (Number.isNaN(targetUserId)) {
@@ -541,17 +506,8 @@ export function disableUser(req: Request, userId: string): Response {
 }
 
 export function enableUser(req: Request, userId: string): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const targetUserId = Number.parseInt(userId, 10);
 	if (Number.isNaN(targetUserId)) {
@@ -575,17 +531,8 @@ export async function updateUserTier(
 	req: Request,
 	userId: string,
 ): Promise<Response> {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const targetUserId = Number.parseInt(userId, 10);
 	if (Number.isNaN(targetUserId)) {
@@ -636,17 +583,8 @@ export async function updateUserTier(
 }
 
 export function deleteUser(req: Request, userId: string): Response {
-	const user = getSessionUserFlexible(req);
-	if (user instanceof Response) {
-		return user;
-	}
-
-	const csrfError = validateCsrf(req);
-	if (csrfError) return csrfError;
-
-	if (!user.isAdmin) {
-		return Response.json({ error: "Admin access required" }, { status: 403 });
-	}
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
 
 	const targetUserId = Number.parseInt(userId, 10);
 	if (Number.isNaN(targetUserId)) {
