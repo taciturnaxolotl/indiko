@@ -189,7 +189,7 @@ test/                  # Tests (bun:test)
 - **Code reuse**: exchanging a code sets `authcodes.family` and tokens inherit it; a replayed code revokes every token in that family (S303, RFC 9700 §4.5)
 - **Refresh scope**: `scope` on a refresh request may narrow but never widen (`invalid_scope`)
 - **Refresh token issuance**: `offline_access` (OIDC) or the consent-screen "stay signed in" checkbox for IndieAuth-style requests (`offersStaySignedIn` in `lib/oauth/refresh-choice.ts`: scoped, no `openid`, no `offline_access`). The answer rides on `authcodes.issue_refresh` (migration 017) so the client's `scope` is never widened; the grant remembers it as `offline_access` in `permissions.scopes` for auto-approval
-- **Introspection requires auth**: a live Bearer access token or confidential `client_id`+`client_secret`; otherwise 401 with no token info (S801/S802)
+- **Introspection requires auth**: a live Bearer access token or confidential `client_id`+`client_secret`; otherwise 401 with no token info (S801/S802). Both paths report a suspended user's token as `active: false`
 - **CORS**: token, revoke, userinfo, OIDC discovery and JWKS send `Access-Control-Allow-Origin: *` (never with credentials) and answer `OPTIONS`; helpers in `lib/oauth/errors.ts` (`withCors`, `corsPreflight`, `methodNotAllowed`)
 - **indieauth.rocks**: `test/indieauth-rocks.test.ts` mirrors the server test suite by test id (S2xx-S9xx). Run the live suite at https://indieauth.rocks after deploying by entering a `/u/{username}` profile URL
 - OIDC nonce support and auth_time tracking in authcodes

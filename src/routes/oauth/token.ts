@@ -844,7 +844,7 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 
 		const tokenData = db
 			.query(
-				"SELECT t.user_id, t.client_id, t.scope, t.expires_at, t.revoked, t.created_at, t.resource, u.username FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
+				"SELECT t.user_id, t.client_id, t.scope, t.expires_at, t.revoked, t.created_at, t.resource, u.username, u.status FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
 			)
 			.get(tokenValue) as
 			| {
@@ -856,10 +856,18 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 					created_at: number;
 					resource: string | null;
 					username: string;
+					status: string;
 			  }
 			| undefined;
 
-		if (!tokenData || tokenData.revoked === 1) {
+		// A suspended user's token is dead even if nothing got around to revoking
+		// it. The Bearer caller check already enforces this; client credentials
+		// must not be a way around it.
+		if (
+			!tokenData ||
+			tokenData.revoked === 1 ||
+			tokenData.status !== "active"
+		) {
 			return Response.json({ active: false }, { headers: NO_STORE_HEADERS });
 		}
 

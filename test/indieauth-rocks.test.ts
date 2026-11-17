@@ -1084,4 +1084,22 @@ describe("S8xx introspection", () => {
 		);
 		expect(res.status).toBe(401);
 	});
+
+	test("a suspended user's unrevoked token is inactive to a confidential client", async () => {
+		const accessToken = await issued();
+		db.query(
+			"INSERT INTO apps (client_id, redirect_uris, name, is_preregistered, client_secret_hash) VALUES (?, ?, ?, 1, ?)",
+		).run("ikc_rs", "[]", "Resource Server", hashSecret("s3cret"));
+		db.query("UPDATE users SET status = 'suspended' WHERE username = ?").run(
+			"kieran",
+		);
+
+		const res = await introspect({
+			token: accessToken,
+			client_id: "ikc_rs",
+			client_secret: "s3cret",
+		});
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ active: false });
+	});
 });

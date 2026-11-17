@@ -58,6 +58,7 @@ beforeEach(() => {
 	db.query("DELETE FROM challenges").run();
 	db.query("DELETE FROM credentials").run();
 	db.query("DELETE FROM sessions").run();
+	db.query("DELETE FROM tokens").run();
 	db.query("DELETE FROM users").run();
 });
 
@@ -174,5 +175,20 @@ describe("loginOptions LDAP enforcement", () => {
 		const row = userRow(id);
 		expect(row.status).toBe("suspended");
 		expect(row.orphaned_since).not.toBeNull();
+	});
+
+	test("suspending on not_found revokes the user's OAuth tokens", async () => {
+		const id = ldapUser("gone3");
+		db.query(
+			"INSERT INTO tokens (token, user_id, client_id, scope, expires_at) VALUES (?, ?, ?, ?, ?)",
+		).run("live-token", id, "https://app.example/", "profile", 9999999999);
+		ldapResult = "not_found";
+
+		await loginOptions(json("/auth/login/options", { username: "gone3" }));
+
+		const token = db
+			.query("SELECT revoked FROM tokens WHERE user_id = ?")
+			.get(id) as { revoked: number };
+		expect(token.revoked).toBe(1);
 	});
 });

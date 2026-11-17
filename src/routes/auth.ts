@@ -600,6 +600,9 @@ async function ldapUserStillPresent(user: LdapLoginUser): Promise<boolean> {
 			"UPDATE users SET status = 'suspended', orphaned_since = COALESCE(orphaned_since, ?) WHERE id = ?",
 		).run(nowSec, user.id);
 		db.query("DELETE FROM sessions WHERE user_id = ?").run(user.id);
+		// Same as an admin suspension: a live access token would otherwise keep
+		// working at resource servers until it expired.
+		db.query("UPDATE tokens SET revoked = 1 WHERE user_id = ?").run(user.id);
 		console.warn(
 			`[auth] ${user.username} no longer exists in LDAP — account suspended`,
 		);
