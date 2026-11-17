@@ -6,6 +6,12 @@ import {
 } from "../lib/oauth/client-display";
 import { hashSecret } from "../lib/secrets";
 import { getSessionUserFlexible, validateCsrf } from "../lib/session";
+import {
+	isHttpUrl,
+	MAX_URL_LENGTH,
+	optionalHttpUrl,
+	optionalText,
+} from "../lib/validate";
 
 function generateClientSecret(): string {
 	return `iks_${nanoid(43)}`; // indiko secret
@@ -18,54 +24,6 @@ function generateClientId(): string {
 // Input caps for admin-supplied client metadata.
 const MAX_NAME_LENGTH = 256;
 const MAX_DESCRIPTION_LENGTH = 2048;
-const MAX_URL_LENGTH = 2048;
-
-function isHttpUrl(value: string): boolean {
-	try {
-		const u = new URL(value);
-		return u.protocol === "http:" || u.protocol === "https:";
-	} catch {
-		return false;
-	}
-}
-
-/**
- * Validate an optional free-text field: must be a string within `max` when
- * present. Returns the normalized value (null for empty/absent) or an error
- * message. `undefined` is passed through so callers can tell "omitted" from
- * "cleared".
- */
-function optionalText(
-	value: unknown,
-	label: string,
-	max: number,
-):
-	| { ok: true; value: string | null | undefined }
-	| { ok: false; error: string } {
-	if (value === undefined) return { ok: true, value: undefined };
-	if (value === null || value === "") return { ok: true, value: null };
-	if (typeof value !== "string") {
-		return { ok: false, error: `${label} must be a string` };
-	}
-	if (value.length > max) {
-		return { ok: false, error: `${label} must be at most ${max} characters` };
-	}
-	return { ok: true, value };
-}
-
-function optionalHttpUrl(
-	value: unknown,
-	label: string,
-):
-	| { ok: true; value: string | null | undefined }
-	| { ok: false; error: string } {
-	const text = optionalText(value, label, MAX_URL_LENGTH);
-	if (!text.ok) return text;
-	if (typeof text.value === "string" && !isHttpUrl(text.value)) {
-		return { ok: false, error: `${label} must be an http(s) URL` };
-	}
-	return text;
-}
 
 /** redirect_uris must be a non-empty array of http(s) URL strings. */
 function validateRedirectUris(

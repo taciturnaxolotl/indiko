@@ -10,21 +10,12 @@ import {
 	getSessionUserFlexible,
 	validateCsrf,
 } from "../lib/session";
+import { isHttpUrl, MAX_URL_LENGTH } from "../lib/validate";
 
 // Input caps for user-editable profile fields. Anything larger is a storage /
 // bandwidth DoS (served back on /u/:username, /userinfo and admin lists).
 const MAX_NAME_LENGTH = 256;
 const MAX_EMAIL_LENGTH = 256;
-const MAX_URL_LENGTH = 2048;
-
-function isHttpUrl(value: string): boolean {
-	try {
-		const u = new URL(value);
-		return u.protocol === "http:" || u.protocol === "https:";
-	} catch {
-		return false;
-	}
-}
 
 /**
  * Cut off every credential an app holds for a user: the consent grant, unused
