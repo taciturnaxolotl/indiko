@@ -251,19 +251,9 @@ function recordDeviceGrant(
 		return;
 	}
 
-	const app = db
-		.query("SELECT default_role FROM apps WHERE client_id = ?")
-		.get(clientId) as { default_role: string | null } | undefined;
-
 	db.query(
-		"INSERT INTO permissions (user_id, client_id, scopes, resources, role) VALUES (?, ?, ?, ?, ?)",
-	).run(
-		userId,
-		clientId,
-		JSON.stringify(scopes),
-		resourcesToStored(resources),
-		app?.default_role || null,
-	);
+		"INSERT INTO permissions (user_id, client_id, scopes, resources) VALUES (?, ?, ?, ?)",
+	).run(userId, clientId, JSON.stringify(scopes), resourcesToStored(resources));
 }
 
 // GET /device - User verification page

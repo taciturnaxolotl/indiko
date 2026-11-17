@@ -317,7 +317,7 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 		// If not bootstrap, validate invite code
 		let inviteId: number | undefined;
-		let inviteRoles: Array<{ app_id: number; role: string }> = [];
+		let inviteRoles: Array<{ resource_id: number; role: string }> = [];
 		if (!isBootstrap) {
 			if (!inviteCode) {
 				return Response.json(
@@ -374,10 +374,11 @@ export async function registerVerify(req: Request): Promise<Response> {
 
 			inviteId = invite.id;
 
-			// Get app role assignments for this invite
 			inviteRoles = db
-				.query("SELECT app_id, role FROM invite_roles WHERE invite_id = ?")
-				.all(inviteId) as Array<{ app_id: number; role: string }>;
+				.query(
+					"SELECT resource_id, role FROM invite_resource_roles WHERE invite_id = ?",
+				)
+				.all(inviteId) as Array<{ resource_id: number; role: string }>;
 		}
 
 		// Verify WebAuthn response
@@ -518,13 +519,13 @@ export async function registerVerify(req: Request): Promise<Response> {
 						"INSERT INTO invite_uses (invite_id, user_id, used_at) VALUES (?, ?, ?)",
 					).run(inviteId, userId, usedAt);
 
-					// Assign app roles to the new user (skip for passkey reset - they already have roles)
-					if (inviteRoles.length > 0 && !isPasskeyReset) {
-						const insertPermission = db.query(
-							"INSERT INTO permissions (user_id, app_id, role) VALUES (?, ?, ?)",
+					// A passkey reset keeps the roles the account already has.
+					if (!isPasskeyReset) {
+						const assign = db.query(
+							"INSERT OR REPLACE INTO resource_roles (resource_id, user_id, role) VALUES (?, ?, ?)",
 						);
-						for (const { app_id, role } of inviteRoles) {
-							insertPermission.run(userId, app_id, role);
+						for (const { resource_id, role } of inviteRoles) {
+							assign.run(resource_id, userId, role);
 						}
 					}
 				}
@@ -1023,16 +1024,10 @@ export async function ldapVerify(req: Request): Promise<Response> {
 			.get() as { id: number } | undefined;
 
 		if (defaultInvite) {
-			const inviteRoles = db
-				.query("SELECT app_id, role FROM invite_roles WHERE invite_id = ?")
-				.all(defaultInvite.id) as Array<{ app_id: number; role: string }>;
-
-			const insertRole = db.query(
-				"INSERT INTO invite_roles (invite_id, app_id, role) VALUES (?, ?, ?)",
-			);
-			for (const { app_id, role } of inviteRoles) {
-				insertRole.run(newInviteId.id, app_id, role);
-			}
+			db.query(
+				`INSERT INTO invite_resource_roles (invite_id, resource_id, role)
+				 SELECT ?, resource_id, role FROM invite_resource_roles WHERE invite_id = ?`,
+			).run(newInviteId.id, defaultInvite.id);
 		}
 
 		return Response.json({

@@ -517,3 +517,151 @@ describe("admin API", () => {
 		expect(rows.map((r) => r.revoked)).toEqual([1, 1, 0, 0]);
 	});
 });
+
+describe("home resource (an app's own roles)", () => {
+	const VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+	const CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
+	function homeApp(opts: Parameters<typeof seedResource>[0] = {}): number {
+		seedApp();
+		const id = seedResource({ identifier: "urn:indiko:app:test", ...opts });
+		allowClient(id);
+		db.query("UPDATE apps SET resource_id = ? WHERE client_id = ?").run(
+			id,
+			CLIENT_ID,
+		);
+		return id;
+	}
+
+	async function exchangeRole(userId: number): Promise<unknown> {
+		const code = `code-${crypto.randomUUID()}`;
+		db.query(
+			`INSERT INTO authcodes (code, user_id, client_id, redirect_uri, scopes, code_challenge, expires_at, used)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+		).run(
+			code,
+			userId,
+			CLIENT_ID,
+			REDIRECT_URI,
+			JSON.stringify(["profile"]),
+			CHALLENGE,
+			Math.floor(Date.now() / 1000) + 60,
+		);
+		const res = await token(
+			new Request("http://localhost/auth/token", {
+				method: "POST",
+				headers: { "Content-Type": "application/x-www-form-urlencoded" },
+				body: new URLSearchParams({
+					grant_type: "authorization_code",
+					code,
+					client_id: CLIENT_ID,
+					redirect_uri: REDIRECT_URI,
+					code_verifier: VERIFIER,
+				}).toString(),
+			}),
+		);
+		const body = (await res.json()) as { role?: string; error?: string };
+		return body.error ?? body.role ?? null;
+	}
+
+	test("the token response carries the user's role there, or the default", async () => {
+		const id = homeApp({ roles: ["admin", "viewer"], defaultRole: "viewer" });
+		const admin = createUser({});
+		assign(id, admin, "admin");
+		expect(await exchangeRole(admin)).toBe("admin");
+		expect(await exchangeRole(createUser({}))).toBe("viewer");
+	});
+
+	test("an app without a home resource carries no role", async () => {
+		seedApp();
+		expect(await exchangeRole(createUser({}))).toBeNull();
+	});
+
+	test("role required on the home resource gates sign-in with no resource param", async () => {
+		homeApp({ assignment: true });
+		const cookie = createSession(createUser({}));
+		const url = new URL(authorizeUrl(API).url);
+		url.searchParams.delete("resource");
+		const res = await authorizeGet(
+			new Request(url, { headers: { Cookie: `indiko_session=${cookie}` } }),
+		);
+		const location = new URL(res.headers.get("Location") ?? "");
+		expect(location.searchParams.get("error")).toBe("access_denied");
+	});
+
+	test("introspection reports only audience roles, never the home role", async () => {
+		const id = homeApp({ defaultRole: "viewer" });
+		const userId = createUser({});
+		assign(id, userId, "admin");
+		const unscoped = seedToken(userId, null).access;
+		const scoped = seedToken(userId, API).access;
+		const plain = (await (await introspect(unscoped)).json()) as Record<
+			string,
+			unknown
+		>;
+		expect(plain.active).toBe(true);
+		expect(plain.role).toBeUndefined();
+		const withAud = (await (await introspect(scoped)).json()) as Record<
+			string,
+			unknown
+		>;
+		expect(withAud.aud).toBe(API);
+		expect(withAud.role).toBeUndefined();
+	});
+});
+
+describe("migration 019 (app roles to resources)", () => {
+	test("moves app roles, grants and invite roles onto per-app resources", async () => {
+		const { Database } = await import("bun:sqlite");
+		const { getMigrations, migrate } = await import("bun-sqlite-migrations");
+		const migrations = getMigrations("src/migrations");
+		const old = new Database(":memory:");
+		old.run("PRAGMA foreign_keys = ON;");
+		migrate(old, migrations, 18);
+		old.run(
+			"INSERT INTO users (id, username, name) VALUES (1,'kieran','K'),(2,'alice','A')",
+		);
+		old.run(`INSERT INTO apps (id, client_id, redirect_uris, name, is_preregistered, available_roles, default_role) VALUES
+			(1,'ikc_abc','[]','Grafana',1,'["admin","viewer"]','viewer'),
+			(2,'https://blog.example/','[]','Blog',0,NULL,NULL),
+			(3,'https://plain.example/','[]','Plain',0,NULL,NULL)`);
+		old.run(`INSERT INTO permissions (user_id, client_id, scopes, role) VALUES
+			(1,'ikc_abc','[]','admin'),(2,'ikc_abc','[]','viewer'),(1,'https://blog.example/','[]','editor')`);
+		old.run(
+			"INSERT INTO invites (id, code, max_uses, created_by) VALUES (1,'inv',1,1)",
+		);
+		old.run(
+			"INSERT INTO invite_roles (invite_id, app_id, role) VALUES (1,1,'admin')",
+		);
+
+		migrate(old, migrations);
+
+		expect(
+			old
+				.query(
+					"SELECT r.identifier, r.default_role FROM apps a LEFT JOIN resources r ON r.id = a.resource_id ORDER BY a.id",
+				)
+				.all(),
+		).toEqual([
+			{ identifier: "urn:indiko:app:ikc_abc", default_role: "viewer" },
+			{ identifier: "https://blog.example", default_role: null },
+			{ identifier: null, default_role: null },
+		]);
+		expect(
+			old
+				.query(
+					"SELECT r.identifier, rr.user_id, rr.role FROM resource_roles rr JOIN resources r ON r.id = rr.resource_id ORDER BY rr.role",
+				)
+				.all(),
+		).toEqual([
+			{ identifier: "urn:indiko:app:ikc_abc", user_id: 1, role: "admin" },
+			{ identifier: "https://blog.example", user_id: 1, role: "editor" },
+		]);
+		expect(
+			old.query("SELECT COUNT(*) AS n FROM resource_clients").get(),
+		).toEqual({ n: 2 });
+		expect(
+			old.query("SELECT invite_id, role FROM invite_resource_roles").all(),
+		).toEqual([{ invite_id: 1, role: "admin" }]);
+	});
+});

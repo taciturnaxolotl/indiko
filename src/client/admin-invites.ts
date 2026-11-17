@@ -48,90 +48,45 @@ async function createInvite() {
 	const modal = document.getElementById("createInviteModal");
 	if (modal) {
 		modal.style.display = "flex";
-		// Load apps for role assignment
-		await loadAppsForInvite();
+		await loadResourcesForInvite();
 	}
 }
 
-async function loadAppsForInvite() {
-	try {
-		const response = await apiFetch("/api/admin/clients", {});
+interface ResourceOption {
+	id: number;
+	name: string;
+	availableRoles: string[] | null;
+}
 
-		if (!response.ok) {
-			throw new Error("Failed to load apps");
-		}
-
-		const data = await response.json();
-		const appRolesContainer = document.getElementById("appRolesContainer");
-
-		if (!appRolesContainer) return;
-
-		if (data.clients.length === 0) {
-			appRolesContainer.innerHTML =
-				'<p style="color: var(--old-rose); font-size: 0.875rem;">No pre-registered apps available</p>';
-			return;
-		}
-
-		appRolesContainer.innerHTML = data.clients
-			.filter((app: { isPreregistered: boolean }) => app.isPreregistered)
-			.map(
-				(app: {
-					id: number;
-					clientId: string;
-					name: string;
-					roles: string[];
-				}) => {
-					const roleOptions =
-						app.roles.length > 0
-							? app.roles
-									.map(
-										(role) =>
-											`<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`,
-									)
-									.join("")
-							: '<option value="" disabled>No roles defined yet</option>';
-
-					const displayName = app.name || app.clientId;
-
-					return `
-				<div class="app-role-item">
-					<label>
-						<input type="checkbox" name="appRole" value="${app.id}" data-client-id="${escapeHtml(app.clientId)}">
-						<span>${escapeHtml(displayName)}</span>
-					</label>
-					<select class="role-select" data-app-id="${app.id}" disabled>
-						<option value="">Select role...</option>
-						${roleOptions}
-					</select>
-				</div>
-			`;
-				},
-			)
-			.join("");
-
-		// Enable/disable role select when checkbox changes
-		const checkboxes = appRolesContainer.querySelectorAll(
-			'input[name="appRole"]',
-		);
-		checkboxes.forEach((checkbox) => {
-			checkbox.addEventListener("change", (e) => {
-				const target = e.target as HTMLInputElement;
-				const appId = target.value;
-				const roleSelect = appRolesContainer.querySelector(
-					`select.role-select[data-app-id="${appId}"]`,
-				) as HTMLSelectElement;
-
-				if (roleSelect) {
-					roleSelect.disabled = !target.checked;
-					if (!target.checked) {
-						roleSelect.value = "";
-					}
-				}
-			});
-		});
-	} catch (error) {
-		console.error("Failed to load apps:", error);
+async function loadResourcesForInvite() {
+	const container = document.getElementById("appRolesContainer");
+	if (!container) return;
+	const response = await apiFetch("/api/admin/resources", {});
+	if (!response.ok) {
+		container.innerHTML = '<div class="error">Failed to load resources</div>';
+		return;
 	}
+	const { resources } = (await response.json()) as {
+		resources: ResourceOption[];
+	};
+	if (resources.length === 0) {
+		container.innerHTML =
+			'<p style="color: var(--old-rose); font-size: 0.875rem;">No resources yet. Register one on the <a href="/admin/resources" style="color: inherit;">resources page</a> to hand out roles with invites.</p>';
+		return;
+	}
+	container.innerHTML = resources
+		.map((r) => {
+			const field = r.availableRoles
+				? `<select class="role-select" data-resource-id="${r.id}"><option value="">no role</option>${r.availableRoles
+						.map(
+							(role) =>
+								`<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`,
+						)
+						.join("")}</select>`
+				: `<input class="role-input-custom" data-resource-id="${r.id}" placeholder="no role">`;
+			return `<div class="app-role-item"><label>${escapeHtml(r.name)}</label>${field}</div>`;
+		})
+		.join("");
 }
 
 async function submitCreateInvite() {
@@ -156,33 +111,16 @@ async function submitCreateInvite() {
 	const note = noteInput.value.trim() || null;
 	const message = messageInput.value.trim() || null;
 
-	// Collect app roles
-	const appRolesContainer = document.getElementById("appRolesContainer");
-	const appRoles: Array<{ appId: number; role: string }> = [];
-
-	if (appRolesContainer) {
-		const checkedBoxes = appRolesContainer.querySelectorAll(
-			'input[name="appRole"]:checked',
-		);
-		checkedBoxes.forEach((checkbox) => {
-			const appId = parseInt((checkbox as HTMLInputElement).value, 10);
-			const roleSelect = appRolesContainer.querySelector(
-				`select.role-select[data-app-id="${appId}"]`,
-			) as HTMLSelectElement;
-
-			let role = "";
-			if (roleSelect?.value) {
-				role = roleSelect.value;
-			}
-
-			if (role) {
-				appRoles.push({
-					appId,
-					role,
-				});
-			}
-		});
-	}
+	const resourceRoles = Array.from(
+		document.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+			"#appRolesContainer [data-resource-id]",
+		),
+	)
+		.filter((field) => field.value.trim())
+		.map((field) => ({
+			resourceId: Number(field.dataset.resourceId),
+			role: field.value.trim(),
+		}));
 
 	submitBtn.disabled = true;
 	submitBtn.textContent = "creating...";
@@ -198,7 +136,7 @@ async function submitCreateInvite() {
 				expiresAt,
 				note,
 				message,
-				appRoles: appRoles.length > 0 ? appRoles : undefined,
+				resourceRoles,
 			}),
 		});
 
@@ -227,17 +165,10 @@ function closeCreateInviteModal() {
 		(document.getElementById("inviteNote") as HTMLTextAreaElement).value = "";
 		(document.getElementById("inviteMessage") as HTMLTextAreaElement).value =
 			"";
-		const appRolesContainer = document.getElementById("appRolesContainer");
-		if (appRolesContainer) {
-			appRolesContainer
-				.querySelectorAll('input[type="checkbox"]')
-				.forEach((input) => {
-					(input as HTMLInputElement).checked = false;
-				});
-			appRolesContainer.querySelectorAll("select").forEach((select) => {
-				(select as HTMLSelectElement).value = "";
-				(select as HTMLSelectElement).disabled = true;
-			});
+		for (const field of document.querySelectorAll<
+			HTMLInputElement | HTMLSelectElement
+		>("#appRolesContainer [data-resource-id]")) {
+			field.value = "";
 		}
 	}
 }
@@ -277,11 +208,7 @@ async function loadInvites() {
 					createdAt: number;
 					createdBy: string;
 					inviteUrl: string;
-					appRoles: Array<{
-						clientId: string;
-						name: string | null;
-						role: string;
-					}>;
+					resourceRoles: Array<{ name: string; role: string }>;
 					usedBy: Array<{ username: string; usedAt: number }>;
 				}) => {
 					const createdDate = new Date(
@@ -300,14 +227,14 @@ async function loadInvites() {
 						: "No expiry";
 
 					const roleInfo =
-						invite.appRoles.length > 0
+						invite.resourceRoles.length > 0
 							? `<div class="invite-meta-item">
-							<div class="invite-meta-label">app roles</div>
-							<div class="invite-roles">${invite.appRoles
-								.map((r) => {
-									const appName = r.name || r.clientId;
-									return `<span class="invite-role">${escapeHtml(appName)} • ${escapeHtml(r.role)}</span>`;
-								})
+							<div class="invite-meta-label">roles</div>
+							<div class="invite-roles">${invite.resourceRoles
+								.map(
+									(r) =>
+										`<span class="invite-role">${escapeHtml(r.name)} • ${escapeHtml(r.role)}</span>`,
+								)
 								.join("")}</div>
 						</div>`
 							: "";

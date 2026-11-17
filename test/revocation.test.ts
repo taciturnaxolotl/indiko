@@ -49,15 +49,10 @@ function mutatingReq(
 	});
 }
 
-function seedApp(clientId = CLIENT_ID, defaultRole: string | null = null) {
+function seedApp(clientId = CLIENT_ID) {
 	db.query(
-		"INSERT INTO apps (client_id, redirect_uris, name, is_preregistered, default_role) VALUES (?, ?, ?, 0, ?)",
-	).run(
-		clientId,
-		JSON.stringify([`${clientId}callback`]),
-		"Test Client",
-		defaultRole,
-	);
+		"INSERT INTO apps (client_id, redirect_uris, name, is_preregistered) VALUES (?, ?, ?, 0)",
+	).run(clientId, JSON.stringify([`${clientId}callback`]), "Test Client");
 }
 
 function seedPermission(userId: number, clientId = CLIENT_ID) {
@@ -319,10 +314,10 @@ describe("device approval records a revocable grant", () => {
 		});
 	}
 
-	test("inserts a permissions row with scopes, resources and the app default role", async () => {
+	test("inserts a permissions row with scopes and resources", async () => {
 		const userId = createUser({});
 		const session = createSession(userId);
-		seedApp(CLIENT_ID, "viewer");
+		seedApp(CLIENT_ID);
 		const { userCode } = seedDeviceCode(CLIENT_ID, {
 			scope: "profile email offline_access",
 			resource: "https://api.example/v1",
@@ -334,12 +329,11 @@ describe("device approval records a revocable grant", () => {
 
 		const perm = db
 			.query(
-				"SELECT scopes, resources, role FROM permissions WHERE user_id = ? AND client_id = ?",
+				"SELECT scopes, resources FROM permissions WHERE user_id = ? AND client_id = ?",
 			)
 			.get(userId, CLIENT_ID) as {
 			scopes: string;
 			resources: string | null;
-			role: string | null;
 		};
 		expect(perm).not.toBeNull();
 		expect(JSON.parse(perm.scopes)).toEqual([
@@ -348,7 +342,6 @@ describe("device approval records a revocable grant", () => {
 			"offline_access",
 		]);
 		expect(perm.resources).toBe("https://api.example/v1");
-		expect(perm.role).toBe("viewer");
 
 		// It now shows on the user's /apps list …
 		const listRes = getAuthorizedApps(
@@ -375,13 +368,12 @@ describe("device approval records a revocable grant", () => {
 		const session = createSession(userId);
 		seedApp(CLIENT_ID);
 		db.query(
-			"INSERT INTO permissions (user_id, client_id, scopes, resources, role) VALUES (?, ?, ?, ?, ?)",
+			"INSERT INTO permissions (user_id, client_id, scopes, resources) VALUES (?, ?, ?, ?)",
 		).run(
 			userId,
 			CLIENT_ID,
 			JSON.stringify(["profile", "email"]),
 			"https://a.example",
-			"editor",
 		);
 		const { userCode } = seedDeviceCode(CLIENT_ID, {
 			scope: "profile offline_access",
@@ -393,12 +385,11 @@ describe("device approval records a revocable grant", () => {
 
 		const perm = db
 			.query(
-				"SELECT scopes, resources, role FROM permissions WHERE user_id = ? AND client_id = ?",
+				"SELECT scopes, resources FROM permissions WHERE user_id = ? AND client_id = ?",
 			)
 			.get(userId, CLIENT_ID) as {
 			scopes: string;
 			resources: string | null;
-			role: string | null;
 		};
 		expect((JSON.parse(perm.scopes) as string[]).sort()).toEqual([
 			"email",
@@ -409,7 +400,6 @@ describe("device approval records a revocable grant", () => {
 			"https://a.example",
 			"https://b.example",
 		]);
-		expect(perm.role).toBe("editor");
 		const count = db
 			.query("SELECT COUNT(*) as n FROM permissions WHERE user_id = ?")
 			.get(userId) as { n: number };

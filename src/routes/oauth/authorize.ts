@@ -676,18 +676,13 @@ export async function authorizePost(req: Request): Promise<Response> {
 			clientId,
 		);
 	} else {
-		const app = db
-			.query("SELECT default_role FROM apps WHERE client_id = ?")
-			.get(clientId) as { default_role: string | null } | undefined;
-
 		db.query(
-			"INSERT INTO permissions (user_id, client_id, scopes, resources, role) VALUES (?, ?, ?, ?, ?)",
+			"INSERT INTO permissions (user_id, client_id, scopes, resources) VALUES (?, ?, ?, ?)",
 		).run(
 			user.userId,
 			clientId,
 			JSON.stringify(rememberedScopes),
 			resourceStored,
-			app?.default_role || null,
 		);
 	}
 

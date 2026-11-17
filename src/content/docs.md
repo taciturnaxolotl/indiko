@@ -586,37 +586,26 @@ Users can uncheck optional scopes during authorization. When `profile` is reques
 
 ## roles
 
-Indiko supports role-based access control (RBAC) through app-specific roles. Roles are arbitrary strings assigned to users on a per-app basis.
+Roles live on [registered resources](#registered-resources). A person holds at most one role per resource, and every app that uses that resource sees the same role.
 
-> **Building an API rather than an app?** Use [registered resources](#registered-resources) instead. Their roles belong to the API, are shared by every app that calls it, and are reported by introspection where a resource server can see them.
-
-### how roles work
-
-1. An admin defines available roles for a pre-registered app
-2. An admin assigns roles to users for that app
-3. When the user authorizes your app, their role is included in the token response
-4. Your app uses the role for access control decisions
+An app gets roles of its own by pointing at a resource: in **admin → apps**, pick one under **roles from**. Its token response then carries the person's role there, or the resource's default role:
 
 ```json
 {
-  "access_token": "...",
-  "me": "{{origin}}/u/username",
-  "role": "editor"
+	"access_token": "...",
+	"me": "{{origin}}/u/username",
+	"role": "editor"
 }
 ```
 
-### defining app roles
-
-Admins define roles when creating or editing a pre-registered client. Roles are app-specific; each app defines its own set (e.g., `admin`, `editor`, `viewer`).
+That resource's rules apply to every sign-in through the app, whether or not the app sends `resource=`. If the resource requires a role, someone without one is refused at sign-in. If it caps the app to certain roles, any other role is left out of the token response.
 
 ### assigning roles
 
-Roles can be assigned two ways:
+- **Manually:** on the resource's page under **admin → resources**
+- **Through invites:** an invite can carry a role per resource, and whoever signs up with it gets those roles
 
-- **Manually** — Admins assign roles to specific users via the admin panel
-- **Via invites** — Invite links can pre-assign roles; users who register through the link get those roles automatically
-
-> **Default roles:** Pre-registered apps can define a default role. New users who authorize the app get this role automatically unless they've been assigned a different one.
+> **Upgrading from per-app roles:** each app that had roles now has a resource of the same name holding its role list, default role and assignments. URL clients keep their client URL as the identifier; `ikc_` clients get `urn:indiko:app:<client_id>`. Token responses carry the same `role` as before.
 
 ## client types
 

@@ -42,7 +42,6 @@ import {
 	getClient,
 	listClients,
 	regenerateClientSecret,
-	setUserRole,
 	updateClient,
 } from "./routes/clients";
 import { docsJs, docsMarkdown, docsPage } from "./routes/docs";
@@ -371,11 +370,6 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 			if (req.method === "PUT") return updateClient(req, req.params.clientId);
 			if (req.method === "DELETE")
 				return deleteClient(req, req.params.clientId);
-			return new Response("Method not allowed", { status: 405 });
-		},
-		"/api/admin/clients/:clientId/users/:username/role": (req) => {
-			if (req.method === "POST")
-				return setUserRole(req, req.params.clientId, req.params.username);
 			return new Response("Method not allowed", { status: 405 });
 		},
 		"/api/admin/clients/:clientId/secret": (req) => {

@@ -1,4 +1,5 @@
 import { db } from "../../db";
+import { homeResource } from "../../lib/oauth/resource-registry";
 
 // GET /.well-known/oauth-client - Client metadata lookup
 export function clientMetadata(req: Request): Response {
@@ -24,8 +25,6 @@ export function clientMetadata(req: Request): Response {
 				description,
 				redirect_uris,
 				is_preregistered,
-				available_roles,
-				default_role,
 				first_seen,
 				last_used
 			FROM apps
@@ -39,8 +38,6 @@ export function clientMetadata(req: Request): Response {
 				description: string | null;
 				redirect_uris: string;
 				is_preregistered: number;
-				available_roles: string | null;
-				default_role: string | null;
 				first_seen: number;
 				last_used: number;
 		  }
@@ -54,9 +51,7 @@ export function clientMetadata(req: Request): Response {
 	}
 
 	const redirectUris = JSON.parse(client.redirect_uris) as string[];
-	const availableRoles = client.available_roles
-		? (JSON.parse(client.available_roles) as string[])
-		: undefined;
+	const home = homeResource(client.client_id);
 
 	// Derive client_uri from the client_id when it's a URL (auto-registered apps)
 	let clientUri: string | undefined;
@@ -83,8 +78,8 @@ export function clientMetadata(req: Request): Response {
 	if (clientUri) metadata.client_uri = clientUri;
 	if (client.logo_url) metadata.logo_uri = client.logo_url;
 	if (client.description) metadata.client_description = client.description;
-	if (availableRoles) metadata.roles = availableRoles;
-	if (client.default_role) metadata.default_role = client.default_role;
+	if (home?.availableRoles) metadata.roles = home.availableRoles;
+	if (home?.defaultRole) metadata.default_role = home.defaultRole;
 
 	return Response.json(metadata, {
 		headers: {

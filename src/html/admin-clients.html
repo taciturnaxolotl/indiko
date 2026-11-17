@@ -187,38 +187,6 @@
 			color: var(--paper);
 		}
 
-		.client-details .user-role-input {
-			display: flex;
-			gap: var(--space-2);
-			align-items: center;
-			margin-top: var(--space-2);
-		}
-
-		.client-details .user-role-input input {
-			padding: var(--space-2);
-			background: rgba(0, 0, 0, 0.3);
-			border: 1px solid var(--paper-dim);
-			color: var(--paper);
-			font-family: inherit;
-			font-size: var(--text-sm);
-		}
-
-		.client-details .user-role-input button {
-			padding: var(--space-2) var(--space-3);
-			background: var(--accent);
-			color: var(--paper);
-			border: none;
-			cursor: pointer;
-			font-family: inherit;
-			font-size: var(--text-xs);
-			font-weight: 600;
-			transition: background 0.2s;
-		}
-
-		.client-details .user-role-input button:hover {
-			background: var(--accent-deep);
-		}
-
 		.client-details .user-meta {
 			font-size: var(--text-xs);
 			color: var(--paper-dim);
@@ -491,14 +459,9 @@
 					<button type="button" class="btn-add" id="addRedirectUriBtn">add redirect uri</button>
 				</fieldset>
 				<div class="form-group">
-					<label class="form-label" for="availableRoles">Available Roles (one per line)</label>
-					<textarea class="form-input form-textarea" id="availableRoles" placeholder="admin&#10;editor&#10;viewer" style="min-height: 6rem;"></textarea>
-					<p style="font-size: 0.75rem; color: var(--old-rose); margin-top: 0.5rem;">Define which roles can be assigned to users for this app. Leave empty to allow free-text roles.</p>
-				</div>
-				<div class="form-group">
-					<label class="form-label" for="defaultRole">Default Role</label>
-					<input type="text" class="form-input" id="defaultRole" placeholder="Leave empty for no default" />
-					<p style="font-size: 0.75rem; color: var(--old-rose); margin-top: 0.5rem;">Automatically assigned when users first authorize this app.</p>
+					<label class="form-label" for="resourceId">Roles from</label>
+					<select class="form-input" id="resourceId"></select>
+					<p style="font-size: 0.75rem; color: var(--old-rose); margin-top: 0.5rem;">The resource whose role this app's token response carries. Define and assign roles on the <a href="/admin/resources" style="color: inherit;">resources page</a>.</p>
 				</div>
 				<div class="form-actions">
 					<button type="button" class="btn" style="background: rgba(188, 141, 160, 0.2);" id="cancelBtn">cancel</button>

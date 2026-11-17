@@ -32,7 +32,7 @@ export interface AccessDenial {
 }
 
 export type Access =
-	| { ok: true; roles: Record<string, string> }
+	| { ok: true; roles: Record<string, string>; appRole: string | null }
 	| { ok: false; denial: AccessDenial };
 
 export function parseRoleList(stored: string | null): string[] | null {
@@ -68,6 +68,16 @@ export function findResource(identifier: string): RegisteredResource | null {
 	return row ? rowToResource(row) : null;
 }
 
+/** The resource whose roles an app carries in its token response, if it has one. */
+export function homeResource(clientId: string): RegisteredResource | null {
+	const row = db
+		.query(
+			"SELECT r.* FROM resources r JOIN apps a ON a.resource_id = r.id WHERE a.client_id = ?",
+		)
+		.get(clientId) as ResourceRow | null;
+	return row ? rowToResource(row) : null;
+}
+
 /** A registered audience as seen through one client: listed or not, and its role ceiling. */
 interface Binding {
 	resource: RegisteredResource;
@@ -75,22 +85,27 @@ interface Binding {
 	ceiling: string[] | null;
 }
 
-function bindings(clientId: string, identifiers: string[]): Binding[] {
-	return identifiers.flatMap((identifier) => {
-		const resource = findResource(identifier);
-		if (!resource) return [];
+/** The requested audiences plus the app's home resource, which applies to every sign-in. */
+function bindings(
+	clientId: string,
+	identifiers: string[],
+	home: RegisteredResource | null,
+): Binding[] {
+	const resources = identifiers
+		.map(findResource)
+		.filter((r): r is RegisteredResource => r !== null);
+	if (home && !resources.some((r) => r.id === home.id)) resources.push(home);
+	return resources.map((resource) => {
 		const entry = db
 			.query(
 				"SELECT allowed_roles FROM resource_clients WHERE resource_id = ? AND client_id = ?",
 			)
 			.get(resource.id, clientId) as { allowed_roles: string | null } | null;
-		return [
-			{
-				resource,
-				listed: entry !== null,
-				ceiling: parseRoleList(entry?.allowed_roles ?? null),
-			},
-		];
+		return {
+			resource,
+			listed: entry !== null,
+			ceiling: parseRoleList(entry?.allowed_roles ?? null),
+		};
 	});
 }
 
@@ -121,7 +136,11 @@ export function checkClientAccess(
 	clientId: string,
 	identifiers: string[],
 ): AccessDenial | null {
-	for (const binding of bindings(clientId, identifiers)) {
+	for (const binding of bindings(
+		clientId,
+		identifiers,
+		homeResource(clientId),
+	)) {
 		const denial = clientDenial(binding);
 		if (denial) return denial;
 	}
@@ -133,8 +152,9 @@ export function evaluateAccess(
 	userId: number,
 	identifiers: string[],
 ): Access {
+	const home = homeResource(clientId);
 	const roles: Record<string, string> = {};
-	for (const binding of bindings(clientId, identifiers)) {
+	for (const binding of bindings(clientId, identifiers, home)) {
 		const denial = clientDenial(binding);
 		if (denial) return { ok: false, denial };
 		const role = roleFor(binding, userId);
@@ -149,7 +169,11 @@ export function evaluateAccess(
 			};
 		}
 	}
-	return { ok: true, roles };
+	return {
+		ok: true,
+		roles,
+		appRole: home ? (roles[home.identifier] ?? null) : null,
+	};
 }
 
 /** Introspection claims: one audience gives `aud` + `role`, several give arrays/maps. */
@@ -162,7 +186,16 @@ export function audienceClaims(
 		const [aud] = identifiers as [string];
 		return roles[aud] ? { aud, role: roles[aud] } : { aud };
 	}
-	return Object.keys(roles).length > 0
-		? { aud: identifiers, roles }
+	const audRoles = Object.fromEntries(
+		identifiers.flatMap((aud) => (roles[aud] ? [[aud, roles[aud]]] : [])),
+	);
+	return Object.keys(audRoles).length > 0
+		? { aud: identifiers, roles: audRoles }
 		: { aud: identifiers };
+}
+
+/** The role an app's token response carries for this user, from its home resource. */
+export function appRole(clientId: string, userId: number): string | null {
+	const access = evaluateAccess(clientId, userId, []);
+	return access.ok ? access.appRole : null;
 }

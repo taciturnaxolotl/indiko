@@ -668,10 +668,15 @@ async function handleAuthorizationCodeGrant(
 		profile.email = user.email;
 	}
 
-	// Get user's role for this app (if assigned)
-	const permission = db
-		.query("SELECT role FROM permissions WHERE user_id = ? AND client_id = ?")
-		.get(authcode.user_id, client_id) as { role: string | null } | undefined;
+	// Re-checked at exchange like at refresh, and the source of the app's role.
+	const access = evaluateAccess(
+		client_id,
+		authcode.user_id,
+		storedToResources(authcode.resource),
+	);
+	if (!access.ok) {
+		return oauthError(400, "invalid_grant", access.denial.description);
+	}
 
 	const origin = process.env.ORIGIN || "http://localhost:3000";
 
@@ -735,8 +740,8 @@ async function handleAuthorizationCodeGrant(
 		response.refresh_token = refreshToken;
 	}
 
-	if (permission?.role) {
-		response.role = permission.role;
+	if (access.appRole) {
+		response.role = access.appRole;
 	}
 
 	// Generate OIDC id_token if openid scope is requested

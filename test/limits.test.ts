@@ -57,7 +57,8 @@ function getReq(sessionToken: string, url: string): Request {
 }
 
 beforeEach(() => {
-	db.query("DELETE FROM invite_roles").run();
+	db.query("DELETE FROM invite_resource_roles").run();
+	db.query("DELETE FROM resources").run();
 	db.query("DELETE FROM invites").run();
 	db.query("DELETE FROM device_codes").run();
 	db.query("DELETE FROM tokens").run();
@@ -419,16 +420,18 @@ describe("admin client create/update limits", () => {
 
 	test("updateClient leaves omitted fields unchanged", async () => {
 		const session = seedAdmin();
+		const resourceId = db
+			.query("INSERT INTO resources (identifier, name) VALUES (?, ?)")
+			.run("https://api.example", "API").lastInsertRowid;
 		db.query(
-			"INSERT INTO apps (client_id, redirect_uris, name, logo_url, description, is_preregistered, available_roles, default_role) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
+			"INSERT INTO apps (client_id, redirect_uris, name, logo_url, description, is_preregistered, resource_id) VALUES (?, ?, ?, ?, ?, 1, ?)",
 		).run(
 			"ikc_upd",
 			JSON.stringify(redirectUris),
 			"Original",
 			"https://cdn.example/o.png",
 			"Original description",
-			JSON.stringify(["admin", "viewer"]),
-			"viewer",
+			resourceId,
 		);
 
 		const res = await updateClient(
@@ -441,15 +444,14 @@ describe("admin client create/update limits", () => {
 
 		const row = db
 			.query(
-				"SELECT name, logo_url, description, redirect_uris, available_roles, default_role FROM apps WHERE client_id = ?",
+				"SELECT name, logo_url, description, redirect_uris, resource_id FROM apps WHERE client_id = ?",
 			)
-			.get("ikc_upd") as Record<string, string | null>;
+			.get("ikc_upd") as Record<string, string | number | null>;
 		expect(row.name).toBe("Original");
 		expect(row.logo_url).toBe("https://cdn.example/o.png");
 		expect(row.description).toBe("New description");
 		expect(row.redirect_uris).toBe(JSON.stringify(redirectUris));
-		expect(row.available_roles).toBe(JSON.stringify(["admin", "viewer"]));
-		expect(row.default_role).toBe("viewer");
+		expect(row.resource_id).toBe(Number(resourceId));
 	});
 
 	test("updateClient: null clears, redirectUris must be a non-empty http(s) list", async () => {
@@ -538,9 +540,9 @@ describe("invite input validation", () => {
 			{ note: 42 },
 			{ note: "n".repeat(1025) },
 			{ message: ["x"] },
-			{ appRoles: "admin" },
-			{ appRoles: [{ appId: "1", role: "admin" }] },
-			{ appRoles: [{ appId: 99999, role: "admin" }] }, // unknown app
+			{ resourceRoles: "admin" },
+			{ resourceRoles: [{ resourceId: "1", role: "admin" }] },
+			{ resourceRoles: [{ resourceId: 99999, role: "admin" }] }, // unknown resource
 		];
 		for (const body of bad) {
 			const res = await createInvite(authedReq(session, CREATE, "POST", body));
@@ -568,22 +570,26 @@ describe("invite input validation", () => {
 		expect(defaults.status).toBe(200);
 	});
 
-	test("an invalid appRoles entry does not leave an orphan invite behind", async () => {
+	test("an invalid resourceRoles entry does not leave an orphan invite behind", async () => {
 		const session = seedAdmin();
-		const app = db
+		const resource = db
 			.query(
-				"INSERT INTO apps (client_id, redirect_uris, name, is_preregistered) VALUES (?, ?, ?, 1)",
+				"INSERT INTO resources (identifier, name, available_roles) VALUES (?, ?, ?)",
 			)
-			.run("ikc_inv", "[]", "Inv App");
-		const res = await createInvite(
-			authedReq(session, CREATE, "POST", {
-				appRoles: [
-					{ appId: Number(app.lastInsertRowid), role: "admin" },
-					{ appId: 424242, role: "admin" },
-				],
-			}),
-		);
-		expect(res.status).toBe(400);
+			.run("https://api.example", "API", JSON.stringify(["admin"]));
+		const resourceId = Number(resource.lastInsertRowid);
+		for (const resourceRoles of [
+			[
+				{ resourceId, role: "admin" },
+				{ resourceId: 424242, role: "admin" },
+			],
+			[{ resourceId, role: "owner" }],
+		]) {
+			const res = await createInvite(
+				authedReq(session, CREATE, "POST", { resourceRoles }),
+			);
+			expect(res.status).toBe(400);
+		}
 		expect(
 			(db.query("SELECT COUNT(*) as n FROM invites").get() as { n: number }).n,
 		).toBe(0);

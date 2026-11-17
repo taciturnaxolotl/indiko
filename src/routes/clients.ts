@@ -4,9 +4,11 @@ import {
 	clientDisplayName,
 	clientRegistration,
 } from "../lib/oauth/client-display";
+import { appRole, homeResource } from "../lib/oauth/resource-registry";
 import { hashSecret } from "../lib/secrets";
 import { requireAdmin } from "../lib/session";
 import {
+	type Checked,
 	isHttpUrl,
 	MAX_URL_LENGTH,
 	optionalHttpUrl,
@@ -47,6 +49,26 @@ function validateRedirectUris(
 	return { ok: true, value: value as string[] };
 }
 
+/** `undefined` leaves the link alone, `null` clears it, a number must name a resource. */
+function checkResourceId(value: unknown): Checked<number | null | undefined> {
+	if (value === undefined || value === null) return { ok: true, value };
+	if (
+		!Number.isInteger(value) ||
+		!db.query("SELECT 1 FROM resources WHERE id = ?").get(value as number)
+	) {
+		return { ok: false, error: "resourceId must name an existing resource" };
+	}
+	return { ok: true, value: value as number };
+}
+
+/** An app is always allowed on the resource it takes its roles from. */
+function allowOnHomeResource(clientId: string, resourceId: number | null) {
+	if (resourceId === null) return;
+	db.query(
+		"INSERT OR IGNORE INTO resource_clients (resource_id, client_id) VALUES (?, ?)",
+	).run(resourceId, clientId);
+}
+
 export function listClients(req: Request): Response {
 	const user = requireAdmin(req);
 	if (user instanceof Response) return user;
@@ -80,27 +102,6 @@ export function listClients(req: Request): Response {
 		last_used: number;
 	}>;
 
-	// Get distinct roles for each app
-	const appRoles = db
-		.query(
-			`SELECT a.id as app_id, p.role 
-			FROM permissions p
-			JOIN apps a ON p.client_id = a.client_id
-			WHERE p.role IS NOT NULL AND p.role != '' 
-			GROUP BY a.id, p.role 
-			ORDER BY a.id, p.role`,
-		)
-		.all() as Array<{ app_id: number; role: string }>;
-
-	// Group roles by app_id
-	const rolesByApp = new Map<number, string[]>();
-	for (const { app_id, role } of appRoles) {
-		if (!rolesByApp.has(app_id)) {
-			rolesByApp.set(app_id, []);
-		}
-		rolesByApp.get(app_id)?.push(role);
-	}
-
 	return Response.json({
 		clients: clients.map((c) => ({
 			id: c.id,
@@ -113,7 +114,6 @@ export function listClients(req: Request): Response {
 			registration: clientRegistration(c),
 			firstSeen: c.first_seen,
 			lastUsed: c.last_used,
-			roles: rolesByApp.get(c.id) || [],
 		})),
 	});
 }
@@ -137,8 +137,7 @@ export async function createClient(req: Request): Promise<Response> {
 			logoUrl: rawLogoUrl,
 			description: rawDescription,
 			redirectUris: rawRedirectUris,
-			availableRoles,
-			defaultRole,
+			resourceId: rawResourceId,
 		} = body;
 
 		const redirects = validateRedirectUris(rawRedirectUris);
@@ -163,6 +162,10 @@ export async function createClient(req: Request): Promise<Response> {
 		if (!logoCheck.ok) {
 			return Response.json({ error: logoCheck.error }, { status: 400 });
 		}
+		const resourceCheck = checkResourceId(rawResourceId);
+		if (!resourceCheck.ok) {
+			return Response.json({ error: resourceCheck.error }, { status: 400 });
+		}
 		const name = nameCheck.value ?? null;
 		const description = descriptionCheck.value ?? null;
 		const logoUrl = logoCheck.value ?? null;
@@ -172,36 +175,10 @@ export async function createClient(req: Request): Promise<Response> {
 		const clientSecret = generateClientSecret();
 		const clientSecretHash = hashSecret(clientSecret);
 
-		// Validate roles if provided
-		let rolesArray: string[] = [];
-		if (availableRoles) {
-			if (!Array.isArray(availableRoles)) {
-				return Response.json(
-					{ error: "Available roles must be an array" },
-					{ status: 400 },
-				);
-			}
-			rolesArray = availableRoles.filter(
-				(r: unknown) => typeof r === "string" && r.trim(),
-			);
-		}
-
-		// Validate default role is in available roles
-		if (
-			defaultRole &&
-			rolesArray.length > 0 &&
-			!rolesArray.includes(defaultRole)
-		) {
-			return Response.json(
-				{ error: "Default role must be one of the available roles" },
-				{ status: 400 },
-			);
-		}
-
 		const result = db
 			.query(
-				`INSERT INTO apps (client_id, name, logo_url, description, redirect_uris, is_preregistered, registration, client_secret_hash, available_roles, default_role, first_seen, last_used) 
-				VALUES (?, ?, ?, ?, ?, 1, 'admin', ?, ?, ?, ?, ?)`,
+				`INSERT INTO apps (client_id, name, logo_url, description, redirect_uris, is_preregistered, registration, client_secret_hash, resource_id, first_seen, last_used)
+				VALUES (?, ?, ?, ?, ?, 1, 'admin', ?, ?, ?, ?)`,
 			)
 			.run(
 				clientId,
@@ -210,11 +187,11 @@ export async function createClient(req: Request): Promise<Response> {
 				description,
 				JSON.stringify(redirectUris),
 				clientSecretHash,
-				rolesArray.length > 0 ? JSON.stringify(rolesArray) : null,
-				defaultRole || null,
+				resourceCheck.value ?? null,
 				Math.floor(Date.now() / 1000),
 				Math.floor(Date.now() / 1000),
 			);
+		allowOnHomeResource(clientId, resourceCheck.value ?? null);
 
 		return Response.json({
 			success: true,
@@ -251,8 +228,6 @@ export function getClient(req: Request, clientId: string): Response {
 				redirect_uris,
 				is_preregistered,
 				registration,
-				available_roles,
-				default_role,
 				first_seen,
 				last_used
 			FROM apps
@@ -268,8 +243,6 @@ export function getClient(req: Request, clientId: string): Response {
 				redirect_uris: string;
 				is_preregistered: number;
 				registration: string | null;
-				available_roles: string | null;
-				default_role: string | null;
 				first_seen: number;
 				last_used: number;
 		  }
@@ -284,8 +257,8 @@ export function getClient(req: Request, clientId: string): Response {
 			`SELECT 
 				u.username,
 				u.name,
+				p.user_id,
 				p.scopes,
-				p.role,
 				p.granted_at,
 				p.last_used
 			FROM permissions p
@@ -296,8 +269,8 @@ export function getClient(req: Request, clientId: string): Response {
 		.all(clientId) as Array<{
 		username: string;
 		name: string;
+		user_id: number;
 		scopes: string;
-		role: string | null;
 		granted_at: number;
 		last_used: number;
 	}>;
@@ -312,10 +285,7 @@ export function getClient(req: Request, clientId: string): Response {
 			redirectUris: JSON.parse(client.redirect_uris) as string[],
 			isPreregistered: client.is_preregistered === 1,
 			registration: clientRegistration(client),
-			availableRoles: client.available_roles
-				? (JSON.parse(client.available_roles) as string[])
-				: null,
-			defaultRole: client.default_role,
+			resource: homeResource(client.client_id),
 			firstSeen: client.first_seen,
 			lastUsed: client.last_used,
 		},
@@ -323,7 +293,7 @@ export function getClient(req: Request, clientId: string): Response {
 			username: u.username,
 			name: u.name,
 			scopes: JSON.parse(u.scopes) as string[],
-			role: u.role,
+			role: appRole(client.client_id, u.user_id),
 			grantedAt: u.granted_at,
 			lastUsed: u.last_used,
 		})),
@@ -345,27 +315,12 @@ export async function updateClient(
 				{ status: 400 },
 			);
 		}
-		const {
-			name,
-			logoUrl,
-			description,
-			redirectUris,
-			availableRoles,
-			defaultRole,
-		} = body as Record<string, unknown>;
+		const { name, logoUrl, description, redirectUris, resourceId } =
+			body as Record<string, unknown>;
 
 		const existing = db
-			.query(
-				"SELECT id, is_preregistered, available_roles, default_role FROM apps WHERE client_id = ?",
-			)
-			.get(clientId) as
-			| {
-					id: number;
-					is_preregistered: number;
-					available_roles: string | null;
-					default_role: string | null;
-			  }
-			| undefined;
+			.query("SELECT id FROM apps WHERE client_id = ?")
+			.get(clientId) as { id: number } | undefined;
 
 		if (!existing) {
 			return Response.json({ error: "Client not found" }, { status: 404 });
@@ -375,7 +330,7 @@ export async function updateClient(
 		// Only fields that are present are validated and written. `null` (or
 		// "") clears an optional field.
 		const updates: string[] = [];
-		const values: (string | null)[] = [];
+		const values: (string | number | null)[] = [];
 
 		const nameCheck = optionalText(name, "Name", MAX_NAME_LENGTH);
 		if (!nameCheck.ok) {
@@ -419,74 +374,13 @@ export async function updateClient(
 			values.push(JSON.stringify(redirects.value));
 		}
 
-		// Roles: start from what is stored, overlay whatever the body provides.
-		let rolesArray: string[] = existing.available_roles
-			? (JSON.parse(existing.available_roles) as string[])
-			: [];
-		if (availableRoles !== undefined) {
-			if (availableRoles === null) {
-				// Explicitly disable roles
-				rolesArray = [];
-			} else if (Array.isArray(availableRoles)) {
-				rolesArray = availableRoles.filter(
-					(r: unknown): r is string => typeof r === "string" && !!r.trim(),
-				);
-			} else {
-				return Response.json(
-					{ error: "Available roles must be an array or null" },
-					{ status: 400 },
-				);
-			}
-			updates.push("available_roles = ?");
-			values.push(rolesArray.length > 0 ? JSON.stringify(rolesArray) : null);
+		const resourceCheck = checkResourceId(resourceId);
+		if (!resourceCheck.ok) {
+			return Response.json({ error: resourceCheck.error }, { status: 400 });
 		}
-
-		let effectiveDefault: string | null = existing.default_role;
-		if (defaultRole !== undefined) {
-			if (defaultRole === null || defaultRole === "") {
-				effectiveDefault = null;
-			} else if (typeof defaultRole === "string") {
-				if (defaultRole.length > MAX_NAME_LENGTH) {
-					return Response.json(
-						{
-							error: `Default role must be at most ${MAX_NAME_LENGTH} characters`,
-						},
-						{ status: 400 },
-					);
-				}
-				effectiveDefault = defaultRole;
-			} else {
-				return Response.json(
-					{ error: "Default role must be a string or null" },
-					{ status: 400 },
-				);
-			}
-			updates.push("default_role = ?");
-			values.push(effectiveDefault);
-		} else if (
-			availableRoles !== undefined &&
-			effectiveDefault &&
-			rolesArray.length > 0 &&
-			!rolesArray.includes(effectiveDefault)
-		) {
-			// The role list changed underneath an unchanged default that is no
-			// longer in it: clear the default rather than leave a dangling one.
-			effectiveDefault = null;
-			updates.push("default_role = ?");
-			values.push(null);
-		}
-
-		// Validate default role is in available roles
-		if (
-			defaultRole !== undefined &&
-			effectiveDefault &&
-			rolesArray.length > 0 &&
-			!rolesArray.includes(effectiveDefault)
-		) {
-			return Response.json(
-				{ error: "Default role must be one of the available roles" },
-				{ status: 400 },
-			);
+		if (resourceCheck.value !== undefined) {
+			updates.push("resource_id = ?");
+			values.push(resourceCheck.value);
 		}
 
 		if (updates.length === 0) {
@@ -497,6 +391,7 @@ export async function updateClient(
 			...values,
 			clientId,
 		);
+		allowOnHomeResource(clientId, resourceCheck.value ?? null);
 
 		return Response.json({ success: true });
 	} catch (error) {
@@ -529,71 +424,6 @@ export function deleteClient(req: Request, clientId: string): Response {
 	db.query("DELETE FROM apps WHERE client_id = ?").run(clientId);
 
 	return Response.json({ success: true });
-}
-
-export async function setUserRole(
-	req: Request,
-	clientId: string,
-	username: string,
-): Promise<Response> {
-	const user = requireAdmin(req);
-	if (user instanceof Response) return user;
-
-	try {
-		const body = await req.json();
-		const { role } = body;
-
-		const targetUser = db
-			.query("SELECT id FROM users WHERE username = ?")
-			.get(username) as { id: number } | undefined;
-
-		if (!targetUser) {
-			return Response.json({ error: "User not found" }, { status: 404 });
-		}
-
-		const client = db
-			.query("SELECT id, available_roles FROM apps WHERE client_id = ?")
-			.get(clientId) as
-			| { id: number; available_roles: string | null }
-			| undefined;
-
-		if (!client) {
-			return Response.json({ error: "Client not found" }, { status: 404 });
-		}
-
-		// Validate role against available roles if defined
-		if (role && client.available_roles) {
-			const availableRoles = JSON.parse(client.available_roles) as string[];
-			if (!availableRoles.includes(role)) {
-				return Response.json(
-					{
-						error: `Role must be one of: ${availableRoles.join(", ")}`,
-					},
-					{ status: 400 },
-				);
-			}
-		}
-
-		const permission = db
-			.query("SELECT id FROM permissions WHERE user_id = ? AND client_id = ?")
-			.get(targetUser.id, clientId) as { id: number } | undefined;
-
-		if (!permission) {
-			return Response.json(
-				{ error: "User has not authorized this client" },
-				{ status: 404 },
-			);
-		}
-
-		db.query(
-			"UPDATE permissions SET role = ? WHERE user_id = ? AND client_id = ?",
-		).run(role || null, targetUser.id, clientId);
-
-		return Response.json({ success: true });
-	} catch (error) {
-		console.error("Set user role error:", error);
-		return Response.json({ error: "Failed to set user role" }, { status: 500 });
-	}
 }
 
 export function regenerateClientSecret(

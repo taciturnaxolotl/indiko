@@ -5,16 +5,13 @@
  *   bun scripts/seed-dev.ts           # insert seed data
  *   bun scripts/seed-dev.ts --reset  # wipe users/apps/etc first, then seed
  *
- * Does NOT touch oidc_keys or migrations. Only inserts into:
- *   users, credentials, sessions, apps, permissions, invites, tokens
+ * Uses DATABASE_URL like the server (default data/indiko.db) and migrates it.
+ * Inserts into users, credentials, sessions, resources, apps, permissions,
+ * invites and tokens; never touches oidc_keys.
  */
 
-import { Database } from "bun:sqlite";
-import * as path from "node:path";
-
-const dbPath = path.join(import.meta.dir, "..", "data", "indiko.db");
-const db = new Database(dbPath);
-db.run("PRAGMA foreign_keys = ON;");
+// Same database and migrations as the server, so DATABASE_URL is honored.
+import { db } from "../src/db";
 
 const reset = process.argv.includes("--reset");
 if (reset) {
@@ -23,20 +20,23 @@ if (reset) {
 		"tokens",
 		"permissions",
 		"invite_uses",
-		"invite_roles",
+		"invite_resource_roles",
 		"invites",
 		"authcodes",
 		"challenges",
 		"sessions",
 		"credentials",
 		"apps",
+		"resource_roles",
+		"resource_clients",
+		"resources",
 		"users",
 	]) {
 		db.run(`DELETE FROM ${table};`);
 	}
 	// Reset autoincrement counters
 	db.run(
-		"DELETE FROM sqlite_sequence WHERE name IN ('users','credentials','sessions','apps','permissions','invites','tokens','invite_roles','invite_uses','authcodes','challenges');",
+		"DELETE FROM sqlite_sequence WHERE name IN ('users','credentials','sessions','apps','permissions','invites','tokens','resources','invite_uses','authcodes','challenges');",
 	);
 	console.log("done.");
 }
@@ -240,9 +240,18 @@ for (const a of apps) {
 		.get(a.client_id) as { id: number } | undefined;
 	if (existing) continue;
 
+	// An app's roles live on a resource of its own, which it is allowed on.
+	const resourceId = a.available_roles
+		? db
+				.query(
+					"INSERT INTO resources (identifier, name, available_roles, default_role) VALUES (?, ?, ?, ?)",
+				)
+				.run(a.client_id, a.name, a.available_roles, a.default_role)
+				.lastInsertRowid
+		: null;
 	db.query(
-		`INSERT INTO apps (client_id, redirect_uris, name, logo_url, description, is_preregistered, client_secret_hash, available_roles, default_role, first_seen, last_used)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO apps (client_id, redirect_uris, name, logo_url, description, is_preregistered, client_secret_hash, resource_id, first_seen, last_used)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	).run(
 		a.client_id,
 		a.redirect_uris,
@@ -251,11 +260,15 @@ for (const a of apps) {
 		a.description,
 		a.is_preregistered,
 		a.client_secret_hash,
-		a.available_roles,
-		a.default_role,
+		resourceId,
 		now - Math.floor(Math.random() * 90 * 86400),
 		now - Math.floor(Math.random() * 7 * 86400),
 	);
+	if (resourceId) {
+		db.query(
+			"INSERT INTO resource_clients (resource_id, client_id) VALUES (?, ?)",
+		).run(resourceId, a.client_id);
+	}
 	insertedApps++;
 }
 console.log(`${insertedApps} new apps inserted`);
@@ -362,16 +375,21 @@ for (const p of perms) {
 	if (existing) continue;
 
 	db.query(
-		`INSERT INTO permissions (user_id, client_id, scopes, role, granted_at, last_used)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO permissions (user_id, client_id, scopes, granted_at, last_used)
+		 VALUES (?, ?, ?, ?, ?)`,
 	).run(
 		userIds[p.user],
 		clientId,
 		p.scopes,
-		p.role,
 		now - Math.floor(Math.random() * 60 * 86400),
 		now - Math.floor(Math.random() * 3 * 86400),
 	);
+	if (p.role) {
+		db.query(
+			`INSERT OR REPLACE INTO resource_roles (resource_id, user_id, role)
+			 SELECT resource_id, ?, ? FROM apps WHERE client_id = ? AND resource_id IS NOT NULL`,
+		).run(userIds[p.user], p.role, clientId);
+	}
 	insertedPerms++;
 }
 console.log(`${insertedPerms} new permissions inserted`);

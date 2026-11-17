@@ -1,6 +1,11 @@
 import crypto from "node:crypto";
 import { db } from "../../db";
+import {
+	type ResourceRow,
+	rowToResource,
+} from "../../lib/oauth/resource-registry";
 import { requireAdmin } from "../../lib/session";
+import type { Checked } from "../../lib/validate";
 
 function parseInviteId(req: Request): string | null {
 	const url = new URL(req.url);
@@ -84,6 +89,44 @@ async function readJsonObject(
 	return body as Record<string, unknown>;
 }
 
+/** `[{ resourceId, role }]`, each role valid for its resource. */
+function checkResourceRoles(
+	value: unknown,
+): Checked<Array<{ resourceId: number; role: string }>> {
+	if (value === undefined || value === null) return { ok: true, value: [] };
+	if (!Array.isArray(value)) {
+		return { ok: false, error: "resourceRoles must be an array" };
+	}
+	const roles: Array<{ resourceId: number; role: string }> = [];
+	for (const entry of value as Array<Record<string, unknown>>) {
+		const { resourceId, role } = entry ?? {};
+		if (
+			!Number.isInteger(resourceId) ||
+			typeof role !== "string" ||
+			!role.trim()
+		) {
+			return {
+				ok: false,
+				error:
+					"resourceRoles entries must be { resourceId: integer, role: string }",
+			};
+		}
+		const row = db
+			.query("SELECT * FROM resources WHERE id = ?")
+			.get(resourceId as number) as ResourceRow | null;
+		if (!row) return { ok: false, error: `Unknown resourceId: ${resourceId}` };
+		const available = rowToResource(row).availableRoles;
+		if (available && !available.includes(role.trim())) {
+			return {
+				ok: false,
+				error: `${row.name} roles are: ${available.join(", ")}`,
+			};
+		}
+		roles.push({ resourceId: resourceId as number, role: role.trim() });
+	}
+	return { ok: true, value: roles };
+}
+
 // POST /api/invites/create - Create invite link (admin only)
 export async function createInvite(req: Request): Promise<Response> {
 	const user = requireAdmin(req);
@@ -117,43 +160,10 @@ export async function createInvite(req: Request): Promise<Response> {
 		return Response.json({ error: messageCheck.error }, { status: 400 });
 	}
 
-	// Validate appRoles up front so a bad entry can't leave an orphan invite
-	// behind after the first INSERT.
-	const appRoles: Array<{ appId: number; role: string }> = [];
-	if (body.appRoles !== undefined && body.appRoles !== null) {
-		if (!Array.isArray(body.appRoles)) {
-			return Response.json(
-				{ error: "appRoles must be an array" },
-				{ status: 400 },
-			);
-		}
-		for (const entry of body.appRoles as unknown[]) {
-			if (
-				!entry ||
-				typeof entry !== "object" ||
-				typeof (entry as { appId?: unknown }).appId !== "number" ||
-				!Number.isInteger((entry as { appId: number }).appId) ||
-				typeof (entry as { role?: unknown }).role !== "string" ||
-				!(entry as { role: string }).role.trim() ||
-				(entry as { role: string }).role.length > 256
-			) {
-				return Response.json(
-					{
-						error: "appRoles entries must be { appId: integer, role: string }",
-					},
-					{ status: 400 },
-				);
-			}
-			const { appId, role } = entry as { appId: number; role: string };
-			const app = db.query("SELECT id FROM apps WHERE id = ?").get(appId);
-			if (!app) {
-				return Response.json(
-					{ error: `Unknown appId: ${appId}` },
-					{ status: 400 },
-				);
-			}
-			appRoles.push({ appId, role });
-		}
+	// Validated up front so a bad entry can't leave an orphan invite behind.
+	const resourceRoles = checkResourceRoles(body.resourceRoles);
+	if (!resourceRoles.ok) {
+		return Response.json({ error: resourceRoles.error }, { status: 400 });
 	}
 
 	const inviteCode = crypto.randomBytes(16).toString("base64url");
@@ -166,7 +176,7 @@ export async function createInvite(req: Request): Promise<Response> {
 		"INSERT INTO invites (code, created_by, max_uses, expires_at, note, message) VALUES (?, ?, ?, ?, ?, ?)",
 	);
 	const insertRole = db.prepare(
-		"INSERT INTO invite_roles (invite_id, app_id, role) VALUES (?, ?, ?)",
+		"INSERT INTO invite_resource_roles (invite_id, resource_id, role) VALUES (?, ?, ?)",
 	);
 
 	const create = db.transaction(() => {
@@ -179,8 +189,8 @@ export async function createInvite(req: Request): Promise<Response> {
 			message,
 		);
 		const inviteId = Number(result.lastInsertRowid);
-		for (const appRole of appRoles) {
-			insertRole.run(inviteId, appRole.appId, appRole.role);
+		for (const { resourceId, role } of resourceRoles.value) {
+			insertRole.run(inviteId, resourceId, role);
 		}
 	});
 	create();
@@ -218,16 +228,15 @@ export function listInvites(req: Request): Response {
 
 	const inviteRoles = db
 		.query(`
-		SELECT ir.invite_id, ir.app_id, ir.role, a.client_id, a.name
-		FROM invite_roles ir
-		JOIN apps a ON ir.app_id = a.id
+		SELECT ir.invite_id, ir.resource_id, ir.role, r.name
+		FROM invite_resource_roles ir
+		JOIN resources r ON ir.resource_id = r.id
 	`)
 		.all() as Array<{
 		invite_id: number;
-		app_id: number;
+		resource_id: number;
 		role: string;
-		client_id: string;
-		name: string | null;
+		name: string;
 	}>;
 
 	const inviteUses = db
@@ -259,11 +268,10 @@ export function listInvites(req: Request): Response {
 			createdAt: inv.created_at,
 			createdBy: inv.created_by_username,
 			inviteUrl: `${process.env.ORIGIN}/login?invite=${inv.code}`,
-			appRoles: inviteRoles
+			resourceRoles: inviteRoles
 				.filter((r) => r.invite_id === inv.id)
 				.map((r) => ({
-					appId: r.app_id,
-					clientId: r.client_id,
+					resourceId: r.resource_id,
 					name: r.name,
 					role: r.role,
 				})),

@@ -1,11 +1,6 @@
 declare global {
 	interface Window {
 		toggleClient: (clientId: string) => Promise<void>;
-		setUserRole: (
-			clientId: string,
-			username: string,
-			role: string,
-		) => Promise<void>;
 		editClient: (clientId: string) => Promise<void>;
 		deleteClient: (clientId: string, event?: Event) => Promise<void>;
 		removeRedirectUri: (btn: HTMLButtonElement) => void;
@@ -28,6 +23,26 @@ const createClientBtn = document.getElementById(
 	"createClientBtn",
 ) as HTMLButtonElement;
 const clientModal = document.getElementById("clientModal") as HTMLElement;
+const resourceSelect = document.getElementById(
+	"resourceId",
+) as HTMLSelectElement;
+
+async function loadResourceOptions(selected: number | null) {
+	const response = await apiFetch("/api/admin/resources", {});
+	const resources = response.ok
+		? (
+				(await response.json()) as {
+					resources: { id: number; name: string; identifier: string }[];
+				}
+			).resources
+		: [];
+	resourceSelect.innerHTML = `<option value="">no roles</option>${resources
+		.map(
+			(r) =>
+				`<option value="${r.id}" ${r.id === selected ? "selected" : ""}>${escapeHtml(r.name)} (${escapeHtml(r.identifier)})</option>`,
+		)
+		.join("")}`;
+}
 const modalClose = document.getElementById("modalClose") as HTMLButtonElement;
 const cancelBtn = document.getElementById("cancelBtn") as HTMLButtonElement;
 const clientForm = document.getElementById("clientForm") as HTMLFormElement;
@@ -75,8 +90,7 @@ interface Client {
 	description: string | null;
 	redirectUris: string[];
 	isPreregistered: boolean;
-	availableRoles: string[] | null;
-	defaultRole: string | null;
+	resource: { id: number; name: string; identifier: string } | null;
 	firstSeen: number;
 	lastUsed: number;
 }
@@ -240,6 +254,14 @@ window.toggleClient = async (clientId: string) => {
 					: ""
 			}
 			<div class="detail-section">
+				<div class="detail-title">roles</div>
+				${
+					data.client.resource
+						? `<div>from <a href="/admin/resources" style="color: var(--paper);">${escapeHtml(data.client.resource.name)}</a>. Assign them on the resources page.</div>`
+						: '<div class="empty">This app carries no roles. Pick a resource in its settings to give it some.</div>'
+				}
+			</div>
+			<div class="detail-section">
 				<div class="detail-title">redirect uris</div>
 				<div class="redirect-uris">
 					${data.client.redirectUris.map((uri: string) => `<div class="redirect-uri">${escapeHtml(uri)}</div>`).join("")}
@@ -264,31 +286,7 @@ window.toggleClient = async (clientId: string) => {
 								<div class="user-item">
 									<div class="user-info">
 										<div class="user-name"><a href="/u/${encodeURIComponent(user.username)}" style="color: var(--paper); text-decoration: none;">${escapeHtml(user.name)}</a> (<a href="/u/${encodeURIComponent(user.username)}" style="color: var(--paper-dim); text-decoration: none;">@${escapeHtml(user.username)}</a>)</div>
-										${
-											data.client.isPreregistered &&
-											data.client.availableRoles !== null
-												? `
-											<div class="user-role-input">
-												<label style="color: var(--paper-dim); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05rem;">ROLE${data.client.availableRoles.length > 0 ? "" : " (OPTIONAL)"}</label>
-												${
-													data.client.availableRoles.length > 0
-														? `<select data-username="${escapeHtml(user.username)}" data-client-id="${escapeHtml(clientId)}" style="padding: var(--space-2); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--paper-dim); color: var(--paper); font-family: inherit; font-size: var(--text-sm);">
-														<option value="">No role</option>
-														${data.client.availableRoles
-															.map(
-																(role: string) => `
-															<option value="${escapeHtml(role)}" ${user.role === role ? "selected" : ""}>${escapeHtml(role)}</option>
-														`,
-															)
-															.join("")}
-													</select>`
-														: `<input type="text" value="${escapeHtml(user.role || "")}" placeholder="e.g. admin, editor, viewer" data-username="${escapeHtml(user.username)}" data-client-id="${escapeHtml(clientId)}" />`
-												}
-												<button data-detail-action="set-role" data-client-id="${escapeHtml(clientId)}" data-username="${escapeHtml(user.username)}">update</button>
-											</div>
-										`
-												: ""
-										}
+										${data.client.resource ? `<div class="user-meta">role: ${escapeHtml(user.role ?? "none")}</div>` : ""}
 										<div class="user-meta">granted ${grantedDate} • last used ${lastUsedDate} • scopes: ${escapeHtml(user.scopes.join(", "))}</div>
 									</div>
 									<button class="revoke-btn" data-detail-action="revoke-user" data-client-id="${escapeHtml(clientId)}" data-username="${escapeHtml(user.username)}">revoke</button>
@@ -321,43 +319,10 @@ clientsList.addEventListener("click", (e) => {
 
 	if (action === "regenerate-secret" && clientId) {
 		window.regenerateSecret(clientId, e);
-	} else if (action === "set-role" && clientId && username) {
-		const input = actionEl.previousElementSibling as
-			| HTMLInputElement
-			| HTMLSelectElement;
-		window.setUserRole(clientId, username, input?.value || "");
 	} else if (action === "revoke-user" && clientId && username) {
 		window.revokeUserPermission(clientId, username, e);
 	}
 });
-
-window.setUserRole = async (
-	clientId: string,
-	username: string,
-	role: string,
-) => {
-	try {
-		const response = await apiFetch(
-			`/api/admin/clients/${encodeURIComponent(clientId)}/users/${encodeURIComponent(username)}/role`,
-			{
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ role: role || null }),
-			},
-		);
-
-		if (!response.ok) {
-			throw new Error("Failed to set user role");
-		}
-
-		showToast("User role updated successfully");
-	} catch (error) {
-		console.error("Failed to set user role:", error);
-		showToast("Failed to update user role. Please try again.", "error");
-	}
-};
 
 window.editClient = async (clientId: string) => {
 	try {
@@ -384,10 +349,7 @@ window.editClient = async (clientId: string) => {
 			client.logoUrl || "";
 		(document.getElementById("description") as HTMLTextAreaElement).value =
 			client.description || "";
-		(document.getElementById("availableRoles") as HTMLTextAreaElement).value =
-			client.availableRoles ? client.availableRoles.join("\n") : "";
-		(document.getElementById("defaultRole") as HTMLInputElement).value =
-			client.defaultRole || "";
+		await loadResourceOptions(client.resource?.id ?? null);
 
 		redirectUrisList.innerHTML = client.redirectUris
 			.map(
@@ -465,6 +427,7 @@ createClientBtn.addEventListener("click", () => {
 			<button type="button" class="btn-remove" onclick="removeRedirectUri(this)">remove</button>
 		</div>
 	`;
+	void loadResourceOptions(null);
 	clientModal.classList.add("active");
 });
 
@@ -508,12 +471,7 @@ clientForm.addEventListener("submit", async (e) => {
 	const description = (
 		document.getElementById("description") as HTMLTextAreaElement
 	).value;
-	const availableRolesText = (
-		document.getElementById("availableRoles") as HTMLTextAreaElement
-	).value;
-	const defaultRole = (
-		document.getElementById("defaultRole") as HTMLInputElement
-	).value;
+	const resourceValue = resourceSelect.value;
 
 	const redirectUriInputs = Array.from(
 		redirectUrisList.querySelectorAll(".redirect-uri-input"),
@@ -521,22 +479,6 @@ clientForm.addEventListener("submit", async (e) => {
 	const redirectUris = redirectUriInputs
 		.map((input) => input.value)
 		.filter((uri) => uri.trim());
-
-	// Parse available roles from textarea (one per line)
-	const availableRoles = availableRolesText
-		.split("\n")
-		.map((r) => r.trim())
-		.filter((r) => r);
-
-	// Validate default role is in available roles
-	if (
-		defaultRole &&
-		availableRoles.length > 0 &&
-		!availableRoles.includes(defaultRole)
-	) {
-		showToast("Default role must be one of the available roles", "error");
-		return;
-	}
 
 	if (redirectUris.length === 0) {
 		showToast("At least one redirect URI is required", "error");
@@ -560,8 +502,7 @@ clientForm.addEventListener("submit", async (e) => {
 				logoUrl,
 				description,
 				redirectUris,
-				availableRoles: availableRolesText.trim() ? availableRoles : null,
-				defaultRole: defaultRole || null,
+				resourceId: resourceValue ? Number(resourceValue) : null,
 			}),
 		});
 
