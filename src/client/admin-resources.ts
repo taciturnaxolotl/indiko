@@ -1,6 +1,7 @@
 import "./ds";
 import { apiFetch } from "./api";
 import { escapeHtml } from "./escape";
+import { requirePage } from "./session";
 
 interface Resource {
 	id: number;
@@ -59,20 +60,6 @@ async function send(
 	const data = (await response.json().catch(() => ({}))) as { error?: string };
 	toast.show(data.error ?? `Request failed (${response.status})`, "error");
 	return false;
-}
-
-async function checkAuth() {
-	const response = await apiFetch("/api/hello", {});
-	if (response.status === 401 || response.status === 403) {
-		window.location.href = "/login";
-		return;
-	}
-	const data = (await response.json()) as { isAdmin?: boolean };
-	if (!data.isAdmin) {
-		window.location.href = "/";
-		return;
-	}
-	await loadResources();
 }
 
 async function loadResources() {
@@ -323,7 +310,8 @@ document.addEventListener("submit", async (event) => {
 	submitModal,
 );
 
-checkAuth().catch((error) => {
+void requirePage({ admin: true });
+loadResources().catch((error) => {
 	console.error("Auth check failed:", error);
 	list.innerHTML = '<div class="error">Failed to load resources</div>';
 });

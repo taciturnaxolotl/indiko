@@ -134,6 +134,14 @@ const server = Bun.serve({
 	routes: {
 		"/favicon.svg": Bun.file("./public/favicon.svg"),
 		"/logo.svg": Bun.file("./public/logo.svg"),
+		// Where the raw /ds/tokens.css resolves its font URL; bundled pages inline it.
+		"/public/fonts/space-grotesk-latin.woff2": () =>
+			new Response(Bun.file("./public/fonts/space-grotesk-latin.woff2"), {
+				headers: {
+					"Content-Type": "font/woff2",
+					"Cache-Control": "public, max-age=2592000",
+				},
+			}),
 		"/": homePage,
 		"/dashboard": indexHTML,
 		"/about": aboutPage,

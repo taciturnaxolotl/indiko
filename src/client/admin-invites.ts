@@ -1,6 +1,7 @@
 import "./ds";
 import { apiFetch } from "./api";
 import { escapeHtml } from "./escape";
+import { requirePage } from "./session";
 
 declare global {
 	interface Window {
@@ -16,32 +17,6 @@ const invitesList = document.getElementById("invitesList") as HTMLElement;
 const createInviteBtn = document.getElementById(
 	"createInviteBtn",
 ) as HTMLButtonElement;
-
-// Check auth and display user
-async function checkAuth() {
-	try {
-		const response = await apiFetch("/api/hello", {});
-
-		if (response.status === 401 || response.status === 403) {
-			window.location.href = "/login";
-			return;
-		}
-
-		const data = await response.json();
-
-		// Check if admin
-		if (!data.isAdmin) {
-			window.location.href = "/";
-			return;
-		}
-
-		// Load invites
-		loadInvites();
-	} catch (error) {
-		console.error("Auth check failed:", error);
-		invitesList.innerHTML = '<div class="error">Failed to load invites</div>';
-	}
-}
 
 async function createInvite() {
 	// Show the create invite modal
@@ -345,7 +320,8 @@ invitesList.addEventListener("click", (e) => {
 	}
 });
 
-checkAuth();
+void requirePage({ admin: true });
+loadInvites();
 
 createInviteBtn.addEventListener("click", createInvite);
 

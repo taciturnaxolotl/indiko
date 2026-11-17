@@ -4,9 +4,9 @@ import { apiFetch } from "./api";
 import type IButton from "./ds/button";
 import type IToast from "./ds/toast";
 import { escapeHtml } from "./escape";
+import { cachedSession, requirePage } from "./session";
 
 let welcome!: HTMLElement;
-let subtitle!: HTMLElement;
 let recentApps!: HTMLElement;
 let passkeysList!: HTMLElement;
 let addPasskeyBtn!: IButton;
@@ -40,7 +40,6 @@ function $(id: string): HTMLElement {
 
 function init() {
 	welcome = $("welcome");
-	subtitle = $("subtitle");
 	recentApps = $("recentApps");
 	passkeysList = $("passkeysList");
 	addPasskeyBtn = $("addPasskeyBtn") as IButton;
@@ -73,7 +72,7 @@ function init() {
 	);
 	addPasskeyBtn.addEventListener("click", onAddPasskey);
 
-	checkAuth();
+	start();
 }
 
 interface App {
@@ -112,29 +111,17 @@ function updateAvatarPreview(photo: string | null, username: string) {
 	}
 }
 
-// Check auth and display user
-async function checkAuth() {
-	try {
-		const response = await apiFetch("/api/hello", {});
+function showWelcome(username: string | undefined) {
+	welcome.textContent = username ? `welcome, ${username}` : "welcome";
+}
 
-		if (response.status === 401 || response.status === 403) {
-			window.location.href = "/login";
-			return;
-		}
-
-		const data = await response.json();
-
-		// Update welcome message
-		welcome.textContent = `welcome, ${data.username}`;
-		subtitle.textContent = "your identity dashboard";
-
-		// Load profile and apps
-		loadProfile();
-		loadRecentApps();
-		loadPasskeys();
-	} catch (error) {
-		console.error("Auth check failed:", error);
-	}
+/** Paint the remembered name now; data loads alongside the session check. */
+function start() {
+	showWelcome(cachedSession()?.username);
+	void requirePage().then((me) => showWelcome(me.username));
+	loadProfile();
+	loadRecentApps();
+	loadPasskeys();
 }
 
 async function loadProfile() {

@@ -150,9 +150,7 @@ export function docsPage(req: Request): Response {
 	<meta property="og:image" content="${origin}/og.png" />
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:image" content="${origin}/og.png" />
-	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+	<link rel="preload" href="/public/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
 	<link rel="stylesheet" href="/ds/tokens.css">
 	<link rel="stylesheet" href="/ds/components.css">
 	<link rel="stylesheet" href="/styles.css">

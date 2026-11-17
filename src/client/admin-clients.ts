@@ -17,6 +17,7 @@ import "./ds";
 import { apiFetch } from "./api";
 import type IToast from "./ds/toast";
 import { escapeHtml } from "./escape";
+import { requirePage } from "./session";
 
 const clientsList = document.getElementById("clientsList") as HTMLElement;
 const createClientBtn = document.getElementById(
@@ -57,29 +58,6 @@ const toast = document.getElementById("toast") as unknown as IToast;
 
 function showToast(message: string, type: "success" | "error" = "success") {
 	toast.show(message, type);
-}
-
-async function checkAuth() {
-	try {
-		const response = await apiFetch("/api/hello", {});
-
-		if (response.status === 401 || response.status === 403) {
-			window.location.href = "/login";
-			return;
-		}
-
-		const data = await response.json();
-
-		if (!data.isAdmin) {
-			window.location.href = "/";
-			return;
-		}
-
-		loadClients();
-	} catch (error) {
-		console.error("Auth check failed:", error);
-		clientsList.innerHTML = '<div class="error">Failed to load clients</div>';
-	}
 }
 
 interface Client {
@@ -758,4 +736,5 @@ secretModal?.addEventListener("click", (e) => {
 	}
 });
 
-checkAuth();
+void requirePage({ admin: true });
+loadClients();

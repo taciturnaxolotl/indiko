@@ -17,9 +17,6 @@
 	<meta name="twitter:card" content="summary" />
 	<meta name="twitter:title" content="OAuth Clients • Indiko Admin" />
 	<meta name="twitter:description" content="Manage OAuth clients and application registrations" />
-	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
 	<link rel="stylesheet" href="../client/ds/tokens.css">
 	<link rel="stylesheet" href="../client/ds/components.css">
 	<link rel="stylesheet" href="../styles.css">
@@ -421,8 +418,8 @@
 		<div class="invite-actions">
 			<button type="button" class="invite-btn" id="createClientBtn">create client</button>
 		</div>
-		<div id="clientsList" class="clients-list">
-			<div class="loading">loading clients...</div>
+		<div id="clientsList" class="clients-list" data-loads>
+			<div class="skeleton" role="status" aria-label="loading clients" style="--skeleton-row: 4.25rem"><span></span><span></span><span></span></div>
 		</div>
 	</main>
 

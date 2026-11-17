@@ -161,6 +161,9 @@ test/                  # Tests (bun:test)
 - `/about` carries the JSON-LD identity graph (`SoftwareApplication`, `Organization` with contactPoint + address, `WebSite`, `WebPage`); the other content pages carry everything but `SoftwareApplication`. `/og.png` is the shared social image
 
 ### Client-Side Code
+- **Session**: `src/client/session.ts` makes one `/api/hello` call per page (`session()`), caches it in sessionStorage so `<i-nav>` paints signed-in state instantly (`cachedSession()`), and `requirePage({ admin })` redirects visitors who may not be there. Pages load their data alongside it rather than after it
+- **Fonts**: Space Grotesk is self-hosted (`public/fonts`, OFL). `tokens.css` declares it with a relative URL, so Bun inlines it into bundled pages and server-rendered pages fetch `/public/fonts/...` (they also preload it). `"Space Grotesk Fallback"` is Arial with metric overrides so the swap does not shift layout; use `var(--font)` rather than a literal stack
+- **Smoothness**: cross-document view transitions are on (`@view-transition` in tokens.css; nav and admin subnav are named so they hold still), list placeholders are `.skeleton` rows inside a `data-loads` container, and the nav adds speculation rules to prefetch same-origin links on hover
 - Extract JavaScript from HTML into separate TypeScript modules in `src/client/`
 - Import client modules into HTML with `<script type="module" src="../client/file.ts"></script>`
 - Bun will bundle the imports automatically

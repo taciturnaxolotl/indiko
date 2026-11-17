@@ -15,9 +15,6 @@
   <meta name="twitter:title" content="Admin • Indiko" />
   <meta name="twitter:description" content="Indiko admin panel - manage users and invites" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../client/ds/tokens.css">
   <link rel="stylesheet" href="../client/ds/components.css">
   <link rel="stylesheet" href="../styles.css">
@@ -35,8 +32,8 @@
   </nav>
 
   <main class="admin-main">
-    <div id="usersList" class="users-list">
-      <div class="loading">loading users...</div>
+    <div id="usersList" class="users-list" data-loads>
+      <div class="skeleton" role="status" aria-label="loading users" style="--skeleton-row: 4.5rem"><span></span><span></span><span></span></div>
     </div>
   </main>
 

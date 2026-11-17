@@ -1,40 +1,18 @@
 import "./ds";
 import { apiFetch } from "./api";
 import { escapeHtml } from "./escape";
+import { requirePage } from "./session";
 
 const usersList = document.getElementById("usersList") as HTMLElement;
 let currentUserId: number;
 
-// Check auth and display user
-async function checkAuth() {
-	try {
-		const response = await apiFetch("/api/hello", {});
-
-		if (response.status === 401 || response.status === 403) {
-			window.location.href = "/login";
-			return;
-		}
-
-		const data = await response.json();
-		currentUserId = data.id;
-
-		// Check if admin
-		if (!data.isAdmin) {
-			window.location.href = "/";
-			return;
-		}
-
-		// Load users if admin
-		loadUsers();
-	} catch (error) {
-		console.error("Auth check failed:", error);
-		usersList.innerHTML = '<div class="error">Failed to load users</div>';
-	}
-}
-
 async function loadUsers() {
 	try {
-		const response = await apiFetch("/api/users", {});
+		const [me, response] = await Promise.all([
+			requirePage({ admin: true }),
+			apiFetch("/api/users", {}),
+		]);
+		currentUserId = me.id;
 
 		if (!response.ok) {
 			throw new Error("Failed to load users");
@@ -173,4 +151,4 @@ async function handleUserAction(e: Event) {
 	}
 }
 
-checkAuth();
+loadUsers();

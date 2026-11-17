@@ -1,4 +1,42 @@
 /* Indiko design tokens */
+
+/* Self-hosted variable font. Bundled pages get it inlined; served pages fetch /public/fonts/. */
+@font-face {
+	font-family: "Space Grotesk";
+	font-style: normal;
+	font-weight: 300 700;
+	font-display: swap;
+	src: url("../../../public/fonts/space-grotesk-latin.woff2") format("woff2");
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Arial resized to Space Grotesk's metrics, so the swap moves nothing. */
+@font-face {
+	font-family: "Space Grotesk Fallback";
+	src: local("Arial"), local("ArialMT");
+	size-adjust: 111.13%;
+	ascent-override: 88.54%;
+	descent-override: 26.27%;
+	line-gap-override: 0%;
+}
+
+/* Same-origin navigations crossfade instead of flashing. */
+@view-transition {
+	navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+	animation-duration: 140ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	@view-transition {
+		navigation: none;
+	}
+}
+
 :root {
 	/* Palette */
 	--ink: #26242b;
@@ -14,7 +52,7 @@
 	--page-width: 56.25rem;
 
 	/* Typography */
-	--font: "Space Grotesk", sans-serif;
+	--font: "Space Grotesk", "Space Grotesk Fallback", sans-serif;
 	--text-xs: 0.75rem;
 	--text-sm: 0.875rem;
 	--text-md: 1rem;

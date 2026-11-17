@@ -18,7 +18,7 @@
 
 /* Base */
 body {
-	font-family: "Space Grotesk", sans-serif;
+	font-family: var(--font);
 	background: var(--mahogany);
 	color: var(--lavender);
 	min-height: 100vh;
@@ -88,7 +88,7 @@ textarea {
 	border-radius: 0;
 	color: var(--lavender);
 	font-size: 1rem;
-	font-family: "Space Grotesk", sans-serif;
+	font-family: var(--font);
 	transition: border-color 0.2s;
 	letter-spacing: 0.025rem;
 }
@@ -147,7 +147,7 @@ textarea {
 	font-size: 0.875rem;
 	font-weight: 600;
 	cursor: pointer;
-	font-family: "Space Grotesk", sans-serif;
+	font-family: var(--font);
 	transition: background 0.2s;
 }
 

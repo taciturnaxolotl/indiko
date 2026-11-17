@@ -1,17 +1,17 @@
 import { Elena, html, nothing } from "@elenajs/core";
-
-interface SessionInfo {
-	username: string;
-	isAdmin: boolean;
-}
+import {
+	cachedSession,
+	forgetSession,
+	type Session,
+	session,
+} from "../session";
 
 /**
  * <i-nav> — shared top navigation for authenticated pages.
  *
  * Attributes: active (dashboard|apps|docs|admin)
- * Renders logo, primary links, and the signed-in user chip. Fetches the
- * current session itself so every page behaves identically. Stays minimal
- * (logo + links) until the session resolves.
+ * Renders logo, primary links, and the signed-in user chip. Paints the
+ * remembered session immediately, then confirms it against the server.
  *
  * Usage: <i-nav active="apps"></i-nav>
  */
@@ -21,17 +21,16 @@ export default class INav extends Elena(HTMLElement) {
 
 	active = "";
 
-	private session: SessionInfo | null = null;
+	private user: Session | null = cachedSession();
 
 	override async firstUpdated() {
-		try {
-			const res = await fetch("/api/hello");
-			if (!res.ok) return;
-			const data = await res.json();
-			this.session = { username: data.username, isAdmin: !!data.isAdmin };
+		const confirmed = await session().catch(() => this.user);
+		if (
+			confirmed?.username !== this.user?.username ||
+			confirmed?.isAdmin !== this.user?.isAdmin
+		) {
+			this.user = confirmed;
 			this.requestUpdate();
-		} catch {
-			// Stay logged-out-looking on error
 		}
 	}
 
@@ -41,7 +40,7 @@ export default class INav extends Elena(HTMLElement) {
 	}
 
 	override render() {
-		const user = this.session;
+		const user = this.user;
 		return html`
 			<nav class="nav">
 				<a href="/" class="brand">
@@ -76,6 +75,7 @@ export default class INav extends Elena(HTMLElement) {
 	}
 
 	private async signOut() {
+		forgetSession();
 		try {
 			const csrf = document.cookie.match(/indiko_csrf=([^;]+)/)?.[1];
 			await fetch("/auth/logout", {
@@ -89,3 +89,23 @@ export default class INav extends Elena(HTMLElement) {
 	}
 }
 INav.define();
+
+// Prefetch a same-origin page once the pointer settles on its link (Chromium; ignored elsewhere).
+if (HTMLScriptElement.supports?.("speculationrules")) {
+	const rules = document.createElement("script");
+	rules.type = "speculationrules";
+	rules.textContent = JSON.stringify({
+		prefetch: [
+			{
+				where: {
+					and: [
+						{ href_matches: "/*" },
+						{ not: { href_matches: ["/auth/*", "/api/*", "/device*"] } },
+					],
+				},
+				eagerness: "moderate",
+			},
+		],
+	});
+	document.head.append(rules);
+}

@@ -63,9 +63,7 @@ export function userProfile(req: Request): Response {
   <meta name="twitter:description" content="${name}'s profile on Indiko" />
   ${photo ? `<meta name="twitter:image" content="${photo}" />` : ""}
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link rel="preload" href="/public/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/ds/tokens.css">
   <style>
     * {

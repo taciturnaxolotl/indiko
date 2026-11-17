@@ -9,6 +9,7 @@ body {
 	width: 100%;
 	max-width: var(--page-width);
 	margin: 0 auto var(--space-6);
+	view-transition-name: admin-subnav;
 	display: flex;
 	gap: 0;
 	background: var(--ink-sunken);

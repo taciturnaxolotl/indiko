@@ -15,9 +15,6 @@
   <meta name="twitter:title" content="Dashboard • Indiko" />
   <meta name="twitter:description" content="Your Indiko dashboard - manage your profile, apps, and passkeys" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../client/ds/tokens.css">
   <link rel="stylesheet" href="../client/ds/components.css">
   <link rel="stylesheet" href="../styles.css">
@@ -170,14 +167,14 @@
 
   <header>
     <h1 id="welcome">welcome</h1>
-    <p class="subtitle" id="subtitle">loading...</p>
+    <p class="subtitle" id="subtitle">your identity dashboard</p>
   </header>
 
   <main>
     <i-card>
       <h2 class="card-title">recent apps</h2>
-      <div id="recentApps" class="apps-preview">
-        <div class="empty">loading...</div>
+      <div id="recentApps" class="apps-preview" data-loads>
+        <div class="skeleton" role="status" aria-label="loading apps" style="--skeleton-row: 3rem"><span></span><span></span></div>
       </div>
     </i-card>
 
@@ -186,8 +183,8 @@
       <p style="color: var(--paper-dim); margin-bottom: 1rem; line-height: 1.6; font-size: var(--text-sm);">
         Manage your passkeys for secure, password-free authentication.
       </p>
-      <div id="passkeysList">
-        <div class="empty">loading...</div>
+      <div id="passkeysList" data-loads>
+        <div class="skeleton" role="status" aria-label="loading passkeys" style="--skeleton-row: 3.5rem"><span></span></div>
       </div>
       <i-button id="addPasskeyBtn"><button type="button">add new passkey</button></i-button>
     </i-card>

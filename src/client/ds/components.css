@@ -115,9 +115,13 @@
 
 /* i-nav — shared top navigation */
 @scope (i-nav) {
+	/* Sized before the script renders it, so the page below never jumps. */
 	:scope {
 		display: block;
 		width: 100%;
+		min-height: calc(1.75rem + var(--space-4) + 1px);
+		margin-bottom: var(--space-8);
+		view-transition-name: site-nav;
 	}
 
 	.nav {
@@ -126,7 +130,8 @@
 		gap: var(--space-6);
 		width: 100%;
 		max-width: var(--page-width);
-		margin: 0 auto var(--space-8);
+		min-height: calc(1.75rem + var(--space-4) + 1px);
+		margin: 0 auto;
 		padding-bottom: var(--space-4);
 		border-bottom: 1px solid var(--paper-dim);
 	}
@@ -397,5 +402,53 @@
 		color: var(--paper-dim);
 		font-size: var(--text-xs);
 		margin-left: var(--space-2);
+	}
+}
+
+/* Placeholder rows that hold a list's space until its data arrives. */
+.skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.skeleton > span {
+	display: block;
+	height: var(--skeleton-row, 4rem);
+	border: 1px solid rgba(188, 141, 160, 0.15);
+	background: linear-gradient(
+		90deg,
+		rgba(188, 141, 160, 0.05),
+		rgba(188, 141, 160, 0.12),
+		rgba(188, 141, 160, 0.05)
+	);
+	background-size: 200% 100%;
+	animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Whatever replaces a placeholder fades in rather than popping. */
+[data-loads] > :not(.skeleton) {
+	animation: fade-in 160ms ease-out;
+}
+
+@keyframes skeleton-shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -100% 0;
+	}
+}
+
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton > span,
+	[data-loads] > * {
+		animation: none;
 	}
 }

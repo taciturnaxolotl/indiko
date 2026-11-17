@@ -296,9 +296,7 @@ If you followed a link to get here, the [contact page](${base}/contact) has an a
 	<meta name="description" content="That page does not exist on indiko. Here is where to look instead." />
 	<meta name="robots" content="noindex" />
 	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+	<link rel="preload" href="/public/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
 	<link rel="stylesheet" href="/ds/tokens.css">
 	<link rel="stylesheet" href="/ds/components.css">
 	<link rel="stylesheet" href="/styles.css">

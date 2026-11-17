@@ -24,7 +24,7 @@ const DEVICE_STYLES = `
 	.code-input {
 		width: 100%;
 		padding: 1rem;
-		font-family: "Space Grotesk", monospace;
+		font-family: var(--font), monospace;
 		font-size: 1.5rem;
 		font-weight: 700;
 		text-align: center;
@@ -118,9 +118,7 @@ function devicePage(title: string, body: string, status = 200): Response {
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>${escapeHtml(title)} • Indiko</title>
 	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+	<link rel="preload" href="/public/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
 	<link rel="stylesheet" href="/ds/tokens.css">
 	<style>${BASE_STYLES}${DEVICE_STYLES}</style>
 </head>
