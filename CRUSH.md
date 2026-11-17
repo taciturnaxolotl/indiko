@@ -28,6 +28,7 @@ src/
 │   ├── auth.ts        # Passkey registration/login options + verify
 │   ├── api.ts         # User-facing API (profile, apps) and admin user management
 │   ├── clients.ts     # Admin OAuth client CRUD (create, update, delete, secret regen)
+│   ├── resources.ts   # Admin resource server CRUD (allowlist, roles)
 │   ├── passkeys.ts    # Passkey management (list, add, rename, delete)
 │   └── oauth/         # OAuth 2.0 / IndieAuth / OIDC endpoints
 │       ├── authorize.ts   # Authorization endpoint (GET shows consent, POST processes)
@@ -80,7 +81,7 @@ src/
 │   ├── docs.html
 │   ├── oauth-test.html
 │   └── admin-shared.css
-├── migrations/        # SQL migrations (001 through 017; see `ls src/migrations` for the latest)
+├── migrations/        # SQL migrations (001 through 018; see `ls src/migrations` for the latest)
 │   ├── 001_init.sql
 │   ├── 002_add_me_to_authcodes.sql
 │   ├── 003_add_tokens_table.sql
@@ -191,6 +192,7 @@ test/                  # Tests (bun:test)
 - **Refresh token issuance**: `offline_access` (OIDC) or the consent-screen "stay signed in" checkbox for IndieAuth-style requests (`offersStaySignedIn` in `lib/oauth/refresh-choice.ts`: scoped, no `openid`, no `offline_access`). The answer rides on `authcodes.issue_refresh` (migration 017) so the client's `scope` is never widened; the grant remembers it as `offline_access` in `permissions.scopes` for auto-approval
 - **Introspection requires auth**: a live Bearer access token or confidential `client_id`+`client_secret`; otherwise 401 with no token info (S801/S802). Both paths report a suspended user's token as `active: false`
 - **Tokens are hashed at rest**: `tokens.token` and `tokens.refresh_token` hold `hashSecret()` (sha256 hex) digests. Every lookup hashes the presented value first; responses return the plaintext once. `backfillTokenHashes` (`db.ts`) rewrites legacy plaintext rows at startup (issued tokens are 43 chars, digests 64, so length tells them apart). Tests that read the table must query with `hashSecret(...)`
+- **Registered resources** (migration 018, `lib/oauth/resource-registry.ts`): `resources` rows own an allowlist (`resource_clients`, with per-client `allowed_roles` ceiling), per-user roles (`resource_roles`) and an `assignment_required` flag. `checkClientAccess` runs before login (authorize, `/auth/device`); `evaluateAccess` returns a denial or the roles and runs after login, on consent POST, device approval, refresh and introspection (`audienceClaims` shapes `aud`/`role`). All checks are live, so policy changes affect existing tokens. Introspection adds `role` (one aud) or `roles` (several). Unregistered audiences pass every check. Admin CRUD in `routes/resources.ts`, UI at `/admin/resources`. Deleting a resource revokes its tokens
 - **CORS**: token, revoke, userinfo, OIDC discovery and JWKS send `Access-Control-Allow-Origin: *` (never with credentials) and answer `OPTIONS`; helpers in `lib/oauth/errors.ts` (`withCors`, `corsPreflight`, `methodNotAllowed`)
 - **indieauth.rocks**: `test/indieauth-rocks.test.ts` mirrors the server test suite by test id (S2xx-S9xx). Run the live suite at https://indieauth.rocks after deploying by entering a `/u/{username}` profile URL
 - OIDC nonce support and auth_time tracking in authcodes
@@ -226,6 +228,7 @@ test/                  # Tests (bun:test)
 - **permissions**: per-user, per-app granted scopes and role; written by consent, device approval (`recordDeviceGrant`), and invite roles. Revoking (`revokeGrant` in api.ts) also revokes tokens and device codes
 - **authcodes**: short-lived authorization codes (60-second expiry, single-use), includes username, `me` hint, `nonce` and `auth_time` for OIDC, `family` set at exchange so a replay can revoke the tokens it minted
 - **tokens**: access tokens with optional refresh_token and refresh_expires_at (both stored as sha256 digests)
+- **resources / resource_clients / resource_roles**: registered resource servers, their client allowlist and ceilings, and per-user roles
 - **invites**: admin-created invite codes, includes `ldap_username` for LDAP-provisioned accounts
 - **invite_roles**: pre-assign app roles to invites
 - **invite_uses**: tracks which users redeemed which invites

@@ -5,6 +5,7 @@ import {
 	FRAME_DENY_HEADERS,
 } from "../../lib/oauth/pages";
 import { resourcesToStored, storedToResources } from "../../lib/oauth/resource";
+import { evaluateAccess } from "../../lib/oauth/resource-registry";
 import {
 	csrfTokenMatches,
 	getCsrfToken,
@@ -440,6 +441,23 @@ export async function devicePost(req: Request): Promise<Response> {
 		return devicePage(
 			"device denied",
 			`<div class="success-msg">The device has been denied access. You can close this page.</div>`,
+		);
+	}
+
+	// Only now is the user known, and the allowlist may have changed since /auth/device.
+	const access = evaluateAccess(
+		deviceCode.client_id,
+		user.userId,
+		storedToResources(deviceCode.resource),
+	);
+	if (!access.ok) {
+		db.query(
+			"UPDATE device_codes SET status = 'denied' WHERE id = ? AND status = 'pending'",
+		).run(deviceCode.id);
+		return devicePage(
+			"access denied",
+			`<div class="error-msg">${escapeHtml(access.denial.description)}.</div>`,
+			403,
 		);
 	}
 

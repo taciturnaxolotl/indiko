@@ -538,6 +538,34 @@ To check the audience, introspect the token and read `aud`. One resource comes b
 
 > **Optional by design:** clients that ignore `resource` behave exactly as before. Adding it is a hardening step, not a migration.
 
+### registered resources
+
+An admin can register a resource server under **admin → resources**. A registered resource is the authority on three things, and indiko enforces all of them:
+
+- **Which apps may ask for it.** By default only clients on the resource's allowlist can request it. Anyone else gets `invalid_target` before the person is ever asked to sign in or approve.
+- **Which role each person holds there.** Roles are assigned once per resource, not once per app, so a user who reaches the same API through a web app, a phone app and a browser extension has one role, not three.
+- **Whether a role is required at all.** With "people need a role" on, someone with no assignment and no default role is refused with `access_denied`.
+
+Each allowlisted app can also carry a **role ceiling**: the set of roles a token from that app may carry. A sync extension held to `writer` never carries `admin`, even for an admin. Roles are not ranked, so a role outside the ceiling is withheld, not demoted.
+
+Introspection reports the role for a token's audience. One audience gives `role`; several give `roles` keyed by audience:
+
+```json
+{
+  "active": true,
+  "sub": "{{origin}}/u/username",
+  "client_id": "https://myapp.example.com",
+  "aud": "https://api.example.com",
+  "role": "reader"
+}
+```
+
+The role and the allowlist are checked live on every introspection. Taking a role away or dropping an app from the allowlist takes effect on the next request, without waiting for tokens to expire: the token introspects as `{"active": false}` and can no longer be refreshed. Deleting a resource revokes every token bound to it.
+
+> **Unregistered resources still work.** A `resource` that matches no registered row behaves as described above: any client may ask for it, consent is the only gate, and introspection carries no role.
+
+> **For resource servers:** a registered resource lets your API trust indiko for authorization as well as identity. Check `aud`, read `role`, and treat a missing `role` as no access.
+
 ## scopes
 
 Scopes control what data your app can access:
@@ -559,6 +587,8 @@ Users can uncheck optional scopes during authorization. When `profile` is reques
 ## roles
 
 Indiko supports role-based access control (RBAC) through app-specific roles. Roles are arbitrary strings assigned to users on a per-app basis.
+
+> **Building an API rather than an app?** Use [registered resources](#registered-resources) instead. Their roles belong to the API, are shared by every app that calls it, and are reported by introspection where a resource server can see them.
 
 ### how roles work
 

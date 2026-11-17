@@ -3,6 +3,7 @@ import { db } from "./db";
 import adminHTML from "./html/admin.html";
 import adminClientsHTML from "./html/admin-clients.html";
 import adminInvitesHTML from "./html/admin-invites.html";
+import adminResourcesHTML from "./html/admin-resources.html";
 import appsHTML from "./html/apps.html";
 import indexHTML from "./html/index.html";
 import loginHTML from "./html/login.html";
@@ -66,6 +67,17 @@ import {
 	listPasskeys,
 	renamePasskey,
 } from "./routes/passkeys";
+import {
+	createResource,
+	deleteResource,
+	getResource,
+	listResources,
+	removeResourceClient,
+	removeResourceUserRole,
+	setResourceClient,
+	setResourceUserRole,
+	updateResource,
+} from "./routes/resources";
 import {
 	aboutPage,
 	contactPage,
@@ -151,6 +163,7 @@ const server = Bun.serve({
 		"/admin/invites": adminInvitesHTML,
 		"/admin/apps": () => Response.redirect("/admin/clients", 302),
 		"/admin/clients": adminClientsHTML,
+		"/admin/resources": adminResourcesHTML,
 		"/login": loginHTML,
 		"/docs": docsPage,
 		"/docs.md": () => docsMarkdown(),
@@ -368,6 +381,30 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 		"/api/admin/clients/:clientId/secret": (req) => {
 			if (req.method === "POST")
 				return regenerateClientSecret(req, req.params.clientId);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/resources": (req: Request) => {
+			if (req.method === "GET") return listResources(req);
+			if (req.method === "POST") return createResource(req);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/resources/:id": (req) => {
+			if (req.method === "GET") return getResource(req, req.params.id);
+			if (req.method === "PUT") return updateResource(req, req.params.id);
+			if (req.method === "DELETE") return deleteResource(req, req.params.id);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/resources/:id/clients": (req) => {
+			if (req.method === "PUT") return setResourceClient(req, req.params.id);
+			if (req.method === "DELETE")
+				return removeResourceClient(req, req.params.id);
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/resources/:id/users/:username": (req) => {
+			if (req.method === "PUT")
+				return setResourceUserRole(req, req.params.id, req.params.username);
+			if (req.method === "DELETE")
+				return removeResourceUserRole(req, req.params.id, req.params.username);
 			return new Response("Method not allowed", { status: 405 });
 		},
 	},

@@ -13,6 +13,7 @@ import {
 	parseBody,
 } from "../../lib/oauth/errors";
 import { resourcesToStored, validateResources } from "../../lib/oauth/resource";
+import { checkClientAccess } from "../../lib/oauth/resource-registry";
 import { canonicalizeURL } from "../../lib/oauth/urls";
 
 const DEVICE_CODE_TTL = 600; // 10 minutes
@@ -128,6 +129,11 @@ export async function deviceAuthorization(req: Request): Promise<Response> {
 
 		const grantError = verifyGrantAllowed(clientId, DEVICE_GRANT_TYPE);
 		if (grantError) return grantError;
+
+		const clientDenial = checkClientAccess(clientId, resources);
+		if (clientDenial) {
+			return oauthError(400, clientDenial.error, clientDenial.description);
+		}
 
 		// Auto-register the client if not already known (same as authorization flow).
 		// Device flow has no redirect_uri, so there is nothing to match.

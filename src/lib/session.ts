@@ -104,6 +104,20 @@ export function getSessionUserFlexible(req: Request): SessionUser | Response {
 	return bearerResult; // return the original 401
 }
 
+/** An admin session, with CSRF enforced on any method that can change state. */
+export function requireAdmin(req: Request): SessionUser | Response {
+	const user = getSessionUserFlexible(req);
+	if (user instanceof Response) return user;
+	if (req.method !== "GET" && req.method !== "HEAD") {
+		const csrfError = validateCsrf(req);
+		if (csrfError) return csrfError;
+	}
+	if (!user.isAdmin) {
+		return Response.json({ error: "Admin access required" }, { status: 403 });
+	}
+	return user;
+}
+
 // --- Cookie helpers ---
 
 const SESSION_COOKIE = "indiko_session";

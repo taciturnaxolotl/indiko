@@ -3,6 +3,7 @@ import {
 	safeFetch,
 	validateExternalURL,
 } from "../ssrf-safe-fetch";
+import { findResource } from "./resource-registry";
 
 // RFC 8707 Resource Indicators.
 //
@@ -80,6 +81,17 @@ async function fetchResourceInfo(id: string): Promise<ResourceInfo> {
 		/* keep id as host */
 	}
 	const info: ResourceInfo = { id, name: host, host };
+
+	// An admin-registered resource is the authority on its own name; asking
+	// the resource server over the network would only be a weaker source.
+	const registered = findResource(id);
+	if (registered) {
+		info.name = registered.name;
+		if (registered.logoUrl && validateExternalURL(registered.logoUrl).safe)
+			info.logo = registered.logoUrl;
+		return info;
+	}
+
 	try {
 		const prmUrl = `${id.replace(/\/+$/, "")}/.well-known/oauth-protected-resource`;
 		const res = await safeFetch(prmUrl, {

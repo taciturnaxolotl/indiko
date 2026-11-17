@@ -11,6 +11,11 @@ import {
 	parseBody,
 	unauthorizedResponse,
 } from "../../lib/oauth/errors";
+import { storedToResources } from "../../lib/oauth/resource";
+import {
+	audienceClaims,
+	evaluateAccess,
+} from "../../lib/oauth/resource-registry";
 import { canonicalizeURL, verifyPKCE } from "../../lib/oauth/urls";
 import { hashSecret, verifySecret } from "../../lib/secrets";
 import { signIDToken } from "../../oidc";
@@ -195,6 +200,16 @@ async function handleRefreshTokenGrant(
 	);
 	if (credentialError) {
 		return credentialError;
+	}
+
+	// A grant the registry no longer allows cannot be renewed.
+	const access = evaluateAccess(
+		client_id,
+		tokenData.user_id,
+		storedToResources(tokenData.resource),
+	);
+	if (!access.ok) {
+		return oauthError(400, "invalid_grant", access.denial.description);
 	}
 
 	// RFC 6749 §6: the requested scope may narrow the original grant but can
@@ -883,18 +898,16 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 		const origin = process.env.ORIGIN || "http://localhost:3000";
 		const meValue = user?.url || `${origin}/u/${tokenData.username}`;
 
-		// RFC 8707 / 7662: echo the token's audience so a resource server can
-		// confirm the token was minted for it. One resource → a string, several →
-		// an array; omitted entirely when the token is unscoped.
-		const resources = tokenData.resource
-			? tokenData.resource.split(" ").filter(Boolean)
-			: [];
-		const aud =
-			resources.length === 1
-				? resources[0]
-				: resources.length > 1
-					? resources
-					: undefined;
+		// Checked live, so a policy change kills existing tokens on the next call.
+		const resources = storedToResources(tokenData.resource);
+		const access = evaluateAccess(
+			tokenData.client_id,
+			tokenData.user_id,
+			resources,
+		);
+		if (!access.ok) {
+			return Response.json({ active: false }, { headers: NO_STORE_HEADERS });
+		}
 
 		return Response.json(
 			{
@@ -906,7 +919,7 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 				exp: tokenData.expires_at,
 				iat: tokenData.created_at,
 				username: tokenData.username,
-				...(aud ? { aud } : {}),
+				...audienceClaims(resources, access.roles),
 			},
 			{ headers: NO_STORE_HEADERS },
 		);

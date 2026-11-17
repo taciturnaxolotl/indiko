@@ -18,6 +18,10 @@ import {
 	storedToResources,
 	validateResources,
 } from "../../lib/oauth/resource";
+import {
+	checkClientAccess,
+	evaluateAccess,
+} from "../../lib/oauth/resource-registry";
 import { canonicalizeURL, validateClientURL } from "../../lib/oauth/urls";
 import {
 	csrfTokenMatches,
@@ -27,6 +31,21 @@ import {
 import { token } from "./token";
 
 const AUTH_CODE_TTL = 60; // seconds
+
+/** RFC 6749 §4.1.2.1 error redirect, with `iss` per RFC 9207. */
+function errorRedirect(
+	redirectUri: string,
+	state: string | null,
+	error: string,
+	description?: string,
+): Response {
+	const url = new URL(redirectUri);
+	url.searchParams.set("error", error);
+	if (description) url.searchParams.set("error_description", description);
+	url.searchParams.set("iss", process.env.ORIGIN || "http://localhost:3000");
+	if (state) url.searchParams.set("state", state);
+	return Response.redirect(url.toString(), 302);
+}
 
 // RFC 6749 §3.1: request parameters MUST NOT be included more than once.
 // A repeated redirect_uri in particular is a trick to get one value validated
@@ -229,18 +248,9 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		});
 	}
 
-	// Step 4: redirect_uri is now trusted — report remaining errors via
-	// redirect per RFC 6749 §4.1.2.1
-	const redirectError = (error: string, description: string): Response => {
-		const origin = process.env.ORIGIN || "http://localhost:3000";
-		const errorUrl = new URL(redirectUri);
-		errorUrl.searchParams.set("error", error);
-		errorUrl.searchParams.set("error_description", description);
-		// RFC 9207: iss must be present on error responses too
-		errorUrl.searchParams.set("iss", origin);
-		if (state) errorUrl.searchParams.set("state", state);
-		return Response.redirect(errorUrl.toString(), 302);
-	};
+	// Step 4: redirect_uri is now trusted, so remaining errors go back to it.
+	const redirectError = (error: string, description: string) =>
+		errorRedirect(redirectUri, state, error, description);
 
 	if (responseType !== "code") {
 		return redirectError(
@@ -274,6 +284,12 @@ export async function authorizeGet(req: Request): Promise<Response> {
 		);
 	}
 
+	// Refuse an unlisted client before sign-in, so nobody approves a request that cannot work.
+	const clientDenial = checkClientAccess(clientId, requestedResources);
+	if (clientDenial) {
+		return redirectError(clientDenial.error, clientDenial.description);
+	}
+
 	// Check if user is logged in
 	const user = getUserFromCookie(req);
 
@@ -286,6 +302,11 @@ export async function authorizeGet(req: Request): Promise<Response> {
 				...FRAME_DENY_HEADERS,
 			},
 		});
+	}
+
+	const access = evaluateAccess(clientId, user.userId, requestedResources);
+	if (!access.ok) {
+		return redirectError(access.denial.error, access.denial.description);
 	}
 
 	const meHint = trustedMeHint(me, user.userId);
@@ -555,12 +576,7 @@ export async function authorizePost(req: Request): Promise<Response> {
 	}
 
 	if (action === "deny") {
-		const origin = process.env.ORIGIN || "http://localhost:3000";
-		const denyUrl = new URL(redirectUri);
-		denyUrl.searchParams.set("error", "access_denied");
-		denyUrl.searchParams.set("state", state);
-		denyUrl.searchParams.set("iss", origin);
-		return Response.redirect(denyUrl.toString(), 302);
+		return errorRedirect(redirectUri, state, "access_denied");
 	}
 
 	// Get the scopes the user actually approved (from checkboxes). An empty
@@ -588,6 +604,17 @@ export async function authorizePost(req: Request): Promise<Response> {
 		});
 	}
 	const resourceStored = resourcesToStored(approvedResources);
+
+	// Hidden fields are attacker-editable, so the registry is consulted again.
+	const access = evaluateAccess(clientId, user.userId, approvedResources);
+	if (!access.ok) {
+		return errorRedirect(
+			redirectUri,
+			state,
+			access.denial.error,
+			access.denial.description,
+		);
+	}
 
 	// The person's answer to "stay signed in". Only meaningful for an
 	// IndieAuth-style request; an OIDC client says it with offline_access.
