@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { hashSecret } from "../src/lib/secrets";
 import { token } from "../src/routes/oauth/token";
 import { createUser, db } from "./helpers/db";
 
@@ -168,13 +169,21 @@ describe("token endpoint: authorization_code grant", () => {
 
 		const stored = db
 			.query("SELECT user_id, client_id, scope FROM tokens WHERE token = ?")
-			.get(body.access_token) as {
+			.get(hashSecret(body.access_token)) as {
 			user_id: number;
 			client_id: string;
 			scope: string;
 		};
 		expect(stored.user_id).toBe(userId);
 		expect(stored.client_id).toBe(CLIENT_ID);
+
+		// Only digests are at rest: neither handle appears in the table as issued.
+		const plaintext = db
+			.query(
+				"SELECT COUNT(*) AS n FROM tokens WHERE token = ? OR refresh_token = ?",
+			)
+			.get(body.access_token, body.refresh_token) as { n: number };
+		expect(plaintext.n).toBe(0);
 	});
 
 	test("second exchange of same code fails (single use)", async () => {
@@ -319,12 +328,18 @@ describe("token endpoint: refresh family detection (RFC 9700)", () => {
 		// Old row marked rotated, new row active in the same family
 		const oldRow = db
 			.query("SELECT rotated, family FROM tokens WHERE refresh_token = ?")
-			.get(issued.refresh_token) as { rotated: number; family: string };
+			.get(hashSecret(issued.refresh_token)) as {
+			rotated: number;
+			family: string;
+		};
 		expect(oldRow.rotated).toBe(1);
 
 		const newRow = db
 			.query("SELECT rotated, family FROM tokens WHERE refresh_token = ?")
-			.get(rotated.refresh_token) as { rotated: number; family: string };
+			.get(hashSecret(rotated.refresh_token)) as {
+			rotated: number;
+			family: string;
+		};
 		expect(newRow.rotated).toBe(0);
 		expect(newRow.family).toBe(oldRow.family);
 	});

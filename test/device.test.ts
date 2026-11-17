@@ -222,7 +222,10 @@ describe("token endpoint: device_code grant", () => {
 		// Token should be in the tokens table
 		const storedToken = db
 			.query("SELECT user_id, client_id FROM tokens WHERE token = ?")
-			.get(body.access_token) as { user_id: number; client_id: string };
+			.get(hashSecret(body.access_token)) as {
+			user_id: number;
+			client_id: string;
+		};
 		expect(storedToken.user_id).toBe(userId);
 		expect(storedToken.client_id).toBe(CLIENT_ID);
 	});

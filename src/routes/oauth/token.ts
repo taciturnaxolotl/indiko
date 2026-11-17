@@ -12,7 +12,7 @@ import {
 	unauthorizedResponse,
 } from "../../lib/oauth/errors";
 import { canonicalizeURL, verifyPKCE } from "../../lib/oauth/urls";
-import { verifySecret } from "../../lib/secrets";
+import { hashSecret, verifySecret } from "../../lib/secrets";
 import { signIDToken } from "../../oidc";
 
 const ACCESS_TOKEN_TTL = 3600; // 1 hour
@@ -144,7 +144,7 @@ async function handleRefreshTokenGrant(
 		.query(
 			"SELECT id, user_id, client_id, scope, refresh_expires_at, revoked, rotated, family, resource FROM tokens WHERE refresh_token = ?",
 		)
-		.get(refresh_token) as
+		.get(hashSecret(refresh_token)) as
 		| {
 				id: number;
 				user_id: number;
@@ -246,12 +246,12 @@ async function handleRefreshTokenGrant(
 	db.query(
 		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
-		newAccessToken,
+		hashSecret(newAccessToken),
 		tokenData.user_id,
 		tokenData.client_id,
 		newScope,
 		expiresAt,
-		newRefreshToken,
+		hashSecret(newRefreshToken),
 		refreshExpiresAt,
 		family,
 		tokenData.resource, // RFC 8707: a refreshed token keeps its audience
@@ -444,12 +444,12 @@ async function handleDeviceCodeGrant(
 	db.query(
 		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
-		accessToken,
+		hashSecret(accessToken),
 		deviceCode.user_id,
 		deviceCode.client_id,
 		deviceCode.scope,
 		expiresAt,
-		refreshToken,
+		refreshToken && hashSecret(refreshToken),
 		refreshExpiresAt,
 		crypto.randomUUID(),
 		deviceCode.resource,
@@ -695,12 +695,12 @@ async function handleAuthorizationCodeGrant(
 	db.query(
 		"INSERT INTO tokens (token, user_id, client_id, scope, expires_at, refresh_token, refresh_expires_at, family, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 	).run(
-		accessToken,
+		hashSecret(accessToken),
 		authcode.user_id,
 		client_id,
 		scopes.join(" "),
 		expiresAt,
-		refreshToken,
+		refreshToken && hashSecret(refreshToken),
 		refreshExpiresAt,
 		family,
 		authcode.resource, // RFC 8707: bind the token to the requested audience
@@ -790,7 +790,7 @@ function introspectionCallerAuthorized(
 			.query(
 				"SELECT t.expires_at, t.revoked, u.status FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
 			)
-			.get(credential) as
+			.get(hashSecret(credential)) as
 			| { expires_at: number; revoked: number; status: string }
 			| undefined;
 		if (!row || row.revoked === 1 || row.status !== "active") return false;
@@ -846,7 +846,7 @@ export async function tokenIntrospect(req: Request): Promise<Response> {
 			.query(
 				"SELECT t.user_id, t.client_id, t.scope, t.expires_at, t.revoked, t.created_at, t.resource, u.username, u.status FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
 			)
-			.get(tokenValue) as
+			.get(hashSecret(tokenValue)) as
 			| {
 					user_id: number;
 					client_id: string;
@@ -937,9 +937,10 @@ export async function tokenRevoke(req: Request): Promise<Response> {
 		// RFC 7009 §2.1: revoking a refresh token must also invalidate associated
 		// access tokens, and vice versa. Here both live on one row, so revoking
 		// either handle revokes the whole record.
+		const digest = hashSecret(tokenValue);
 		const refreshTokenData = db
 			.query("SELECT id FROM tokens WHERE refresh_token = ?")
-			.get(tokenValue) as { id: number } | undefined;
+			.get(digest) as { id: number } | undefined;
 
 		if (refreshTokenData) {
 			db.query("UPDATE tokens SET revoked = 1 WHERE id = ?").run(
@@ -948,7 +949,7 @@ export async function tokenRevoke(req: Request): Promise<Response> {
 		} else {
 			const accessTokenData = db
 				.query("SELECT id FROM tokens WHERE token = ?")
-				.get(tokenValue) as { id: number } | undefined;
+				.get(digest) as { id: number } | undefined;
 
 			if (accessTokenData) {
 				db.query("UPDATE tokens SET revoked = 1 WHERE id = ?").run(

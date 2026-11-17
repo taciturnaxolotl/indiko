@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-// Client secrets are stored as sha256 hex digests.
+// Client secrets and OAuth tokens are stored as sha256 hex digests.
 export function hashSecret(secret: string): string {
 	return crypto.createHash("sha256").update(secret).digest("hex");
 }

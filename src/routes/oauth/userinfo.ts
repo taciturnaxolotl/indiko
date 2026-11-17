@@ -1,5 +1,6 @@
 import { db } from "../../db";
 import { unauthorizedResponse } from "../../lib/oauth/errors";
+import { hashSecret } from "../../lib/secrets";
 import {
 	clearCsrfCookieHeader,
 	clearSessionCookieHeader,
@@ -25,7 +26,7 @@ export function userinfo(req: Request): Response {
 			.query(
 				"SELECT t.user_id, t.scope, t.expires_at, t.revoked, u.name, u.email, u.photo, u.url, u.username, u.status FROM tokens t JOIN users u ON t.user_id = u.id WHERE t.token = ?",
 			)
-			.get(tokenValue) as
+			.get(hashSecret(tokenValue)) as
 			| {
 					user_id: number;
 					scope: string;
