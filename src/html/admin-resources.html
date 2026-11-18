@@ -91,7 +91,7 @@
       padding: var(--space-4);
       display: flex;
       flex-direction: column;
-      gap: var(--space-5);
+      gap: var(--space-6);
     }
 
     .detail-section h4 {
@@ -136,17 +136,58 @@
       display: grid;
       grid-template-columns: 2fr 1fr auto;
       gap: var(--space-2);
+      align-items: stretch;
     }
 
-    .add-row input,
+    .add-row input[type="text"],
     .add-row select {
+      width: 100%;
       min-width: 0;
+      height: 2.25rem;
       background: rgba(0, 0, 0, 0.3);
       border: 1px solid var(--old-rose);
       color: var(--lavender);
-      padding: 0.5rem;
+      padding: 0 var(--space-3);
       font-family: inherit;
       font-size: var(--text-sm);
+    }
+
+    .add-client {
+      grid-template-columns: 1fr auto;
+    }
+
+    .ceiling {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2) var(--space-4);
+      border: 0;
+      padding: 0;
+      margin: 0;
+      font-size: var(--text-sm);
+      color: var(--paper);
+    }
+
+    .ceiling legend {
+      float: left;
+      margin-right: var(--space-3);
+      color: var(--paper-dim);
+    }
+
+    .ceiling .hint {
+      font-size: var(--text-xs);
+    }
+
+    .ceiling label {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      cursor: pointer;
+    }
+
+    .ceiling input {
+      accent-color: var(--accent);
     }
 
     .small-btn {
@@ -166,6 +207,11 @@
     .small-btn-danger:hover {
       background: rgba(171, 73, 103, 0.4);
       border-color: var(--accent);
+    }
+
+    .add-row .small-btn {
+      height: 2.25rem;
+      padding: 0 var(--space-4);
     }
 
     .detail-actions {

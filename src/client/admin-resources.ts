@@ -109,6 +109,40 @@ function roleOptions(resource: Resource): string {
 		.join("")}</select>`;
 }
 
+interface Choices {
+	apps: { clientId: string; name: string }[];
+	people: { username: string; name: string | null }[];
+}
+
+let choices: Promise<Choices> | undefined;
+
+/** Apps and people indiko already knows, for the pickers. Fetched once per page. */
+function loadChoices(): Promise<Choices> {
+	choices ??= Promise.all([
+		apiFetch("/api/admin/clients", {}).then((r) =>
+			r.ok ? r.json() : { clients: [] },
+		),
+		apiFetch("/api/users", {}).then((r) => (r.ok ? r.json() : { users: [] })),
+	]).then(([apps, people]) => ({
+		apps: (apps.clients ?? []) as Choices["apps"],
+		people: (people.users ?? []) as Choices["people"],
+	}));
+	return choices;
+}
+
+/** Ceiling picker: one checkbox per defined role; free-form roles stay a text box. */
+function ceilingPicker(resource: Resource): string {
+	if (!resource.availableRoles) {
+		return '<input type="text" name="allowedRoles" placeholder="allowed roles, comma separated (any)">';
+	}
+	return `<fieldset class="ceiling"><legend>allowed roles <span class="hint">(none ticked: any)</span></legend>${resource.availableRoles
+		.map(
+			(r) =>
+				`<label><input type="checkbox" name="allowedRole" value="${escapeHtml(r)}"> ${escapeHtml(r)}</label>`,
+		)
+		.join("")}</fieldset>`;
+}
+
 async function loadDetail(id: number) {
 	const container = document.getElementById(`detail-${id}`);
 	if (!container) return;
@@ -119,6 +153,23 @@ async function loadDetail(id: number) {
 	}
 	const { resource, clients, users } =
 		(await response.json()) as ResourceDetail;
+	const known = await loadChoices();
+	const listed = new Set(clients.map((c) => c.clientId));
+	const assigned = new Set(users.map((u) => u.username));
+	const appOptions = known.apps
+		.filter((a) => !listed.has(a.clientId))
+		.map(
+			(a) =>
+				`<option value="${escapeHtml(a.clientId)}">${escapeHtml(a.name)}</option>`,
+		)
+		.join("");
+	const personOptions = known.people
+		.filter((p) => !assigned.has(p.username))
+		.map(
+			(p) =>
+				`<option value="${escapeHtml(p.username)}">${escapeHtml(p.name ?? p.username)}</option>`,
+		)
+		.join("");
 
 	const clientRows = clients.length
 		? clients
@@ -155,10 +206,11 @@ async function loadDetail(id: number) {
 			<h4>allowed apps</h4>
 			<p class="detail-help">Which client ids may request this audience. Allowed roles cap what a token from that app carries, even for an admin.</p>
 			<div class="row-list">${clientRows}</div>
-			<form class="add-row" data-action="add-client" data-id="${id}">
-				<input type="text" name="clientId" placeholder="https://app.example/ or ikc_..." required>
-				<input type="text" name="allowedRoles" placeholder="allowed roles (any)">
+			<form class="add-row add-client" data-action="add-client" data-id="${id}">
+				<input type="text" name="clientId" list="apps-${id}" placeholder="pick an app, or paste a client URL not seen yet" required autocomplete="off">
+				<datalist id="apps-${id}">${appOptions}</datalist>
 				<button type="submit" class="small-btn">allow</button>
+				${ceilingPicker(resource)}
 			</form>
 		</section>
 		<section class="detail-section">
@@ -166,7 +218,8 @@ async function loadDetail(id: number) {
 			<p class="detail-help">Introspection reports this role for tokens bound to the resource. Changes apply to live tokens immediately.</p>
 			<div class="row-list">${userRows}</div>
 			<form class="add-row" data-action="add-user" data-id="${id}">
-				<input type="text" name="username" placeholder="username" required>
+				<input type="text" name="username" list="people-${id}" placeholder="pick a person" required autocomplete="off">
+				<datalist id="people-${id}">${personOptions}</datalist>
 				${roleOptions(resource)}
 				<button type="submit" class="small-btn">assign</button>
 			</form>
@@ -288,7 +341,9 @@ document.addEventListener("submit", async (event) => {
 	if (form.dataset.action === "add-client") {
 		const ok = await send(`/api/admin/resources/${id}/clients`, "PUT", {
 			clientId: String(data.get("clientId") ?? "").trim(),
-			allowedRoles: roleList(String(data.get("allowedRoles") ?? "")),
+			allowedRoles: data.has("allowedRole")
+				? data.getAll("allowedRole").map(String)
+				: roleList(String(data.get("allowedRoles") ?? "")),
 		});
 		if (ok) await loadResources();
 	} else if (form.dataset.action === "add-user") {
