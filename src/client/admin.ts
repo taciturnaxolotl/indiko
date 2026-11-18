@@ -4,7 +4,24 @@ import { escapeHtml } from "./escape";
 import { requirePage } from "./session";
 
 const usersList = document.getElementById("usersList") as HTMLElement;
+const toast = document.getElementById("toast") as HTMLElement & {
+	show(message: string, kind?: "success" | "error"): void;
+};
 let currentUserId: number;
+
+const ACTIONS: Record<string, { path: string; method: string }> = {
+	enable: { path: "enable", method: "POST" },
+	disable: { path: "disable", method: "POST" },
+	reset: { path: "passkeys/reset", method: "POST" },
+	delete: { path: "delete", method: "DELETE" },
+};
+
+interface PasskeyReset {
+	username: string;
+	passkeys: number;
+	url: string;
+	expiresAt: number;
+}
 
 async function loadUsers() {
 	try {
@@ -71,6 +88,7 @@ async function loadUsers() {
 									: `<button class="btn-disable" data-action="disable" data-user-id="${user.id}">disable</button>`
 								: ""
 						}
+						${!isSelf ? `<button class="btn-edit" data-action="reset" data-user-id="${user.id}">reset passkeys</button>` : ""}
 						${!isSelf ? `<button class="btn-delete" data-action="delete" data-user-id="${user.id}">delete</button>` : ""}
 					</div>
 				</div>
@@ -103,30 +121,24 @@ async function handleUserAction(e: Event) {
 		btn.disabled = true;
 
 		try {
-			let endpoint = "";
-			let method = "POST";
-
-			if (action === "delete") {
-				endpoint = `/api/admin/users/${userId}/delete`;
-				method = "DELETE";
-			} else if (action === "disable") {
-				endpoint = `/api/admin/users/${userId}/disable`;
-			} else if (action === "enable") {
-				endpoint = `/api/admin/users/${userId}/enable`;
-			}
-
-			const response = await apiFetch(endpoint, {
-				method,
-				headers: {},
-			});
+			const target = ACTIONS[action];
+			if (!target) return;
+			const response = await apiFetch(
+				`/api/admin/users/${userId}/${target.path}`,
+				{
+					method: target.method,
+					headers: {},
+				},
+			);
 
 			if (!response.ok) {
 				const error = await response.json();
 				throw new Error(error.error || "Failed to perform action");
 			}
 
-			// Reload users list
-			loadUsers();
+			await loadUsers();
+			if (action === "reset")
+				showResetLink(userId, (await response.json()) as PasskeyReset);
 		} catch (error) {
 			console.error(`Failed to ${action} user:`, error);
 			alert(
@@ -149,6 +161,40 @@ async function handleUserAction(e: Event) {
 			}
 		}, 3000);
 	}
+}
+
+/** The link exists only in this response, so it stays on screen until the admin dismisses it. */
+function showResetLink(userId: string, reset: PasskeyReset) {
+	const card = usersList.querySelector(`.user-card[data-user-id="${userId}"]`);
+	if (!card) return;
+	const expires = new Date(reset.expiresAt * 1000).toLocaleString();
+	const panel = document.createElement("div");
+	panel.className = "reset-link";
+	panel.innerHTML = `
+		<p>Removed ${reset.passkeys} passkey${reset.passkeys !== 1 ? "s" : ""} and signed ${escapeHtml(reset.username)} out.
+		Send them this link to register a new one. It works once, until ${escapeHtml(expires)}.</p>
+		<div class="reset-link-row">
+			<input type="text" readonly value="${escapeHtml(reset.url)}" aria-label="reset link" />
+			<button class="btn-edit" data-copy>copy</button>
+			<button class="btn-edit" data-dismiss>done</button>
+		</div>`;
+	const input = panel.querySelector("input") as HTMLInputElement;
+	const copy = async () => {
+		try {
+			await navigator.clipboard.writeText(reset.url);
+			toast.show("Reset link copied");
+		} catch {
+			input.select();
+			toast.show("Couldn't copy; select the link and copy it by hand", "error");
+		}
+	};
+	panel.querySelector("[data-copy]")?.addEventListener("click", copy);
+	panel
+		.querySelector("[data-dismiss]")
+		?.addEventListener("click", () => panel.remove());
+	input.addEventListener("focus", () => input.select());
+	card.after(panel);
+	copy();
 }
 
 loadUsers();

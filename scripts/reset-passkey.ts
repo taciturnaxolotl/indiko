@@ -26,12 +26,23 @@
  */
 
 import { Database } from "bun:sqlite";
-import crypto from "node:crypto";
 import * as path from "node:path";
+import { resetPasskeys } from "../src/lib/passkey-reset";
 
 // Load database
-const dbPath = path.join(import.meta.dir, "..", "data", "indiko.db");
-const db = new Database(dbPath);
+// Same resolution as the server: DATABASE_URL, relative to the working directory.
+const dbPath = path.resolve(
+	process.env.DATABASE_URL ||
+		path.join(import.meta.dir, "..", "data", "indiko.db"),
+);
+let db: Database;
+try {
+	db = new Database(dbPath, { readwrite: true, create: false });
+} catch (error) {
+	console.error(`❌ Cannot open database at ${dbPath}: ${error}`);
+	console.error("   Set DATABASE_URL to the server's database file.");
+	process.exit(1);
+}
 
 const ORIGIN = process.env.ORIGIN || "http://localhost:3000";
 
@@ -53,7 +64,7 @@ interface Credential {
 function getUser(username: string): User | null {
 	return db
 		.query(
-			"SELECT id, username, name, email, status, is_admin FROM users WHERE username = ?",
+			"SELECT id, username, name, email, status, is_admin FROM users WHERE username = ? COLLATE NOCASE",
 		)
 		.get(username) as User | null;
 }
@@ -62,44 +73,6 @@ function getCredentials(userId: number): Credential[] {
 	return db
 		.query("SELECT id, name, created_at FROM credentials WHERE user_id = ?")
 		.all(userId) as Credential[];
-}
-
-function deleteCredentials(userId: number): number {
-	const result = db
-		.query("DELETE FROM credentials WHERE user_id = ?")
-		.run(userId);
-	return result.changes;
-}
-
-function deleteSessions(userId: number): number {
-	const result = db.query("DELETE FROM sessions WHERE user_id = ?").run(userId);
-	return result.changes;
-}
-
-function createResetInvite(
-	adminUserId: number,
-	targetUsername: string,
-): string {
-	const code = crypto.randomBytes(16).toString("base64url");
-	const now = Math.floor(Date.now() / 1000);
-	const expiresAt = now + 86400; // 24 hours
-
-	// The invite MUST be bound to the target username via ldap_username:
-	// the server only allows a passkey reset (registration against an
-	// existing credential-less account) when the invite names that exact
-	// account. An unbound invite is refused with 403.
-	db.query(
-		"INSERT INTO invites (code, created_by, max_uses, current_uses, expires_at, note, message, ldap_username) VALUES (?, ?, 1, 0, ?, ?, ?, ?)",
-	).run(
-		code,
-		adminUserId,
-		expiresAt,
-		`PASSKEY_RESET:${targetUsername}`,
-		`Your passkey has been reset. Please register a new passkey to regain access to your account.`,
-		targetUsername,
-	);
-
-	return code;
 }
 
 function getAdminUser(): User | null {
@@ -146,7 +119,7 @@ Example:
 	// Look up user
 	const user = getUser(username);
 	if (!user) {
-		console.error(`\n❌ Error: User '${username}' not found`);
+		console.error(`\n❌ Error: User '${username}' not found in ${dbPath}`);
 		process.exit(1);
 	}
 
@@ -211,21 +184,11 @@ Example:
 	// Perform reset
 	console.log("\n🔄 Performing reset...");
 
-	// Delete credentials
-	const deletedCreds = deleteCredentials(user.id);
-	console.log(`   ✅ Deleted ${deletedCreds} passkey(s)`);
-
-	// Delete sessions
-	const deletedSessions = deleteSessions(user.id);
-	console.log(`   ✅ Invalidated ${deletedSessions} session(s)`);
-
-	// Create reset invite (bound to the stored username so the server
-	// accepts it as a reset for exactly this account)
-	const inviteCode = createResetInvite(admin.id, user.username);
+	const reset = resetPasskeys(db, user, admin.id, ORIGIN);
+	console.log(`   ✅ Deleted ${reset.passkeys} passkey(s)`);
+	console.log(`   ✅ Invalidated ${reset.sessions} session(s)`);
 	console.log("   ✅ Created reset invite");
-
-	// Generate reset URL
-	const resetUrl = `${ORIGIN}/login?invite=${inviteCode}&username=${encodeURIComponent(user.username)}`;
+	const resetUrl = reset.url;
 
 	console.log("\n" + "═".repeat(50));
 	console.log("✨ PASSKEY RESET COMPLETE");

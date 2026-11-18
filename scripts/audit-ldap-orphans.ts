@@ -17,8 +17,19 @@ import * as path from "node:path";
 import { authenticate } from "ldap-authentication";
 
 // Load database
-const dbPath = path.join(import.meta.dir, "..", "data", "indiko.db");
-const db = new Database(dbPath);
+// Same resolution as the server: DATABASE_URL, relative to the working directory.
+const dbPath = path.resolve(
+	process.env.DATABASE_URL ||
+		path.join(import.meta.dir, "..", "data", "indiko.db"),
+);
+let db: Database;
+try {
+	db = new Database(dbPath, { readwrite: true, create: false });
+} catch (error) {
+	console.error(`❌ Cannot open database at ${dbPath}: ${error}`);
+	console.error("   Set DATABASE_URL to the server's database file.");
+	process.exit(1);
+}
 
 // Configuration from environment
 const LDAP_URL = process.env.LDAP_URL || "ldap://localhost:389";

@@ -5,6 +5,7 @@ import {
 } from "../lib/oauth/client-display";
 import { verifyDomain } from "../lib/oauth/client-metadata";
 import { validateProfileURL } from "../lib/oauth/urls";
+import { resetPasskeys } from "../lib/passkey-reset";
 import {
 	csrfCookieRefreshHeaders,
 	getSessionUserFlexible,
@@ -580,6 +581,36 @@ export async function updateUserTier(
 		console.error("Update tier error:", error);
 		return Response.json({ error: "Invalid request body" }, { status: 400 });
 	}
+}
+
+export function resetUserPasskeys(req: Request, userId: string): Response {
+	const user = requireAdmin(req);
+	if (user instanceof Response) return user;
+
+	const targetUserId = Number.parseInt(userId, 10);
+	if (Number.isNaN(targetUserId)) {
+		return Response.json({ error: "Invalid user ID" }, { status: 400 });
+	}
+
+	// Resetting yourself would sign you out with no way back in; add a passkey from your profile instead.
+	if (targetUserId === user.userId) {
+		return Response.json(
+			{ error: "Cannot reset your own passkeys" },
+			{ status: 400 },
+		);
+	}
+
+	const targetUser = db
+		.query("SELECT id, username FROM users WHERE id = ?")
+		.get(targetUserId) as { id: number; username: string } | undefined;
+
+	if (!targetUser) {
+		return Response.json({ error: "User not found" }, { status: 404 });
+	}
+
+	return Response.json(
+		resetPasskeys(db, targetUser, user.userId, process.env.ORIGIN as string),
+	);
 }
 
 export function deleteUser(req: Request, userId: string): Response {

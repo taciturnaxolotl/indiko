@@ -23,6 +23,7 @@ import {
 	hello,
 	listAllApps,
 	listUsers,
+	resetUserPasskeys,
 	revokeApp,
 	revokeAppForUser,
 	updateProfile,
@@ -283,6 +284,12 @@ Policy: https://tangled.org/dunkirk.sh/indiko/blob/main/SECURITY.md
 		"/api/admin/users/:id/tier": (req) => {
 			if (req.method === "PUT") {
 				return updateUserTier(req, req.params.id);
+			}
+			return new Response("Method not allowed", { status: 405 });
+		},
+		"/api/admin/users/:id/passkeys/reset": (req) => {
+			if (req.method === "POST") {
+				return resetUserPasskeys(req, req.params.id);
 			}
 			return new Response("Method not allowed", { status: 405 });
 		},
