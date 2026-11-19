@@ -100,12 +100,15 @@ function render() {
 		.join("");
 }
 
-function roleOptions(resource: Resource): string {
+function roleOptions(resource: Resource, current?: string): string {
 	if (!resource.availableRoles) {
-		return '<input type="text" name="role" placeholder="role" required>';
+		return `<input type="text" name="role" placeholder="role" value="${escapeHtml(current ?? "")}" required>`;
 	}
 	return `<select name="role">${resource.availableRoles
-		.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`)
+		.map(
+			(r) =>
+				`<option value="${escapeHtml(r)}" ${r === current ? "selected" : ""}>${escapeHtml(r)}</option>`,
+		)
 		.join("")}</select>`;
 }
 
@@ -191,11 +194,13 @@ async function loadDetail(id: number) {
 		? users
 				.map(
 					(u) => `
-			<div class="row">
+			<form class="row set-role" data-action="set-role" data-id="${id}">
 				<div>${escapeHtml(u.name ?? u.username)} <span class="mono">@${escapeHtml(u.username)}</span></div>
-				<span class="badge badge-strong">${escapeHtml(u.role)}</span>
+				<input type="hidden" name="username" value="${escapeHtml(u.username)}">
+				${roleOptions(resource, u.role)}
+				<button type="submit" class="small-btn">save</button>
 				<button type="button" class="small-btn small-btn-danger" data-action="remove-user" data-id="${id}" data-user="${escapeHtml(u.username)}">remove</button>
-			</div>`,
+			</form>`,
 				)
 				.join("")
 		: `<div class="row-empty">${resource.defaultRole ? `Everyone gets the default role, ${escapeHtml(resource.defaultRole)}.` : "Nobody holds a role here yet."}</div>`;
@@ -346,7 +351,7 @@ document.addEventListener("submit", async (event) => {
 				: roleList(String(data.get("allowedRoles") ?? "")),
 		});
 		if (ok) await loadResources();
-	} else if (form.dataset.action === "add-user") {
+	} else if (["add-user", "set-role"].includes(form.dataset.action)) {
 		const username = String(data.get("username") ?? "").trim();
 		const ok = await send(
 			`/api/admin/resources/${id}/users/${encodeURIComponent(username)}`,

@@ -496,6 +496,36 @@ describe("admin API", () => {
 		expect(removed.status).toBe(200);
 	});
 
+	test("assigning a role again changes it in place", async () => {
+		const cookie = admin();
+		const id = String(
+			seedResource({ roles: ["admin", "reader"], restrict: false }),
+		);
+		const userId = createUser({ username: "kieran" });
+		const put = (role: string) =>
+			setResourceUserRole(
+				adminReq(
+					cookie,
+					"PUT",
+					{ role },
+					`http://localhost/api/admin/resources/${id}/users/kieran`,
+				),
+				id,
+				"kieran",
+			);
+
+		expect((await put("reader")).status).toBe(200);
+		expect(access(CLIENT_ID, userId, [API])).toEqual({ [API]: "reader" });
+
+		expect((await put("admin")).status).toBe(200);
+		expect(access(CLIENT_ID, userId, [API])).toEqual({ [API]: "admin" });
+		expect(
+			db
+				.query("SELECT COUNT(*) AS n FROM resource_roles WHERE resource_id = ?")
+				.get(id),
+		).toEqual({ n: 1 });
+	});
+
 	test("deleting a resource revokes tokens bound to it, and only those", async () => {
 		const cookie = admin();
 		const userId = createUser({});
