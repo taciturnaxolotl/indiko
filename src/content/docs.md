@@ -484,7 +484,7 @@ Indiko rate limits the endpoints an anonymous caller can reach, per client IP. O
 
 | Endpoint | Limit |
 | --- | --- |
-| `/auth/token` | 30 requests / minute |
+| `/auth/token` | 300 requests / minute |
 | `/auth/device` | 10 requests / minute |
 | `/oauth/register` | 5 registrations / minute |
 | `/device` code entry | 10 failed code lookups / 15 minutes, per signed-in user |

@@ -25,7 +25,7 @@ const REFRESH_TOKEN_TTL = 2592000; // 30 days
 
 // Rate limiting for the token endpoint — per-IP sliding window.
 const TOKEN_WINDOW_MS = 60 * 1000; // 1 minute
-const TOKEN_MAX = 30; // max requests per window per IP
+const TOKEN_MAX = 300; // per IP; local resource servers all share the loopback bucket
 const tokenAttempts = new Map<string, { count: number; resetAt: number }>();
 
 function isTokenRateLimited(ip: string): boolean {
